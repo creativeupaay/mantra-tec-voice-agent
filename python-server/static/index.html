@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mantra Tech — Voice Agent Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+            --card-bg: rgba(30, 41, 59, 0.4);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary: #8b5cf6;
+            --primary-glow: rgba(139, 92, 246, 0.3);
+            --secondary: #3b82f6;
+            --danger: #ef4444;
+            --danger-glow: rgba(239, 68, 68, 0.3);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.3);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+            background: #020617;
+            background-image: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Background Glowing Orbs */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(0,0,0,0) 70%);
+            top: 10%;
+            left: 10%;
+            z-index: -1;
+            pointer-events: none;
+        }
+        body::after {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, rgba(0,0,0,0) 70%);
+            bottom: 10%;
+            right: 10%;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            background: linear-gradient(to right, #f8fafc, #c084fc, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.025em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 400;
+            margin: 0;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 14px 16px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 1.1rem;
+            transition: all 0.2s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px var(--primary-glow), inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 16px;
+        }
+
+        button {
+            flex: 1;
+            font-family: inherit;
+            font-size: 1.05rem;
+            font-weight: 600;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #connectBtn {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            box-shadow: 0 4px 14px var(--primary-glow);
+        }
+
+        #connectBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+        }
+
+        #connectBtn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        #connectBtn:disabled {
+            background: #334155;
+            color: #64748b;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        #disconnectBtn {
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            color: white;
+            box-shadow: 0 4px 14px var(--danger-glow);
+            display: none;
+        }
+
+        #disconnectBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+        }
+
+        #disconnectBtn:active {
+            transform: translateY(0);
+        }
+
+        /* Status Panel */
+        #status {
+            margin-top: 24px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--border-color);
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #64748b;
+            transition: background 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.connecting {
+            background: var(--secondary);
+            box-shadow: 0 0 10px var(--secondary);
+            animation: pulse 1s infinite;
+        }
+
+        /* Recording Area */
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 12px;
+            color: #fca5a5;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .recording-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+            box-shadow: 0 0 8px var(--danger);
+            animation: pulse 1s infinite;
+        }
+
+        /* Wave Animation */
+        .wave-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 40px;
+            margin-top: 24px;
+            opacity: 0.15;
+            transition: opacity 0.3s ease;
+        }
+
+        .wave-container.active {
+            opacity: 1;
+        }
+
+        .wave-bar {
+            width: 4px;
+            height: 8px;
+            background: linear-gradient(to top, var(--primary), var(--secondary));
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        .wave-container.active .wave-bar {
+            animation: wave 1.2s ease-in-out infinite alternate;
+        }
+
+        .wave-bar:nth-child(1) { height: 10px; animation-delay: 0.1s; }
+        .wave-bar:nth-child(2) { height: 24px; animation-delay: 0.3s; }
+        .wave-bar:nth-child(3) { height: 38px; animation-delay: 0.5s; }
+        .wave-bar:nth-child(4) { height: 18px; animation-delay: 0.2s; }
+        .wave-bar:nth-child(5) { height: 28px; animation-delay: 0.4s; }
+
+        /* Download Area */
+        .download-area {
+            display: none;
+            margin-top: 24px;
+            padding: 24px;
+            border-radius: 16px;
+            background: rgba(16, 185, 129, 0.06);
+            border: 1px solid rgba(16, 185, 129, 0.15);
+            text-align: center;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .download-status {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .download-btn {
+            display: none;
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 4px 14px var(--success-glow);
+            text-decoration: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 1rem;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.25); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes wave {
+            0% { height: 6px; }
+            100% { height: 38px; }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(16, 185, 129, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--success);
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Mantra Tech</h1>
+            <p class="subtitle">Voice Agent Interactive Console</p>
+        </header>
+
+        <div class="card">
+            <div class="form-group">
+                <label for="phone">Simulated Phone Number:</label>
+                <input type="text" id="phone" placeholder="+1234567890" value="+19999999999">
+            </div>
+
+            <div class="form-group btn-group">
+                <button id="connectBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                    Connect & Speak
+                </button>
+                <button id="disconnectBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16.17 16.17 0 0 0 .99 1.41m2.24-2.24L4 3m16 16L20 20"></path></svg>
+                    Disconnect
+                </button>
+            </div>
+
+            <div id="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Status: Disconnected</span>
+            </div>
+
+            <div class="recording-indicator" id="recordingIndicator">
+                <div class="recording-dot"></div>
+                <span>Recording Conversation: <strong id="recordTimer">00:00</strong></span>
+            </div>
+
+            <!-- Voice Wave Visualizer -->
+            <div class="wave-container" id="waveContainer">
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+            </div>
+
+            <!-- Download Recording Section -->
+            <div class="download-area" id="downloadArea">
+                <div class="download-status" id="downloadStatus">
+                    <div class="spinner" id="processingSpinner"></div>
+                    <span id="downloadStatusText">Preparing recording...</span>
+                </div>
+                <a href="#" class="download-btn" id="downloadBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Download Call Recording (MP3)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <audio id="remoteAudio" autoplay></audio>
+
+    <!-- Load lamejs for client-side MP3 encoding -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.all.min.js"></script>
+    <script>
+        let pc = null;
+        let localStream = null;
+
+        // Recording & Audio Mixing Contexts
+        let audioCtx = null;
+        let recDest = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recordStartTime = 0;
+        let recordInterval = null;
+
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const statusEl = document.getElementById('statusText');
+        const statusDot = document.getElementById('statusDot');
+        const remoteAudio = document.getElementById('remoteAudio');
+        const phoneInput = document.getElementById('phone');
+
+        // Recording & Download UI Elements
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const recordTimer = document.getElementById('recordTimer');
+        const waveContainer = document.getElementById('waveContainer');
+        const downloadArea = document.getElementById('downloadArea');
+        const downloadStatusText = document.getElementById('downloadStatusText');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const processingSpinner = document.getElementById('processingSpinner');
+
+        function setStatus(text, className = '') {
+            statusEl.textContent = "Status: " + text;
+            statusDot.className = 'status-dot ' + className;
+        }
+
+        async function connect() {
+            try {
+                connectBtn.disabled = true;
+                setStatus("Requesting microphone...", "connecting");
+                
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Pipecat expects a data channel to be established
+                const dc = pc.createDataChannel("pipecat");
+                dc.onopen = () => console.log("Data channel open");
+                dc.onmessage = (e) => console.log("Received message:", e.data);
+
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+                pc.ontrack = (event) => {
+                    if (remoteAudio.srcObject !== event.streams[0]) {
+                        remoteAudio.srcObject = event.streams[0];
+                    }
+                };
+
+                pc.oniceconnectionstatechange = () => {
+                    if (pc.iceConnectionState === 'connected') {
+                        setStatus("Connected - Say Hello!", "connected");
+                        connectBtn.style.display = 'none';
+                        disconnectBtn.style.display = 'inline-flex';
+                        
+                        // Start recording the session
+                        startRecording();
+                    } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                        disconnect();
+                    }
+                };
+
+                setStatus("Generating offer...", "connecting");
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering to complete before sending the offer
+                await new Promise((resolve) => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        const checkState = () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                pc.removeEventListener('icegatheringstatechange', checkState);
+                                resolve();
+                            }
+                        };
+                        pc.addEventListener('icegatheringstatechange', checkState);
+                    }
+                });
+
+                setStatus("Negotiating with server...", "connecting");
+                
+                const phone = encodeURIComponent(phoneInput.value);
+                const response = await fetch(`/webrtc/offer?phone_number=${phone}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error("Server rejected offer");
+                }
+
+                const answer = await response.json();
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+            } catch (err) {
+                console.error(err);
+                setStatus("Error - " + err.message, "");
+                connectBtn.disabled = false;
+            }
+        }
+
+        function disconnect() {
+            // Stop recording first
+            if (recordInterval) {
+                clearInterval(recordInterval);
+                recordInterval = null;
+            }
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+            
+            setStatus("Disconnected", "");
+            connectBtn.disabled = false;
+            connectBtn.style.display = 'inline-flex';
+            disconnectBtn.style.display = 'none';
+            
+            // Hide active recording UI
+            recordingIndicator.style.display = 'none';
+            waveContainer.classList.remove('active');
+        }
+
+        // ── Recording & Audio Merging Logic ───────────────────────────────────
+
+        async function startRecording() {
+            try {
+                recordedChunks = [];
+                
+                // Initialize Web Audio API to mix Local Mic + Remote Audio
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                recDest = audioCtx.createMediaStreamDestination();
+
+                // 1. Add Local Mic Track
+                if (localStream) {
+                    const localSource = audioCtx.createMediaStreamSource(localStream);
+                    localSource.connect(recDest);
+                }
+
+                // 2. Add Remote Assistant Track
+                let remoteStream = remoteAudio.srcObject;
+                if (!remoteStream) {
+                    // Fallback to receivers
+                    remoteStream = new MediaStream();
+                    pc.getReceivers().forEach(receiver => {
+                        if (receiver.track && receiver.track.kind === 'audio') {
+                            remoteStream.addTrack(receiver.track);
+                        }
+                    });
+                }
+
+                if (remoteStream && remoteStream.getAudioTracks().length > 0) {
+                    const remoteSource = audioCtx.createMediaStreamSource(remoteStream);
+                    remoteSource.connect(recDest);
+                } else {
+                    console.warn("Could not find remote stream track to record.");
+                }
+
+                // 3. Setup MediaRecorder on the Mixed Destination Stream
+                let options = { mimeType: 'audio/webm;codecs=opus' };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'audio/ogg;codecs=opus' };
+                }
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'audio/mp4' };
+                }
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = {}; // System default
+                }
+
+                mediaRecorder = new MediaRecorder(recDest.stream, options);
+                
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data && e.data.size > 0) {
+                        recordedChunks.push(e.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    console.log("Recording stopped. Processing combined audio...");
+                    await processAndEnableDownload();
+                };
+
+                // Start recording, slice every 250ms
+                mediaRecorder.start(250);
+                recordStartTime = Date.now();
+                updateRecordDuration();
+                recordInterval = setInterval(updateRecordDuration, 1000);
+
+                // Show recording UI
+                recordingIndicator.style.display = 'flex';
+                downloadArea.style.display = 'none';
+                waveContainer.classList.add('active');
+                console.log("MediaRecorder started using mimeType:", mediaRecorder.mimeType);
+
+            } catch (err) {
+                console.error("Failed to initialize session recording:", err);
+            }
+        }
+
+        function updateRecordDuration() {
+            const diffMs = Date.now() - recordStartTime;
+            const secs = Math.floor((diffMs / 1000) % 60);
+            const mins = Math.floor((diffMs / 1000) / 60);
+            recordTimer.textContent = 
+                (mins < 10 ? "0" + mins : mins) + ":" + (secs < 10 ? "0" + secs : secs);
+        }
+
+        async function processAndEnableDownload() {
+            if (recordedChunks.length === 0) {
+                console.warn("No recording data collected.");
+                return;
+            }
+
+            // Reveal download layout, show spinner
+            downloadArea.style.display = 'block';
+            downloadBtn.style.display = 'none';
+            processingSpinner.style.display = 'inline-block';
+            downloadStatusText.textContent = "Processing and decoding call audio...";
+
+            try {
+                // Combine slices into a single raw blob
+                const rawBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                const arrayBuffer = await rawBlob.arrayBuffer();
+
+                // Decode the compressed audio stream into raw PCM Float32 AudioBuffer
+                const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBuffer = await decodeCtx.decodeAudioData(arrayBuffer);
+
+                downloadStatusText.textContent = "Encoding mixed audio to MP3: 0%...";
+
+                // Convert PCM AudioBuffer to MP3 using lamejs
+                const mp3Blob = await encodeMp3InChunks(audioBuffer);
+
+                // Create download link
+                const mp3Url = URL.createObjectURL(mp3Blob);
+                downloadBtn.href = mp3Url;
+
+                // Format filename with local ISO timestamp
+                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                downloadBtn.download = `mantra-call-${ts}.mp3`;
+
+                // Render download button
+                processingSpinner.style.display = 'none';
+                downloadBtn.style.display = 'inline-flex';
+                downloadStatusText.textContent = "Call recording compiled!";
+
+            } catch (err) {
+                console.error("Error generating MP3 recording:", err);
+                processingSpinner.style.display = 'none';
+                downloadStatusText.textContent = "Failed to compile MP3: " + err.message;
+            }
+        }
+
+        // Helper: Chunked, non-blocking MP3 encoding using lamejs
+        function encodeMp3InChunks(audioBuffer) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const numberOfChannels = audioBuffer.numberOfChannels;
+                    const sampleRate = audioBuffer.sampleRate;
+                    // Initialize lamejs MP3 encoder (channels, sampleRate, bitrate: 128kbps)
+                    const mp3encoder = new lamejs.Mp3Encoder(numberOfChannels, sampleRate, 128);
+                    const mp3Data = [];
+
+                    const channelData = [];
+                    for (let c = 0; c < numberOfChannels; c++) {
+                        channelData.push(audioBuffer.getChannelData(c));
+                    }
+
+                    const totalSamples = audioBuffer.length;
+                    const chunkSize = 1152; // LAME standard framesize
+                    let offset = 0;
+
+                    function encodeNextChunk() {
+                        const end = Math.min(offset + chunkSize, totalSamples);
+                        const size = end - offset;
+
+                        if (size <= 0) {
+                            // Flush buffer at the end of stream
+                            const endBuf = mp3encoder.flush();
+                            if (endBuf.length > 0) {
+                                mp3Data.push(endBuf);
+                            }
+
+                            const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+                            resolve(mp3Blob);
+                            return;
+                        }
+
+                        if (numberOfChannels === 1) {
+                            const samples = channelData[0].subarray(offset, end);
+                            const samplesInt16 = new Int16Array(size);
+                            // Convert Float32 to 16-bit Signed Integer PCM
+                            for (let i = 0; i < size; i++) {
+                                const s = Math.max(-1, Math.min(1, samples[i]));
+                                samplesInt16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                            }
+                            const mp3buf = mp3encoder.encodeBuffer(samplesInt16);
+                            if (mp3buf.length > 0) {
+                                mp3Data.push(mp3buf);
+                            }
+                        } else {
+                            const left = channelData[0].subarray(offset, end);
+                            const right = channelData[1].subarray(offset, end);
+                            const leftInt16 = new Int16Array(size);
+                            const rightInt16 = new Int16Array(size);
+                            
+                            // Convert Float32 to 16-bit Signed Integer PCM for both channels
+                            for (let i = 0; i < size; i++) {
+                                const sL = Math.max(-1, Math.min(1, left[i]));
+                                leftInt16[i] = sL < 0 ? sL * 0x8000 : sL * 0x7FFF;
+                                
+                                const sR = Math.max(-1, Math.min(1, right[i]));
+                                rightInt16[i] = sR < 0 ? sR * 0x8000 : sR * 0x7FFF;
+                            }
+                            const mp3buf = mp3encoder.encodeBuffer(leftInt16, rightInt16);
+                            if (mp3buf.length > 0) {
+                                mp3Data.push(mp3buf);
+                            }
+                        }
+
+                        offset += chunkSize;
+                        const pct = Math.round((offset / totalSamples) * 100);
+                        downloadStatusText.textContent = `Encoding mixed audio to MP3: ${Math.min(pct, 100)}%...`;
+
+                        // Yield execution back to the browser event loop to avoid UI freezing
+                        setTimeout(encodeNextChunk, 0);
+                    }
+
+                    encodeNextChunk();
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+    </script>
+</body>
+</html>

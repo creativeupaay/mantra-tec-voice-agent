@@ -1,0 +1,7 @@
+
+STT : Elevenlabs
+
+TTS : Deepgram
+
+LLM : Openrouter
+

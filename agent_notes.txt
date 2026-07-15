@@ -1,0 +1,366 @@
+This is what I'd write as the technical requirements document right now.
+
+One important thing that I want to keep proper file structure and not put all the things in one single file, follow proper system design, not overengineering but having a good base for future scaling.
+
+---
+
+# Mantra Tech Voice Agent - Technical Requirements
+
+## Core Objectives
+
+* Handle incoming customer and lead calls.
+* Answer queries using Mantra Tech knowledge base.
+* Create and manage support tickets.
+* Book consultation calls.
+* Maintain conversational memory across calls.
+* Integrate with Zoho CRM and Zoho Desk.
+
+---
+
+# Data Storage
+
+## Identity Store
+
+Maintain a unique identity per phone number.
+
+Store:
+
+```text
+Phone Number
+Name
+Preferred Language
+Created At
+Last Call At
+Agent Notes
+Customer Profile Summary
+```
+
+Notes:
+
+* A caller may simultaneously be a Lead, Customer, and Support User.
+* Do not classify callers into a single type.
+
+---
+
+## Call Store
+
+Store every call.
+
+```text
+Call Id
+Phone Number
+Timestamp
+Duration
+Transcript
+Call Summary
+Detected Intent
+Call Outcome
+```
+
+---
+
+## Customer Memory
+
+Maintain long-term memory per identity.
+
+Examples:
+
+```text
+Preferred Language
+Common Issues
+Previous Discussions
+Special Notes
+```
+
+---
+
+# Integrations
+
+## Zoho CRM
+
+Capabilities:
+
+```text
+Search Lead by Phone
+Search Contact by Phone
+Create Lead
+Fetch Lead/Contact Details
+Fetch CRM Status
+```
+
+Inject into call context:
+
+```text
+CRM Status
+Owner
+Recent Activity
+Lead Information
+Contact Information
+```
+
+---
+
+## Zoho Desk
+
+Capabilities:
+
+```text
+Find Contact
+Fetch Open Tickets
+Create Ticket
+Update Ticket
+```
+
+Inject into call context:
+
+```text
+Open Tickets
+Ticket Status
+Priority
+Recent Ticket Activity
+```
+
+---
+
+## Consultation Booking
+
+Capabilities:
+
+```text
+Check Availability
+Book Consultation
+Reschedule Consultation
+Cancel Consultation
+```
+
+Pending Decision:
+
+```text
+Single Calendar
+OR
+Multiple Team Calendars
+```
+
+---
+
+## Knowledge Base
+
+Vector Search Access
+
+Capabilities:
+
+```text
+Retrieve Company Information
+Retrieve Product Information
+Retrieve Service Information
+Retrieve FAQs
+```
+
+---
+
+# Call Context Construction
+
+Context Sources:
+
+```text
+Our Database
+Zoho CRM
+Zoho Desk
+Recent Call History
+```
+
+Inject:
+
+```text
+Identity Information
+Customer Memory
+Last 3 Call Summaries
+Open Tickets
+CRM Information
+Recent Timeline Events
+```
+
+Do NOT inject:
+
+```text
+Full CRM Payloads
+Full Ticket Payloads
+Full Transcripts
+```
+
+---
+
+# Incoming Call Flow
+
+```text
+Incoming Call (Plivo)
+        ↓
+Connect WebSocket
+        ↓
+Create Call State
+        ↓
+Fetch Cached Context (Redis)
+        ↓
+Generate Initial Greeting
+        ↓
+Start STT/TTS Pipeline
+```
+
+In Parallel:
+
+```text
+Fetch Identity
+Fetch CRM Context
+Fetch Ticket Context
+Fetch Call History
+Fetch Customer Memory
+```
+
+When data arrives:
+
+```text
+Update Call State
+```
+
+On subsequent LLM turns:
+
+```text
+Automatically inject newly available context
+```
+
+---
+
+# During Call
+
+Agent Capabilities:
+
+```text
+Answer Queries
+Search Knowledge Base
+Create Support Ticket
+Check Ticket Status
+Book Consultation
+Create Lead
+Escalate To Human
+```
+
+---
+
+# Language Handling
+
+Requirements:
+
+```text
+Detect User Language Automatically
+Respond In Same Language
+Support Language Switching During Call
+Support Hindi + English + Hinglish
+```
+
+---
+
+# Chronological Awareness
+
+Agent should be aware of:
+
+```text
+Last Call Time
+Last Call Summary
+Recent Tickets
+Recent CRM Activity
+Recent Bookings
+```
+
+Example:
+
+```text
+Called 1 hour ago
+Ticket created yesterday
+Consultation booked last week
+```
+
+The agent should use chronology naturally during conversation.
+
+---
+
+# No Response Handling
+
+```text
+Ask Again Once
+Ask Again Second Time
+Disconnect Politely
+```
+
+Optional Future Feature:
+
+```text
+Automatic Callback Workflow
+```
+
+---
+
+# Post Call Flow
+
+```text
+Call Ends
+      ↓
+Generate Transcript
+      ↓
+Generate Summary
+      ↓
+Extract Intent
+      ↓
+Update Customer Memory
+      ↓
+Store Call Record
+      ↓
+Create Timeline Event
+```
+
+If Unknown Caller:
+
+```text
+Create Lead in Zoho CRM
+```
+
+If Support Issue Detected:
+
+```text
+Create Ticket in Zoho Desk
+```
+
+---
+
+# Architecture
+
+```text
+Plivo
+  ↓
+Pipecat
+  ↓
+LangGraph Agent
+  ↓
+
+Tools
+
+- Knowledge Base Search
+- Zoho CRM
+- Zoho Desk
+- Booking System
+- Customer Memory
+- Call History
+- Identity Store
+```
+
+The most important design rule:
+
+```text
+Our Database = Conversational Memory
+
+Zoho = Business Workflow State
+```
+
+Keep those responsibilities separate.
+
+
+Our primary database will be in MONGODB.
