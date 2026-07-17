@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from agent.state import CallState
 from env_config import settings
+from modules.calls.model import CallRecording
 from modules.calls.service import call_service
 from modules.identity.service import identity_service
 from services.crm import crm_service
@@ -38,7 +39,11 @@ class PostCallExtraction(BaseModel):
     )
 
 
-async def run_post_call_pipeline(state: CallState, duration_seconds: int = 0) -> None:
+async def run_post_call_pipeline(
+    state: CallState, 
+    duration_seconds: int = 0,
+    recording_content: Optional[bytes] = None
+) -> None:
     """Run the post-call analytics and update long-term storage asynchronously."""
     if not state.transcript_lines:
         logger.info(f"[post-call] No transcript for call {state.call_id}, skipping.")
@@ -89,7 +94,24 @@ async def run_post_call_pipeline(state: CallState, duration_seconds: int = 0) ->
 
     logger.info(f"[post-call] Extracted intent: {extraction.intent}")
 
-    # ── 2. Update Call History ────────────────────────────────────────────────
+    # ── 2. Update Call History & Recording ───────────────────────────────────────
+    # A. Upload recording if available
+    recording_url = None
+    if recording_content:
+        try:
+            recording = CallRecording(
+                call_id=state.call_id,
+                file_content=recording_content,
+                content_type="audio/mpeg",
+                metadata={"phone_number": state.phone_number}
+            )
+            updated_call = await call_service.upload_recording(recording)
+            recording_url = updated_call.recording_url if updated_call else None
+            logger.info(f"[post-call] Uploaded recording for {state.call_id}")
+        except Exception as e:
+            logger.error(f"[post-call] Failed to upload recording for {state.call_id}: {e}")
+    
+    # B. Finalize call record
     try:
         await call_service.finalize_call(
             call_id=state.call_id,

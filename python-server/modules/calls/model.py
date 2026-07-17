@@ -20,6 +20,8 @@ class Call(BaseModel):
     call_summary: Optional[str] = None    # LLM-generated summary
     detected_intent: Optional[str] = None # e.g. "support", "booking", "query"
     call_outcome: Optional[str] = None    # e.g. "ticket_created", "booking_made"
+    recording_url: Optional[str] = None   # URL to the call recording (presigned or local)
+    recording_path: Optional[str] = None  # Storage path/key for the recording
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
@@ -36,3 +38,13 @@ class CallUpdate(BaseModel):
     call_summary: Optional[str] = None
     detected_intent: Optional[str] = None
     call_outcome: Optional[str] = None
+    recording_url: Optional[str] = None
+    recording_path: Optional[str] = None
+
+
+class CallRecording(BaseModel):
+    """Model for call recording data."""
+    call_id: str
+    file_content: bytes
+    content_type: str = "audio/mpeg"
+    metadata: Optional[dict] = None

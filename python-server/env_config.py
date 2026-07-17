@@ -90,6 +90,14 @@ class Settings:
     kb_enabled: bool      # KB_ENABLED (default: True — stub is functional)
     booking_enabled: bool # BOOKING_ENABLED (default: False — stub raises)
 
+    # ── Call Recording Storage ─────────────────────────────────────────────
+    storage_provider: str     # "s3", "local", or ""
+    recording_bucket_name: str  # S3 bucket name
+    recording_region: str       # S3 region
+    aws_access_key_id: str        # AWS credentials
+    aws_secret_access_key: str
+    s3_endpoint_url: str          # For S3-compatible services (MinIO, etc.)
+
     # ── App ──────────────────────────────────────────────────────────────────
     log_level: str
 
@@ -165,6 +173,13 @@ def _load() -> Settings:
         zoho_enabled=_resolve_zoho_enabled(zoho_client_id, zoho_client_secret, zoho_refresh_token),
         kb_enabled=os.getenv("KB_ENABLED", "true").lower() != "false",
         booking_enabled=os.getenv("BOOKING_ENABLED", "false").lower() == "true",
+        # Call Recording Storage
+        storage_provider=os.getenv("STORAGE_PROVIDER", ""),  # "s3", "local", or ""
+        recording_bucket_name=os.getenv("RECORDING_BUCKET_NAME", ""),
+        recording_region=os.getenv("RECORDING_REGION", "us-east-1"),
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", ""),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
+        s3_endpoint_url=os.getenv("S3_ENDPOINT_URL", ""),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )

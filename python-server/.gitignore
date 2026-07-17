@@ -1,1 +1,4 @@
 .env
+__pycache__
+.venv
+mantra_tech_voice_agent.egg-info
