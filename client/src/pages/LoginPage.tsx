@@ -25,45 +25,45 @@ const LoginPage: FC = () => {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[var(--color-surface-page)]">
-      <div className="bg-[var(--color-surface-card)] p-10 rounded-2xl border border-[var(--color-border)] w-[400px]">
+    <div className="flex items-center justify-center min-h-screen bg-surface-page">
+      <div className="bg-surface-card p-10 rounded-2xl border border-border w-[400px]">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">Mantra Tech</h1>
-          <p className="text-[13px] text-[var(--color-text-secondary)] mt-2">Sign in to your admin account</p>
+          <h1 className="text-2xl font-semibold text-text-primary">Mantra Tech</h1>
+          <p className="text-[13px] text-text-secondary mt-2">Sign in to your admin account</p>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="border border-[var(--color-border-strong)] p-3 rounded-lg text-sm text-[var(--color-text-primary)] font-medium text-center">
+            <div className="border border-border-strong p-3 rounded-lg text-sm text-text-primary font-medium text-center">
               {error}
             </div>
           )}
           
           <div>
-            <label className="block text-[13px] font-medium text-[var(--color-text-primary)] mb-1.5">Email</label>
+            <label className="block text-[13px] font-medium text-text-primary mb-1.5">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2.5 bg-transparent border border-[var(--color-border)] rounded-lg focus:outline-none focus:border-[var(--color-text-primary)] text-[14px] text-[var(--color-text-primary)] transition-colors"
+              className="w-full px-3 py-2.5 bg-transparent border border-border rounded-lg focus:outline-none focus:border-text-primary text-[14px] text-text-primary transition-colors"
             />
           </div>
           
           <div>
-            <label className="block text-[13px] font-medium text-[var(--color-text-primary)] mb-1.5">Password</label>
+            <label className="block text-[13px] font-medium text-text-primary mb-1.5">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2.5 bg-transparent border border-[var(--color-border)] rounded-lg focus:outline-none focus:border-[var(--color-text-primary)] text-[14px] text-[var(--color-text-primary)] transition-colors"
+              className="w-full px-3 py-2.5 bg-transparent border border-border rounded-lg focus:outline-none focus:border-text-primary text-[14px] text-text-primary transition-colors"
             />
           </div>
           
           <button
             type="submit"
-            className="w-full mt-2 px-4 py-2.5 bg-[var(--color-text-primary)] text-[var(--color-surface-card)] rounded-lg hover:bg-black text-[14px] font-medium transition-colors"
+            className="w-full mt-2 px-4 py-2.5 bg-text-primary text-surface-card rounded-lg hover:bg-black text-[14px] font-medium transition-colors"
           >
             Login
           </button>

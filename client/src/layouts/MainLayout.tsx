@@ -14,35 +14,35 @@ const MainLayout: FC = () => {
   const { user, logout } = useAuth()
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--color-surface-page)] flex flex-col">
+    <div className="h-screen overflow-hidden bg-surface-page flex flex-col">
       {/* Header */}
-      <header className="bg-[var(--color-surface-card)] border-b border-[var(--color-border)] sticky top-0 z-10">
+      <header className="bg-surface-card border-b border-border sticky top-0 z-10">
         <div className="px-6 h-16 flex justify-between items-center">
           <div className="flex items-center">
-            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">
+            <h1 className="text-xl font-semibold text-text-primary">
               Mantra Tech
             </h1>
           </div>
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-4">
-              <button className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+              <button className="text-text-secondary hover:text-text-primary transition-colors">
                 <Bell size={20} strokeWidth={1.75} />
               </button>
-              <button className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">
+              <button className="text-text-secondary hover:text-text-primary transition-colors">
                 <Mail size={20} strokeWidth={1.75} />
               </button>
             </div>
             
-            <div className="h-6 w-px bg-[var(--color-border)]" />
+            <div className="h-6 w-px bg-border" />
             
             <div className="flex items-center space-x-3">
-              <span className="text-sm font-medium text-[var(--color-text-primary)]">{user?.name || 'Admin User'}</span>
-              <div className="w-8 h-8 bg-[var(--color-border)] rounded-full flex items-center justify-center text-[var(--color-text-secondary)] text-xs font-medium border border-[var(--color-border-strong)]">
+              <span className="text-sm font-medium text-text-primary">{user?.name || 'Admin User'}</span>
+              <div className="w-8 h-8 bg-border rounded-full flex items-center justify-center text-text-secondary text-xs font-medium border border-border-strong">
                 {user?.name?.charAt(0) || 'A'}
               </div>
               <button
                 onClick={logout}
-                className="flex items-center space-x-1.5 ml-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                className="flex items-center space-x-1.5 ml-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
                 title="Logout"
               >
                 <LogOut size={20} strokeWidth={1.75} />
@@ -54,9 +54,9 @@ const MainLayout: FC = () => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-60 bg-[var(--color-surface-card)] border-r border-[var(--color-border)] shrink-0 h-full overflow-y-auto scrollbar-thin">
+        <aside className="w-60 bg-surface-card border-r border-border shrink-0 h-full overflow-y-auto scrollbar-thin">
           <nav className="p-4">
-            <p className="px-3 text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Main Menu</p>
+            <p className="px-3 text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">Main Menu</p>
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon
@@ -68,8 +68,8 @@ const MainLayout: FC = () => {
                       className={({ isActive }) =>
                         `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${
                           isActive
-                            ? 'bg-[var(--color-text-primary)] text-[var(--color-surface-card)]'
-                            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)] hover:text-[var(--color-text-primary)]'
+                            ? 'bg-text-primary text-surface-card'
+                            : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
                         }`
                       }
                     >
@@ -87,8 +87,8 @@ const MainLayout: FC = () => {
                     className={({ isActive }) =>
                       `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors mt-6 ${
                         isActive
-                          ? 'bg-[var(--color-text-primary)] text-[var(--color-surface-card)]'
-                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)] hover:text-[var(--color-text-primary)]'
+                          ? 'bg-text-primary text-surface-card'
+                          : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
                       }`
                     }
                   >

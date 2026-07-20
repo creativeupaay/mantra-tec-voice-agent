@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { IAuthResponse, IUser, ILoginCredentials, IRegisterData } from '../types/api'
+import { ICallListResponse, ICallResponse, ICallRecordingResponse } from '../types/call'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -93,30 +94,11 @@ export const analyticsApi = {
 
 // Call endpoints
 export const callApi = {
-  getAll: () => apiClient.get<{ success: boolean; data: {
-    _id: string
-    call_id: string
-    phone_number: string
-    duration?: number
-    recording_url?: string
-    transcript?: string
-    call_summary?: string
-    detected_intent?: string
-    timestamp: string
-  }[] }>('/calls'),
+  getAll: () => apiClient.get<ICallListResponse>('/calls'),
   
-  getById: (id: string) => apiClient.get<{ success: boolean; data: {
-    _id: string
-    call_id: string
-    phone_number: string
-    duration?: number
-    recording_url?: string
-    transcript?: string
-    call_summary?: string
-    timestamp: string
-  } }>('/calls/' + id),
+  getById: (id: string) => apiClient.get<ICallResponse>('/calls/' + id),
   
-  getRecording: (id: string) => apiClient.get<{ success: boolean; data: { recording_url: string } }>('/calls/' + id + '/recording'),
+  getRecording: (id: string) => apiClient.get<ICallRecordingResponse>('/calls/' + id + '/recording'),
 }
 
 // Agent endpoints
