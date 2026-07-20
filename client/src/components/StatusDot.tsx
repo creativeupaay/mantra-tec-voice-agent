@@ -1,9 +1,8 @@
 import { FC } from 'react'
-
-export type StatusType = 'resolved' | 'escalated' | 'missed' | 'live'
+import { CallStatus } from '../types/call'
 
 interface StatusDotProps {
-  status: StatusType
+  status: CallStatus
   label?: string
 }
 
@@ -28,10 +27,10 @@ const StatusDot: FC<StatusDotProps> = ({ status, label }) => {
   return (
     <div className="flex items-center space-x-2">
       <div
-        className={`w-2 h-2 rounded-full flex-shrink-0 ${status === 'live' ? 'animate-live-pulse' : ''}`}
+        className={`w-2 h-2 rounded-full shrink-0 ${status === 'live' ? 'animate-live-pulse' : ''}`}
         style={getDotStyle()}
       />
-      <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">
+      <span className="text-[13px] font-medium text-text-secondary">
         {label || defaultLabel}
       </span>
     </div>
