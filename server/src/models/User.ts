@@ -23,17 +23,16 @@ const userSchema = new Schema({
 }, { timestamps: true })
 
 // Hash password before saving
-userSchema.pre('save', async function (next: any) {
+userSchema.pre('save', async function () {
   // eslint-disable-next-line @typescript-eslint/no-this-alias
   const doc = this as any
   
   if (!doc.isModified('password')) {
-    return next()
+    return  // in Mongoose v6+, async pre hooks don't use next()
   }
   
   const salt = await bcrypt.genSalt(10)
   doc.password = await bcrypt.hash(doc.password, salt)
-  next()
 })
 
 // Add methods to the schema

@@ -1,58 +1,69 @@
-import { FC, useState } from 'react'
+import { FC, useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 const LoginPage: FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const { login } = useAuth()
+  const { login, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (isAuthenticated) navigate('/')
+  }, [isAuthenticated, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       await login(email, password)
+      navigate('/')  // redirect to dashboard after login
     } catch (err) {
       setError('Invalid credentials')
     }
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 className="text-2xl font-bold mb-6 text-center">Login</h1>
+    <div className="flex items-center justify-center min-h-screen bg-[var(--color-surface-page)]">
+      <div className="bg-[var(--color-surface-card)] p-10 rounded-2xl border border-[var(--color-border)] w-[400px]">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">Mantra Tech</h1>
+          <p className="text-[13px] text-[var(--color-text-secondary)] mt-2">Sign in to your admin account</p>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+            <div className="border border-[var(--color-border-strong)] p-3 rounded-lg text-sm text-[var(--color-text-primary)] font-medium text-center">
               {error}
             </div>
           )}
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-[13px] font-medium text-[var(--color-text-primary)] mb-1.5">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2.5 bg-transparent border border-[var(--color-border)] rounded-lg focus:outline-none focus:border-[var(--color-text-primary)] text-[14px] text-[var(--color-text-primary)] transition-colors"
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-[13px] font-medium text-[var(--color-text-primary)] mb-1.5">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2.5 bg-transparent border border-[var(--color-border)] rounded-lg focus:outline-none focus:border-[var(--color-text-primary)] text-[14px] text-[var(--color-text-primary)] transition-colors"
             />
           </div>
           
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-colors"
+            className="w-full mt-2 px-4 py-2.5 bg-[var(--color-text-primary)] text-[var(--color-surface-card)] rounded-lg hover:bg-black text-[14px] font-medium transition-colors"
           >
             Login
           </button>

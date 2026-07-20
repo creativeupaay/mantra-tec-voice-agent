@@ -13,21 +13,22 @@ function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       
-      <Route path="/" element={<MainLayout />}>
+      <Route path="/" element={
+        <ProtectedRoute>
+          <MainLayout />
+        </ProtectedRoute>
+      }>
         <Route index element={<HomePage />} />
-        <Route path="calls" element={
-          <ProtectedRoute><CallsPage /></ProtectedRoute>
-        } />
-        <Route path="analytics" element={
-          <ProtectedRoute><AnalyticsPage /></ProtectedRoute>
-        } />
+        <Route path="calls" element={<CallsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="usage" element={
           <ProtectedRoute allowedRoles={['super_admin']}><UsagePage /></ProtectedRoute>
         } />
-        <Route path="settings" element={
-          <ProtectedRoute><SettingsPage /></ProtectedRoute>
-        } />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
+
+      {/* Fallback for unmatched routes */}
+      <Route path="*" element={<LoginPage />} />
     </Routes>
   )
 }
