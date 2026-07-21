@@ -2,6 +2,47 @@ import axios from 'axios'
 import { IAuthResponse, IUser, ILoginCredentials, IRegisterData } from '../types/api'
 import { ICallListResponse, ICallResponse, ICallRecordingResponse } from '../types/call'
 
+export interface ICreditUsage {
+  _id: string
+  userId: string | { _id: string; name: string; email: string }
+  amount: number
+  description: string
+  type: 'usage' | 'purchase' | 'refund'
+  service?: 'plivo' | 'deepgram' | 'elevenlabs' | 'cartesia' | 'openrouter' | 'gemini' | 'platform'
+  metadata?: {
+    duration_seconds?: number
+    tokens_prompt?: number
+    tokens_completion?: number
+    [key: string]: any
+  }
+  createdAt: string
+}
+
+export interface ICallAnalytics {
+  kpis: {
+    totalCalls: number
+    resolvedCount: number
+    escalatedCount: number
+    missedCount: number
+    liveCount: number
+    redFlagCount: number
+    avgDurationSeconds: number
+  }
+  callVolume: { date: string; count: number }[]
+  statusBreakdown: { name: string; value: number }[]
+  intentBreakdown: { intent: string; count: number }[]
+  recentRedFlags: {
+    _id: string
+    call_id: string
+    caller_name?: string
+    phone_number: string
+    call_summary?: string
+    detected_intent?: string
+    status: string
+    timestamp: string
+  }[]
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 // Create axios instance
@@ -82,14 +123,10 @@ export const analyticsApi = {
     apiClient.get<{ success: boolean; data: { creditBalance: number } }>('/analytics/credit-balance'),
   
   getAllCreditUsage: () =>
-    apiClient.get<{ success: boolean; data: {
-      _id: string
-      userId: { _id: string; name: string; email: string }
-      amount: number
-      description: string
-      type: 'usage' | 'purchase' | 'refund'
-      createdAt: string
-    }[] }>('/analytics/credit-usage'),
+    apiClient.get<{ success: boolean; data: ICreditUsage[] }>('/analytics/credit-usage'),
+
+  getCallAnalytics: () =>
+    apiClient.get<{ success: boolean; data: ICallAnalytics }>('/analytics/call-analytics'),
 }
 
 // Call endpoints
