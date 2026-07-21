@@ -19,6 +19,11 @@ const creditUsageSchema = new Schema({
     enum: ['usage', 'purchase', 'refund'], 
     required: true 
   },
+  service: {
+    type: String,
+    enum: ['plivo', 'deepgram', 'elevenlabs', 'cartesia', 'openrouter', 'gemini', 'platform'],
+    required: function(this: any) { return this.type === 'usage'; }
+  },
   metadata: {
     type: Schema.Types.Mixed,
     default: {}
@@ -31,7 +36,13 @@ export interface ICreditUsage {
   amount: number
   description: string
   type: 'usage' | 'purchase' | 'refund'
-  metadata?: Record<string, unknown>
+  service?: 'plivo' | 'deepgram' | 'elevenlabs' | 'cartesia' | 'openrouter' | 'gemini' | 'platform'
+  metadata?: {
+    duration_seconds?: number
+    tokens_prompt?: number
+    tokens_completion?: number
+    [key: string]: any
+  }
   createdAt: Date
   updatedAt: Date
 }

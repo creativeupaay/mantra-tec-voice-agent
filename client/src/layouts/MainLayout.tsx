@@ -7,7 +7,6 @@ const navItems = [
   { to: '/', label: 'Dashboard', icon: Home, exact: true },
   { to: '/calls', label: 'Calls', icon: Phone },
   { to: '/analytics', label: 'Analytics', icon: BarChart2 },
-  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 const MainLayout: FC = () => {
@@ -79,13 +78,22 @@ const MainLayout: FC = () => {
                   </li>
                 )
               })}
-              {/* Super Admin only - Usage */}
+
+              {/* Settings — disabled (coming soon) */}
+              <li>
+                <div className="flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md cursor-not-allowed opacity-40 select-none text-text-secondary">
+                  <Settings size={20} strokeWidth={1.75} />
+                  <span>Settings</span>
+                </div>
+              </li>
+
+              {/* Super Admin only — Usage */}
               {user?.role === 'super_admin' && (
-                <li>
+                <li className="mt-6">
                   <NavLink
                     to="/usage"
                     className={({ isActive }) =>
-                      `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors mt-6 ${
+                      `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${
                         isActive
                           ? 'bg-text-primary text-surface-card'
                           : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
