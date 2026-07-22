@@ -6,12 +6,11 @@ Voice agent backend with call recording storage and analytics.
 
 Supports multiple storage backends for call recordings:
 
-| Provider | Environment Variable | Description |
-|----------|---------------------|-------------|
-| AWS S3 | `STORAGE_PROVIDER=s3` | Production S3 storage |
-| Google Cloud Storage | `STORAGE_PROVIDER=gcs` | GCS buckets |
-| Azure Blob | `STORAGE_PROVIDER=azure` | Azure blob storage |
-| Local Filesystem | `STORAGE_PROVIDER=local` | Development/testing |
+| Provider             | Environment Variable     | Description           |
+| -------------------- | ------------------------ | --------------------- |
+| AWS S3               | `STORAGE_PROVIDER=s3`    | Production S3 storage |
+| Google Cloud Storage | `STORAGE_PROVIDER=gcs`   | GCS buckets           |
+| Local Filesystem     | `STORAGE_PROVIDER=local` | Development/testing   |
 
 ## Call Recording Flow
 

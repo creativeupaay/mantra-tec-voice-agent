@@ -14,6 +14,7 @@ from env_config import settings
 from modules.calls.model import CallCategory, CallRecording
 from modules.calls.service import call_service
 from modules.credit_usage.service import get_credit_usage_service
+from modules.credit_usage.model import ServiceType
 from modules.identity.service import identity_service
 from services.crm import crm_service
 from services.desk import desk_service
@@ -252,6 +253,7 @@ async def run_post_call_pipeline(
                 user_id=user_id,
                 amount=credits_used,
                 description=f"Call {state.call_id} - {duration_seconds}s",
+                service=ServiceType.PLATFORM,
                 metadata={
                     "call_id": state.call_id,
                     "duration_seconds": duration_seconds,

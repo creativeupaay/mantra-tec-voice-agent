@@ -13,6 +13,17 @@ class CreditType(str, Enum):
     REFUND = "refund"
 
 
+class ServiceType(str, Enum):
+    """Services that consume credits."""
+    PLIVO = "plivo"
+    DEEPGRAM = "deepgram"
+    ELEVENLABS = "elevenlabs"
+    CARTESIA = "cartesia"
+    OPENROUTER = "openrouter"
+    GEMINI = "gemini"
+    PLATFORM = "platform"
+
+
 class CreditUsage(BaseModel):
     """Credit usage record - tracks consumption, purchases, and refunds."""
 
@@ -21,6 +32,8 @@ class CreditUsage(BaseModel):
     amount: int = Field(..., description="Credit amount (positive for usage/purchase, negative for refund)")
     description: str
     type: CreditType
+    # Service is required for 'usage' type to track which service consumed credits
+    service: Optional[ServiceType] = None
     metadata: dict = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -33,6 +46,7 @@ class CreditUsageCreate(BaseModel):
     amount: int
     description: str
     type: CreditType
+    service: Optional[ServiceType] = None
     metadata: Optional[dict] = None
 
 
@@ -40,4 +54,5 @@ class CreditUsageUpdate(BaseModel):
     amount: Optional[int] = None
     description: Optional[str] = None
     type: Optional[CreditType] = None
+    service: Optional[ServiceType] = None
     metadata: Optional[dict] = None

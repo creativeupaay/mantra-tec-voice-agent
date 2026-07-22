@@ -4,6 +4,7 @@ import { Flag, Printer, X, Calendar, Clock, AlertTriangle, Maximize2, FileText }
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
 import { formatDuration, formatTime } from '../../utils/format'
+import AudioPlayer from './AudioPlayer'
 
 interface CallDetailPanelProps {
   selectedCall: ICall
@@ -212,9 +213,12 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
             <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider mb-2">
               Recording
             </p>
-            <audio controls className="w-full h-9 outline-none">
-              <source src={selectedCall.recording_url} type="audio/mpeg" />
-            </audio>
+            <AudioPlayer 
+              src={selectedCall.recording_url} 
+              callId={selectedCall.call_id}
+              title={`Call ${selectedCall.call_id}`}
+              showFullscreen
+            />
           </div>
         )}
       </div>

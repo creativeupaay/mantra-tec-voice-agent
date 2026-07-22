@@ -68,6 +68,7 @@ from env_config import settings
 from modules.calls.service import call_service
 from pipeline.context import build_call_context
 from pipeline.post_call import run_post_call_pipeline
+from pipeline.credit_tracker import create_credit_tracker
 
 
 # ── TTS Factory ───────────────────────────────────────────────────────────────
@@ -211,10 +212,12 @@ async def run_bot(
         llm.register_function(None, agent_graph.dispatch)
 
         transcript_collector = TranscriptCollector(state)
+        credit_tracker = create_credit_tracker(state)
 
         pipeline = Pipeline([
             transport.input(),
             transcript_collector,
+            credit_tracker,
             llm,
             transport.output(),
             assistant_aggregator,
@@ -255,9 +258,14 @@ async def run_bot(
             ),
         )
 
+        transcript_collector = TranscriptCollector(state)
+        credit_tracker = create_credit_tracker(state)
+
         pipeline = Pipeline([
             transport.input(),
             stt,
+            transcript_collector,
+            credit_tracker,
             user_aggregator,
             llm,
             tts,

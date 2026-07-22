@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 from config.database import get_db, is_db_available
-from modules.credit_usage.model import CreditUsage, CreditUsageCreate, CreditUsageUpdate, CreditType
+from modules.credit_usage.model import CreditUsage, CreditUsageCreate, CreditUsageUpdate, CreditType, ServiceType
 from modules.identity.model import PyObjectId
 
 
@@ -64,6 +64,7 @@ class CreditUsageService:
         user_id: PyObjectId,
         amount: int,
         description: str,
+        service: Optional[ServiceType] = None,
         metadata: Optional[dict] = None
     ) -> CreditUsage:
         """Record credit usage (deduction)."""
@@ -72,6 +73,7 @@ class CreditUsageService:
             amount=-abs(amount),  # Usage is negative
             description=description,
             type=CreditType.USAGE,
+            service=service,
             metadata=metadata or {}
         )
         return await self._repo.create(data)
@@ -81,6 +83,7 @@ class CreditUsageService:
         user_id: PyObjectId,
         amount: int,
         description: str,
+        service: Optional[ServiceType] = None,
         metadata: Optional[dict] = None
     ) -> CreditUsage:
         """Record credit purchase (addition)."""
@@ -89,6 +92,7 @@ class CreditUsageService:
             amount=abs(amount),  # Purchase is positive
             description=description,
             type=CreditType.PURCHASE,
+            service=service,
             metadata=metadata or {}
         )
         return await self._repo.create(data)
@@ -98,6 +102,7 @@ class CreditUsageService:
         user_id: PyObjectId,
         amount: int,
         description: str,
+        service: Optional[ServiceType] = None,
         metadata: Optional[dict] = None
     ) -> CreditUsage:
         """Record credit refund."""
@@ -106,6 +111,7 @@ class CreditUsageService:
             amount=abs(amount),  # Refund is positive
             description=description,
             type=CreditType.REFUND,
+            service=service,
             metadata=metadata or {}
         )
         return await self._repo.create(data)

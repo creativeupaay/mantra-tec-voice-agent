@@ -23,10 +23,7 @@ class CallService:
         return StorageFactory.create(
             provider=storage_provider,
             bucket_name=settings.recording_bucket_name,
-            region=settings.recording_region,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            endpoint_url=settings.s3_endpoint_url,
+            project_id=settings.gcp_project_id,
         )
 
     async def start_call(self, call_id: str, phone_number: str) -> Call:

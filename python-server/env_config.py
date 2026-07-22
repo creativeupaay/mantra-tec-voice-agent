@@ -97,6 +97,7 @@ class Settings:
     aws_access_key_id: str        # AWS credentials
     aws_secret_access_key: str
     s3_endpoint_url: str          # For S3-compatible services (MinIO, etc.)
+    gcp_project_id: str
 
     # ── App ──────────────────────────────────────────────────────────────────
     log_level: str
@@ -174,12 +175,13 @@ def _load() -> Settings:
         kb_enabled=os.getenv("KB_ENABLED", "true").lower() != "false",
         booking_enabled=os.getenv("BOOKING_ENABLED", "false").lower() == "true",
         # Call Recording Storage
-        storage_provider=os.getenv("STORAGE_PROVIDER", ""),  # "s3", "local", or ""
+        storage_provider=os.getenv("STORAGE_PROVIDER", "gcs"),  # "s3", "local", or "gcs"
         recording_bucket_name=os.getenv("RECORDING_BUCKET_NAME", ""),
         recording_region=os.getenv("RECORDING_REGION", "us-east-1"),
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", ""),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
         s3_endpoint_url=os.getenv("S3_ENDPOINT_URL", ""),
+        gcp_project_id=os.getenv("GCP_PROJECT_ID", ""),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )
