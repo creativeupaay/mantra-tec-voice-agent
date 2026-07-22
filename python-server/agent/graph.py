@@ -29,6 +29,10 @@ TOOLS_SCHEMA = ToolsSchema(
 
 _HANDLERS = {
     "search_products": product_tools.handle,
+    "zoho_crm_create_lead": crm_tools.handle_create_lead,
+    "zoho_crm_search_lead": crm_tools.handle_get_crm,
+    "zoho_desk_create_ticket": desk_tools.handle_create_ticket,
+    "zoho_desk_check_tickets": desk_tools.handle_check_tickets,    
     # Handlers temporarily detached.
 }
 

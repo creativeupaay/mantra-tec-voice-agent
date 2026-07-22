@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from agent.state import CallState
+from modules.guardrails.model import get_guardrails, format_guardrails_prompt
 
 
 # ── In-Memory Context ─────────────────────────────────────────────────────────
@@ -255,6 +256,8 @@ Wait for confirmation. Then say: "हमारी team जल्द आपसे
 
 ## Caller Context
 {context_block}
+
+{format_guardrails_prompt(get_guardrails())}
 
 ## Product & Solutions Knowledge
 You have a tool called `search_products` to find products/solutions for customer requirements.

@@ -102,6 +102,10 @@ export const callApi = {
     transcript?: string
     call_summary?: string
     detected_intent?: string
+    call_category?: 'support' | 'sales' | 'booking' | 'inquiry' | 'feedback' | 'complaint' | 'technical' | 'billing'
+    is_red_flagged?: boolean
+    red_flag_reason?: string
+    guardrail_triggered?: string
     timestamp: string
   }[] }>('/calls'),
   
@@ -113,6 +117,7 @@ export const callApi = {
     recording_url?: string
     transcript?: string
     call_summary?: string
+    guardrail_triggered?: string
     timestamp: string
   } }>('/calls/' + id),
   

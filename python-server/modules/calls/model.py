@@ -1,11 +1,24 @@
 """Call record model — one document per Plivo call."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
 from modules.identity.model import PyObjectId
+
+
+class CallCategory(str, Enum):
+    """Categorization for calls."""
+    SUPPORT = "support"
+    SALES = "sales"
+    BOOKING = "booking"
+    INQUIRY = "inquiry"
+    FEEDBACK = "feedback"
+    COMPLAINT = "complaint"
+    TECHNICAL = "technical"
+    BILLING = "billing"
 
 
 class Call(BaseModel):
@@ -19,9 +32,14 @@ class Call(BaseModel):
     transcript: Optional[str] = None      # full turn-by-turn transcript
     call_summary: Optional[str] = None    # LLM-generated summary
     detected_intent: Optional[str] = None # e.g. "support", "booking", "query"
+    call_category: Optional[CallCategory] = None  # Structured category from enum
     call_outcome: Optional[str] = None    # e.g. "ticket_created", "booking_made"
     recording_url: Optional[str] = None   # URL to the call recording (presigned or local)
     recording_path: Optional[str] = None  # Storage path/key for the recording
+    # Red flag fields
+    is_red_flagged: bool = False
+    red_flag_reason: Optional[str] = None
+    guardrail_triggered: Optional[str] = None
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
@@ -37,9 +55,13 @@ class CallUpdate(BaseModel):
     transcript: Optional[str] = None
     call_summary: Optional[str] = None
     detected_intent: Optional[str] = None
+    call_category: Optional[CallCategory] = None
     call_outcome: Optional[str] = None
     recording_url: Optional[str] = None
     recording_path: Optional[str] = None
+    is_red_flagged: Optional[bool] = None
+    red_flag_reason: Optional[str] = None
+    guardrail_triggered: Optional[str] = None
 
 
 class CallRecording(BaseModel):

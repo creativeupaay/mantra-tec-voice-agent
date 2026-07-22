@@ -10,6 +10,9 @@ interface ICall {
   transcript?: string
   call_summary?: string
   detected_intent?: string
+  call_category?: 'support' | 'sales' | 'booking' | 'inquiry' | 'feedback' | 'complaint' | 'technical' | 'billing'
+  is_red_flagged?: boolean
+  red_flag_reason?: string
   timestamp: string
 }
 
@@ -44,6 +47,7 @@ const CallsPage: FC = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase">Call ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase">Phone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase">Category</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase">Duration</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase">Recording</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-600 uppercase">Date</th>
@@ -54,6 +58,17 @@ const CallsPage: FC = () => {
                   <tr key={call.call_id} className="cursor-pointer hover:bg-slate-50" onClick={() => setSelectedCall(call)}>
                     <td className="px-6 py-4 text-sm font-medium text-slate-800">{call.call_id.slice(0, 8)}...</td>
                     <td className="px-6 py-4 text-sm text-slate-700">{call.phone_number}</td>
+                    <td className="px-6 py-4">
+                      {call.is_red_flagged ? (
+                        <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                          Red Flag
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-800">
+                          {call.call_category || 'inquiry'}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-slate-700">
                       {call.duration ? `${Math.floor(call.duration / 60)}m ${call.duration % 60}s` : '-'}
                     </td>
@@ -87,6 +102,24 @@ const CallsPage: FC = () => {
                     <label className="block text-sm font-medium text-slate-600">Phone Number</label>
                     <p className="text-slate-800">{selectedCall.phone_number}</p>
                   </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600">Category</label>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      selectedCall.is_red_flagged 
+                        ? 'bg-red-100 text-red-800' 
+                        : 'bg-slate-100 text-slate-800'
+                    }`}>
+                      {selectedCall.is_red_flagged ? 'Red Flagged' : selectedCall.call_category || 'Inquiry'}
+                    </span>
+                  </div>
+                  
+                  {selectedCall.is_red_flagged && selectedCall.red_flag_reason && (
+                    <div>
+                      <label className="block text-sm font-medium text-red-600">Red Flag Reason</label>
+                      <p className="text-red-800 mt-1">{selectedCall.red_flag_reason}</p>
+                    </div>
+                  )}
                   
                   <div>
                     <label className="block text-sm font-medium text-slate-600">Duration</label>
