@@ -1,0 +1,5 @@
+{
+  // Tell VS Code's built-in CSS linter to ignore at-rules it doesn't recognise.
+  // @theme and @apply are valid Tailwind v4 directives — not actual errors.
+  "css.lint.unknownAtRules": "ignore"
+}

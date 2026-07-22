@@ -1,10 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=JetBrains+Mono:wght@500&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --color-surface-page: #FAFAF9;
+  --color-surface-card: #FFFFFF;
+  --color-text-primary: #18181B;
+  --color-text-secondary: #71717A;
+  --color-text-muted: #A1A1AA;
+  --color-border: #E4E4E7;
+  --color-border-strong: #D4D4D8;
+  --color-accent: #2451DA;
+  --color-accent-bg: #EBF0FD;
+  --color-status-resolved: #5B8C5A;
+  --color-status-escalated: #C1554A;
+  --color-status-missed: #C98A3B;
+  --color-status-live: #2451DA;
+
+  --animate-live-pulse: live-pulse 1.6s infinite ease-in-out;
+
+  @keyframes live-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
 }
 
-/* Custom admin styles */
+
+/* Base styles enforcing the monochrome theme */
 body {
-  @apply bg-slate-50 text-slate-900 font-sans;
+  @apply bg-surface-page text-text-primary font-sans antialiased;
+}
+
+/* ─── Custom Scrollbar ─────────────────────────────────────────────────────
+   Thin, neutral, non-intrusive. Matches the monochrome design system.
+   Track = transparent until hovered; thumb = border-strong color.
+   Works in Chrome/Edge/Safari (webkit) and Firefox.
+────────────────────────────────────────────────────────────────────────── */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: #D4D4D8 transparent;
+}
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: #D4D4D8;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #A1A1AA;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Narrow 4px scrollbar for tight containers (transcript boxes, etc.) */
+.scrollbar-narrow::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-narrow {
+  scrollbar-width: thin;
 }
