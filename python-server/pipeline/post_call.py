@@ -4,14 +4,16 @@ import asyncio
 from typing import List, Optional
 
 import instructor
+from google import genai
+from google.genai import types
 from loguru import logger
-from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from agent.state import CallState
 from env_config import settings
-from modules.calls.model import CallRecording
+from modules.calls.model import CallCategory, CallRecording
 from modules.calls.service import call_service
+from modules.credit_usage.service import get_credit_usage_service
 from modules.identity.service import identity_service
 from services.crm import crm_service
 from services.desk import desk_service
@@ -19,11 +21,15 @@ from services.desk import desk_service
 
 class PostCallExtraction(BaseModel):
     """Structured output from the LLM after analyzing the call transcript."""
+    
     summary: str = Field(
         ..., description="A detailed summary of the conversation and decisions made."
     )
     intent: str = Field(
         ..., description="The primary reason for the call (e.g., Support, Sales, Booking, Inquiry)."
+    )
+    call_category: CallCategory = Field(
+        default=CallCategory.INQUIRY, description="Categorization of the call."
     )
     long_term_notes: List[str] = Field(
         ..., description="Bullet points of key facts to remember for future calls (e.g., user preferences, recurring issues). Do not include transient details."
@@ -36,6 +42,17 @@ class PostCallExtraction(BaseModel):
     )
     caller_name: Optional[str] = Field(
         None, description="The name of the caller if they introduced themselves or shared their name during the call (e.g. 'Manish')."
+    )
+    is_red_flagged: bool = Field(
+        default=False, description="True if the call contains sensitive content, disallowed topics, or the agent lacked knowledge."
+    )
+    red_flag_reason: Optional[str] = Field(
+        None, description="Reason for red flag: e.g., 'Sensitive PII detected', 'Agent knowledge gap', 'Off-topic content.'"
+    )
+    
+    # Guardrail detection
+    guardrail_triggered: Optional[str] = Field(
+        None, description="The guardrail trigger that was detected in the conversation, if any."
     )
 
 
@@ -52,44 +69,41 @@ async def run_post_call_pipeline(
     logger.info(f"[post-call] Starting post-call pipeline for {state.call_id}")
     transcript_text = "\n".join(state.transcript_lines)
 
-    # ── 1. LLM Extraction using Instructor ─────────────────────────────────────
+    # ── 1. LLM Extraction using Gemini ─────────────────────────────────────
     try:
-        # We use OpenRouter with the OpenAI client + Instructor
-        client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=settings.openrouter_api_key,
-        )
-        # Apply instructor patch
-        instructor_client = instructor.from_openai(client)
+        client = genai.Client(api_key=settings.gemini_api_key)
 
-        extraction: PostCallExtraction = await instructor_client.chat.completions.create(
-            model=settings.openrouter_model,
-            response_model=PostCallExtraction,
-            max_retries=2,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a post-call analyst for Mantra Tech. Analyze the following transcript "
-                        "and extract a detailed summary, the primary intent, and any long-term notes to remember. "
-                        "Determine if a support ticket or sales lead still needs to be created."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": f"Transcript:\n\n{transcript_text}"
-                }
+        extraction = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_text(text=f"Transcript:\n\n{transcript_text}")
             ],
+            config=types.GenerateContentConfig(
+                system_instruction=(
+                    "You are a post-call analyst for Mantra Tech. Analyze the following transcript "
+                    "and extract a detailed summary, the primary intent, and categorize the call. "
+                    "Determine if a support ticket or sales lead still needs to be created. "
+                    "Flag if the agent lacked knowledge or detected sensitive/disallowed content."
+                ),
+                response_mime_type="application/json",
+                response_schema=PostCallExtraction,
+            )
         )
+        
+        # Parse the JSON response into PostCallExtraction
+        import json
+        extraction = PostCallExtraction(**json.loads(extraction.text or "{}"))
     except Exception as e:
         logger.error(f"[post-call] LLM extraction failed: {e}")
         # Graceful fallback if LLM fails
         extraction = PostCallExtraction(
             summary="Post-call LLM extraction failed.",
             intent="Unknown",
+            call_category=CallCategory.INQUIRY,
             long_term_notes=[],
             requires_ticket=False,
             requires_lead=False,
+            is_red_flagged=False,
         )
 
     logger.info(f"[post-call] Extracted intent: {extraction.intent}")
@@ -119,6 +133,10 @@ async def run_post_call_pipeline(
             transcript=transcript_text,
             summary=extraction.summary,
             intent=extraction.intent,
+            call_category=extraction.call_category,
+            is_red_flagged=extraction.is_red_flagged,
+            red_flag_reason=extraction.red_flag_reason,
+            guardrail_triggered=extraction.guardrail_triggered,
         )
         logger.info(f"[post-call] Finalized call record for {state.call_id}")
     except Exception as e:
@@ -217,3 +235,30 @@ async def run_post_call_pipeline(
             logger.warning(f"[post-call] Auto-create ticket failed: {e}")
 
     logger.info(f"[post-call] Pipeline completed for {state.call_id}")
+
+    # ── 5. Credit Usage Tracking ─────────────────────────────────────────────
+    # Track credits consumed for this call
+    try:
+        # Get user_id from state or use a default system user
+        user_id = state.user_id if hasattr(state, 'user_id') and state.user_id else None
+        if user_id:
+            # Calculate credits based on duration and services used
+            # Example: 1 credit per minute + LLM tokens + STT/TTS
+            credits_used = max(1, duration_seconds // 60)  # At least 1 credit per call
+            if duration_seconds > 60:
+                credits_used += (duration_seconds - 60) // 30  # Additional credits for extra time
+            
+            await get_credit_usage_service().record_usage(
+                user_id=user_id,
+                amount=credits_used,
+                description=f"Call {state.call_id} - {duration_seconds}s",
+                metadata={
+                    "call_id": state.call_id,
+                    "duration_seconds": duration_seconds,
+                    "phone_number": state.phone_number,
+                    "services": ["stt", "llm", "tts", "platform"]
+                }
+            )
+            logger.info(f"[post-call] Recorded {credits_used} credits used for call {state.call_id}")
+    except Exception as e:
+        logger.error(f"[post-call] Failed to record credit usage: {e}")

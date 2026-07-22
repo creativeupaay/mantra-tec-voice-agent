@@ -112,6 +112,30 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
           <DetailField label="Outcome" value={selectedCall.call_outcome.replace(/_/g, ' ')} />
         )}
 
+        {/* Category */}
+        {selectedCall.call_category && (
+          <DetailField
+            label="Category"
+            value={
+              <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-surface-page border border-border">
+                {selectedCall.call_category}
+              </span>
+            }
+          />
+        )}
+
+        {/* Guardrail triggered */}
+        {selectedCall.guardrail_triggered && (
+          <DetailField
+            label="Guardrail"
+            value={
+              <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                {selectedCall.guardrail_triggered}
+              </span>
+            }
+          />
+        )}
+
         {/* Red flag warning */}
         {selectedCall.is_red_flag && (
           <div
@@ -127,15 +151,22 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
               className="shrink-0 mt-0.5"
               style={{ color: 'var(--color-status-escalated)' }}
             />
-            <p className="text-[13px] leading-relaxed" style={{ color: 'var(--color-status-escalated)' }}>
-              This call has been flagged for review. Follow-up action may be required.
-            </p>
+            <div>
+              <p className="text-[13px] leading-relaxed" style={{ color: 'var(--color-status-escalated)' }}>
+                This call has been flagged for review. Follow-up action may be required.
+              </p>
+              {selectedCall.red_flag_reason && (
+                <p className="text-[12px] mt-1" style={{ color: 'var(--color-status-escalated)' }}>
+                  Reason: {selectedCall.red_flag_reason}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
         {/* Call Summary */}
         {selectedCall.call_summary && (
-          <div 
+          <div
             className="group cursor-pointer p-3 -mx-3 rounded-xl hover:bg-surface-page transition-colors border border-transparent hover:border-border"
             onClick={() => openModal('Call Summary', selectedCall.call_summary!)}
           >
@@ -153,7 +184,7 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
 
         {/* Transcript */}
         {selectedCall.transcript && (
-          <div 
+          <div
             className="group cursor-pointer p-3 -mx-3 rounded-xl hover:bg-surface-page transition-colors border border-transparent hover:border-border"
             onClick={() => openModal('Full Transcript', selectedCall.transcript!)}
           >

@@ -22,7 +22,7 @@ const StatusDot: FC<StatusDotProps> = ({ status, label }) => {
     }
   }
 
-  const defaultLabel = status.charAt(0).toUpperCase() + status.slice(1)
+  const defaultLabel = status?.charAt(0)?.toUpperCase() + status?.slice(1)
 
   return (
     <div className="flex items-center space-x-2">

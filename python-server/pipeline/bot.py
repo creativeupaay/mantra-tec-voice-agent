@@ -205,7 +205,7 @@ async def run_bot(
                 language=settings.gemini_language,
                 temperature=0.7,
                 max_tokens=1024,
-                thinking=ThinkingConfig(thinkingBudget=0),
+                thinking=ThinkingConfig(thinking_budget=0),
             ),
         )
         llm.register_function(None, agent_graph.dispatch)
@@ -404,10 +404,10 @@ async def bot(runner_args: RunnerArguments) -> None:
             )
             transport = FastAPIWebsocketTransport(
                 websocket=runner_args.websocket,
-                audio_in_enabled=True,
-                audio_out_enabled=True,
-                add_wav_header=False,
-                serializer=serializer,
+                params=FastAPIWebsocketParams(
+                    add_wav_header=False,
+                    serializer=serializer,
+                ),
             )
 
         case _:

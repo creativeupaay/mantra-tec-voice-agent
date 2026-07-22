@@ -1,5 +1,6 @@
 """Calls service — business logic for call lifecycle management."""
 
+from modules.calls.model import CallCategory
 from typing import List, Optional
 
 from config.database import get_db
@@ -66,9 +67,13 @@ class CallService:
         transcript: Optional[str] = None,
         summary: Optional[str] = None,
         intent: Optional[str] = None,
+        call_category: Optional[CallCategory] = None,
         outcome: Optional[str] = None,
         recording_url: Optional[str] = None,
         recording_path: Optional[str] = None,
+        is_red_flagged: Optional[bool] = None,
+        red_flag_reason: Optional[str] = None,
+        guardrail_triggered: Optional[str] = None,
     ) -> Optional[Call]:
         """Persist post-call data once the post-call pipeline completes."""
         return await self._repo().update(
@@ -78,9 +83,13 @@ class CallService:
                 transcript=transcript,
                 call_summary=summary,
                 detected_intent=intent,
+                call_category=call_category,
                 call_outcome=outcome,
                 recording_url=recording_url,
                 recording_path=recording_path,
+                is_red_flagged=is_red_flagged,
+                red_flag_reason=red_flag_reason,
+                guardrail_triggered=guardrail_triggered,
             ),
         )
 

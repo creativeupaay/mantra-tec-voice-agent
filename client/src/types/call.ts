@@ -1,5 +1,7 @@
 export type CallStatus = 'live' | 'resolved' | 'escalated' | 'missed'
 
+export type CallCategory = 'support' | 'sales' | 'booking' | 'inquiry' | 'feedback' | 'complaint' | 'technical' | 'billing'
+
 export interface ICall {
   _id: string
   call_id: string
@@ -8,6 +10,9 @@ export interface ICall {
   duration?: number
   status: CallStatus
   is_red_flag: boolean
+  call_category?: CallCategory
+  red_flag_reason?: string
+  guardrail_triggered?: string
   recording_url?: string
   transcript?: string
   call_summary?: string
