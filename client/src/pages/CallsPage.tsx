@@ -7,21 +7,7 @@ import CallFilters from '../components/calls/CallFilters'
 import CallTable from '../components/calls/CallTable'
 import CallDetailPanel from '../components/calls/CallDetailPanel'
 
-<<<<<<< HEAD
 
-const STATUS_COLORS: Record<CallStatus, string> = {
-  live: 'var(--color-status-live)',
-  resolved: 'var(--color-status-resolved)',
-  escalated: 'var(--color-status-escalated)',
-  missed: 'var(--color-status-missed)',
-=======
-const STATUS_LABELS: Record<CallStatus, string> = {
-  live: 'Live',
-  resolved: 'Resolved',
-  escalated: 'Escalated',
-  missed: 'Missed',
->>>>>>> 83e60636a623eeb8ae9e953eed4fc92a26d43ad6
-}
 
 const STATUS_LABELS: Record<CallStatus, string> = {
   live: 'Live',
@@ -36,12 +22,9 @@ const CallsPage: FC = () => {
   const [selectedCall, setSelectedCall] = useState<ICall | null>(null)
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | CallStatus | 'flagged'>('all')
-<<<<<<< HEAD
-=======
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalTitle, setModalTitle] = useState('')
   const [modalContent, setModalContent] = useState('')
->>>>>>> 83e60636a623eeb8ae9e953eed4fc92a26d43ad6
 
   const [calls, setCalls] = useState<ICall[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -60,26 +43,12 @@ const CallsPage: FC = () => {
     fetchCalls()
   }, [])
 
-<<<<<<< HEAD
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [modalTitle, setModalTitle] = useState('')
-  const [modalContent, setModalContent] = useState('')
-
   const openModal = (title: string, content: string) => {
     setModalTitle(title)
     setModalContent(content)
     setIsModalOpen(true)
   }
 
-=======
-  const openModal = (title: string, content: string) => {
-    setModalTitle(title)
-    setModalContent(content)
-    setIsModalOpen(true)
-  }
-
->>>>>>> 83e60636a623eeb8ae9e953eed4fc92a26d43ad6
   const filtered = useMemo(() => {
     return calls.filter(call => {
       const matchesSearch =
@@ -137,14 +106,10 @@ const CallsPage: FC = () => {
           STATUS_LABELS={STATUS_LABELS}
         />
       )}
-<<<<<<< HEAD
-=======
-
->>>>>>> 83e60636a623eeb8ae9e953eed4fc92a26d43ad6
       {/* ── Modal ───────────────────────────────────────────────────────────── */}
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
         title={modalTitle}
       >
         <div className="bg-surface-page border border-border rounded-xl p-6">
