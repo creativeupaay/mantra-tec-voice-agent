@@ -119,7 +119,7 @@ export const getCallAnalytics = async (req: Request, res: Response, next: NextFu
 
     // ── 4. Intent breakdown ────────────────────────────────────────────────
     const intentRaw = await Call.aggregate([
-      { $match: { detected_intent: { $exists: true, $ne: null, $ne: '' } } },
+      { $match: { detected_intent: { $exists: true, $nin: [null, ''] } } },
       { $group: { _id: '$detected_intent', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 8 }

@@ -13,6 +13,7 @@ from agent.state import CallState
 from env_config import settings
 from modules.calls.model import CallCategory, CallRecording
 from modules.calls.service import call_service
+from modules.credit_usage.service import get_credit_usage_service
 from modules.identity.service import identity_service
 from services.crm import crm_service
 from services.desk import desk_service
@@ -73,7 +74,7 @@ async def run_post_call_pipeline(
         client = genai.Client(api_key=settings.gemini_api_key)
 
         extraction = client.models.generate_content(
-            model=settings.gemini_model,
+            model="gemini-2.5-flash",
             contents=[
                 types.Part.from_text(text=f"Transcript:\n\n{transcript_text}")
             ],
@@ -234,3 +235,30 @@ async def run_post_call_pipeline(
             logger.warning(f"[post-call] Auto-create ticket failed: {e}")
 
     logger.info(f"[post-call] Pipeline completed for {state.call_id}")
+
+    # ── 5. Credit Usage Tracking ─────────────────────────────────────────────
+    # Track credits consumed for this call
+    try:
+        # Get user_id from state or use a default system user
+        user_id = state.user_id if hasattr(state, 'user_id') and state.user_id else None
+        if user_id:
+            # Calculate credits based on duration and services used
+            # Example: 1 credit per minute + LLM tokens + STT/TTS
+            credits_used = max(1, duration_seconds // 60)  # At least 1 credit per call
+            if duration_seconds > 60:
+                credits_used += (duration_seconds - 60) // 30  # Additional credits for extra time
+            
+            await get_credit_usage_service().record_usage(
+                user_id=user_id,
+                amount=credits_used,
+                description=f"Call {state.call_id} - {duration_seconds}s",
+                metadata={
+                    "call_id": state.call_id,
+                    "duration_seconds": duration_seconds,
+                    "phone_number": state.phone_number,
+                    "services": ["stt", "llm", "tts", "platform"]
+                }
+            )
+            logger.info(f"[post-call] Recorded {credits_used} credits used for call {state.call_id}")
+    except Exception as e:
+        logger.error(f"[post-call] Failed to record credit usage: {e}")

@@ -27,13 +27,10 @@ const MainLayout: FC = () => {
               <button className="text-text-secondary hover:text-text-primary transition-colors">
                 <Bell size={20} strokeWidth={1.75} />
               </button>
-              <button className="text-text-secondary hover:text-text-primary transition-colors">
-                <Mail size={20} strokeWidth={1.75} />
-              </button>
             </div>
-            
+
             <div className="h-6 w-px bg-border" />
-            
+
             <div className="flex items-center space-x-3">
               <span className="text-sm font-medium text-text-primary">{user?.name || 'Admin User'}</span>
               <div className="w-8 h-8 bg-border rounded-full flex items-center justify-center text-text-secondary text-xs font-medium border border-border-strong">
@@ -65,10 +62,9 @@ const MainLayout: FC = () => {
                       to={item.to}
                       end={item.exact}
                       className={({ isActive }) =>
-                        `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${
-                          isActive
-                            ? 'bg-text-primary text-surface-card'
-                            : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
+                        `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${isActive
+                          ? 'bg-text-primary text-surface-card'
+                          : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
                         }`
                       }
                     >
@@ -93,10 +89,9 @@ const MainLayout: FC = () => {
                   <NavLink
                     to="/usage"
                     className={({ isActive }) =>
-                      `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive
-                          ? 'bg-text-primary text-surface-card'
-                          : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
+                      `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${isActive
+                        ? 'bg-text-primary text-surface-card'
+                        : 'text-text-secondary hover:bg-surface-page hover:text-text-primary'
                       }`
                     }
                   >
