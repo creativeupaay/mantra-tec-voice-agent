@@ -14,10 +14,9 @@ from pipecat.frames.frames import (
     TTSTextFrame,
     LLMFullResponseEndFrame,
     MetricsFrame,
-    FrameDirection,
 )
 from pipecat.metrics.metrics import MetricsData, LLMUsageMetricsData, TTSUsageMetricsData, LLMTokenUsage
-from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from agent.state import CallState
 
 
