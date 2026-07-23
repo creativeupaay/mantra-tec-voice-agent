@@ -273,8 +273,9 @@ const AnalyticsPage: FC = () => {
                     dataKey="intent"
                     axisLine={false}
                     tickLine={false}
+                    tickFormatter={(value: string) => (value.length > 16 ? `${value.slice(0, 14)}...` : value)}
                     tick={{ fontSize: 12, fill: 'var(--color-text-secondary)' }}
-                    width={90}
+                    width={110}
                   />
                   <Tooltip
                     cursor={{ fill: 'var(--color-surface-page)' }}

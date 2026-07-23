@@ -22,16 +22,17 @@ const StatusDot: FC<StatusDotProps> = ({ status, label }) => {
     }
   }
 
-  const defaultLabel = status?.charAt(0)?.toUpperCase() + status?.slice(1)
+  const safeStatus = status || 'resolved'
+  const displayLabel = label || (typeof safeStatus === 'string' ? safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1) : 'Resolved')
 
   return (
     <div className="flex items-center space-x-2">
       <div
-        className={`w-2 h-2 rounded-full shrink-0 ${status === 'live' ? 'animate-live-pulse' : ''}`}
+        className={`w-2 h-2 rounded-full shrink-0 ${safeStatus === 'live' ? 'animate-live-pulse' : ''}`}
         style={getDotStyle()}
       />
-      <span className="text-[13px] font-medium text-text-secondary">
-        {label || defaultLabel}
+      <span className="text-[13px] font-medium text-text-secondary capitalize">
+        {displayLabel}
       </span>
     </div>
   )

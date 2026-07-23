@@ -118,13 +118,41 @@ export const getCallAnalytics = async (req: Request, res: Response, next: NextFu
       .filter((s: any) => s.name) // remove null/undefined statuses
 
     // ── 4. Intent breakdown ────────────────────────────────────────────────
-    const intentRaw = await Call.aggregate([
-      { $match: { detected_intent: { $exists: true, $nin: [null, ''] } } },
-      { $group: { _id: '$detected_intent', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 8 }
-    ])
-    const intentBreakdown = intentRaw.map((i: any) => ({ intent: i._id, count: i.count }))
+    const allCallsWithIntent = await Call.find({
+      $or: [
+        { detected_intent: { $exists: true, $nin: [null, ''] } },
+        { call_category: { $exists: true, $nin: [null, ''] } },
+      ]
+    }).select('detected_intent call_category').lean()
+
+    const normalizeIntent = (raw?: string, category?: string): string => {
+      if (category && category !== 'inquiry') {
+        return category.charAt(0).toUpperCase() + category.slice(1)
+      }
+      if (!raw || raw.toLowerCase() === 'unknown') return 'General Query'
+      const lower = raw.toLowerCase()
+      if (lower.includes('sale') || lower.includes('buy') || lower.includes('pricing') || lower.includes('purchase')) return 'Sales'
+      if (lower.includes('support') || lower.includes('help') || lower.includes('issue') || lower.includes('bug')) return 'Support'
+      if (lower.includes('book') || lower.includes('demo') || lower.includes('consultation')) return 'Booking'
+      if (lower.includes('complaint') || lower.includes('complain')) return 'Complaint'
+      if (lower.includes('tech')) return 'Technical'
+      if (lower.includes('bill')) return 'Billing'
+      if (lower.includes('inquir') || lower.includes('query')) return 'Product Inquiry'
+
+      const clean = raw.replace(/_/g, ' ').trim()
+      return clean.length > 20 ? clean.slice(0, 17) + '...' : clean.charAt(0).toUpperCase() + clean.slice(1)
+    }
+
+    const intentMap: Record<string, number> = {}
+    allCallsWithIntent.forEach((c: any) => {
+      const intentName = normalizeIntent(c.detected_intent, c.call_category)
+      intentMap[intentName] = (intentMap[intentName] || 0) + 1
+    })
+
+    const intentBreakdown = Object.entries(intentMap)
+      .map(([intent, count]) => ({ intent, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
 
     // ── 5. Recent red flag calls ───────────────────────────────────────────
     const recentRedFlags = await Call.find({ is_red_flag: true })

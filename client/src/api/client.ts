@@ -59,6 +59,20 @@ export interface ICallAnalytics {
   }[];
 }
 
+export interface INotification {
+  _id: string;
+  userId?: string;
+  title: string;
+  message: string;
+  category: 'call' | 'credit' | 'system' | 'agent' | 'ticket' | string;
+  severity: 'info' | 'success' | 'warning' | 'error';
+  read: boolean;
+  link?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:8001/api/v1";
 
@@ -125,6 +139,33 @@ export const authApi = {
 
   getProfile: () =>
     apiClient.get<{ success: boolean; user: IUser }>("/auth/profile"),
+
+  updateProfile: (data: { name?: string; email?: string }) =>
+    apiClient.put<{ success: boolean; message: string; user: IUser }>("/auth/profile", data),
+
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    apiClient.put<{ success: boolean; message: string }>("/auth/change-password", data),
+};
+
+// Notification endpoints
+export const notificationApi = {
+  getNotifications: () =>
+    apiClient.get<{
+      success: boolean;
+      data: { notifications: INotification[]; unreadCount: number };
+    }>("/notifications"),
+
+  markAsRead: (id: string) =>
+    apiClient.patch<{ success: boolean; data: INotification }>(`/notifications/${id}/read`),
+
+  markAllAsRead: () =>
+    apiClient.patch<{ success: boolean; message: string }>("/notifications/read-all"),
+
+  deleteNotification: (id: string) =>
+    apiClient.delete<{ success: boolean; message: string }>(`/notifications/${id}`),
+
+  deleteAllNotifications: () =>
+    apiClient.delete<{ success: boolean; message: string }>("/notifications/clear-all"),
 };
 
 // Analytics endpoints

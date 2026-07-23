@@ -1,7 +1,8 @@
 import { FC } from 'react'
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { Home, Phone, BarChart2, Settings, Activity, Bell, Mail, LogOut } from 'lucide-react'
+import { Home, Phone, BarChart2, Settings, Activity, LogOut, User as UserIcon } from 'lucide-react'
+import { NotificationDropdown } from '../components/NotificationDropdown'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home, exact: true },
@@ -15,7 +16,7 @@ const MainLayout: FC = () => {
   return (
     <div className="h-screen overflow-hidden bg-surface-page flex flex-col">
       {/* Header */}
-      <header className="bg-surface-card border-b border-border sticky top-0 z-10">
+      <header className="bg-surface-card border-b border-border sticky top-0 z-40">
         <div className="px-6 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-xl font-semibold text-text-primary">
@@ -24,24 +25,30 @@ const MainLayout: FC = () => {
           </div>
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-4">
-              <button className="text-text-secondary hover:text-text-primary transition-colors">
-                <Bell size={20} strokeWidth={1.75} />
-              </button>
+              <NotificationDropdown />
             </div>
 
             <div className="h-6 w-px bg-border" />
 
             <div className="flex items-center space-x-3">
-              <span className="text-sm font-medium text-text-primary">{user?.name || 'Admin User'}</span>
-              <div className="w-8 h-8 bg-border rounded-full flex items-center justify-center text-text-secondary text-xs font-medium border border-border-strong">
-                {user?.name?.charAt(0) || 'A'}
-              </div>
+              <Link
+                to="/profile"
+                className="flex items-center space-x-2.5 group hover:opacity-80 transition-opacity"
+                title="View Profile Settings"
+              >
+                <span className="text-sm font-medium text-text-primary group-hover:text-accent transition-colors">
+                  {user?.name || 'Admin User'}
+                </span>
+                <div className="w-8 h-8 bg-surface-page rounded-full flex items-center justify-center text-text-primary text-xs font-semibold border border-border group-hover:border-accent transition-colors shadow-sm">
+                  {user?.name?.charAt(0).toUpperCase() || 'A'}
+                </div>
+              </Link>
               <button
                 onClick={logout}
-                className="flex items-center space-x-1.5 ml-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+                className="flex items-center space-x-1.5 ml-2 text-sm font-medium text-text-secondary hover:text-status-escalated transition-colors"
                 title="Logout"
               >
-                <LogOut size={20} strokeWidth={1.75} />
+                <LogOut size={18} strokeWidth={1.75} />
               </button>
             </div>
           </div>
