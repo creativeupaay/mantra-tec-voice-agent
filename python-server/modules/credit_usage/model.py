@@ -28,22 +28,25 @@ class CreditUsage(BaseModel):
     """Credit usage record - tracks consumption, purchases, and refunds."""
 
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
-    user_id: PyObjectId
-    amount: int = Field(..., description="Credit amount (positive for usage/purchase, negative for refund)")
+    call_id: PyObjectId
+    amount: float = Field(
+        ...,
+        description="Estimated USD amount (negative for usage deductions, positive for purchase/refund)",
+    )
     description: str
     type: CreditType
-    # Service is required for 'usage' type to track which service consumed credits
+    # Service is required for 'usage' type to track which API consumed credits
     service: Optional[ServiceType] = None
     metadata: dict = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow, alias="createdAt")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, alias="updatedAt")
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
 
 class CreditUsageCreate(BaseModel):
-    user_id: PyObjectId
-    amount: int
+    call_id: PyObjectId
+    amount: float
     description: str
     type: CreditType
     service: Optional[ServiceType] = None
@@ -51,7 +54,7 @@ class CreditUsageCreate(BaseModel):
 
 
 class CreditUsageUpdate(BaseModel):
-    amount: Optional[int] = None
+    amount: Optional[float] = None
     description: Optional[str] = None
     type: Optional[CreditType] = None
     service: Optional[ServiceType] = None

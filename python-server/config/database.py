@@ -81,8 +81,9 @@ async def _ensure_indexes() -> None:
     await db.sessions.create_index("agent_id")
     await db.sessions.create_index("phone_number")
 
-    # credit_usage: lookup by user_id and time
-    await db.credit_usage.create_index([("user_id", 1), ("created_at", -1)])
+    # credit_usage: lookup by call_id and time (supports both Python + Mongoose timestamp fields)
+    await db.credit_usage.create_index([("call_id", 1), ("createdAt", -1)])
+    await db.credit_usage.create_index([("call_id", 1), ("created_at", -1)])
 
     logger.info("MongoDB indexes ensured")
 

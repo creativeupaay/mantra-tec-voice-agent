@@ -71,7 +71,7 @@ const CallTable: FC<CallTableProps> = ({ isLoading, filtered, selectedCall, setS
                         <p className="text-[14px] font-medium text-text-primary leading-tight truncate">
                           {call.caller_name ?? call.phone_number}
                         </p>
-                        {call.is_red_flag && (
+                        {(call.is_red_flag || call.is_red_flagged) && (
                           <span title="Red flag">
                             <Flag
                               size={12}

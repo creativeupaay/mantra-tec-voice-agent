@@ -4,8 +4,15 @@ from typing import List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from modules.calls.model import Call, CallCreate, CallUpdate, CallRecording
-from services.storage.base import StorageProvider, StorageFactory
+from modules.calls.model import (
+    Call,
+    CallCategory,
+    CallCreate,
+    CallRecording,
+    CallStatus,
+    CallUpdate,
+)
+from services.storage.base import StorageProvider
 
 
 class CallRepository:
@@ -22,7 +29,13 @@ class CallRepository:
         self._storage = provider
 
     async def create(self, data: CallCreate) -> Call:
-        doc = data.model_dump()
+        # Persist the same defaults the Node/Mongoose schema expects so the
+        # Calls UI always has status/category/red-flag fields present.
+        doc = data.model_dump(mode="json")
+        doc.setdefault("status", CallStatus.LIVE.value)
+        doc.setdefault("is_red_flag", False)
+        doc.setdefault("is_red_flagged", False)
+        doc.setdefault("call_category", CallCategory.INQUIRY.value)
         result = await self._col.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return Call(**doc)
@@ -40,8 +53,13 @@ class CallRepository:
         if not self._storage:
             raise RuntimeError("Storage provider not configured")
         
-        # Generate storage path
-        file_path = f"recordings/{recording.call_id}.mp3"
+        # Pick extension from content type (pipeline records WAV/PCM by default)
+        extension = "mp3"
+        if "wav" in (recording.content_type or "").lower():
+            extension = "wav"
+        elif "ogg" in (recording.content_type or "").lower():
+            extension = "ogg"
+        file_path = f"recordings/{recording.call_id}.{extension}"
         
         # Upload to storage
         url = await self._storage.upload_recording(
@@ -60,7 +78,11 @@ class CallRepository:
 
     async def find_by_call_id(self, call_id: str) -> Optional[Call]:
         doc = await self._col.find_one({"call_id": call_id})
-        return Call(**doc) if doc else None
+        if not doc:
+            return None
+        if "_id" in doc:
+            doc["_id"] = str(doc["_id"])
+        return Call(**doc)
 
     async def find_recent_by_phone(
         self, phone_number: str, limit: int = 3
@@ -71,10 +93,20 @@ class CallRepository:
             .sort("timestamp", -1)
             .limit(limit)
         )
-        return [Call(**doc) async for doc in cursor]
+        calls = []
+        async for doc in cursor:
+            if "_id" in doc:
+                doc["_id"] = str(doc["_id"])
+            calls.append(Call(**doc))
+        return calls
 
     async def update(self, call_id: str, data: CallUpdate) -> Optional[Call]:
-        updates = {k: v for k, v in data.model_dump().items() if v is not None}
+        # mode="json" converts enums → strings so Mongo + Mongoose stay in sync.
+        updates = {
+            k: v
+            for k, v in data.model_dump(mode="json").items()
+            if v is not None
+        }
         if updates:
             await self._col.update_one({"call_id": call_id}, {"$set": updates})
         return await self.find_by_call_id(call_id)

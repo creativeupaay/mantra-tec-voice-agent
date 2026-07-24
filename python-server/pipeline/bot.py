@@ -23,7 +23,10 @@ Run with:
 """
 
 import asyncio
+import io
+import time
 import uuid
+import wave
 
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -37,6 +40,7 @@ from pipecat.frames.frames import (
     LLMContextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -52,7 +56,6 @@ from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.plivo import PlivoFrameSerializer
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openrouter.llm import OpenRouterLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
@@ -69,6 +72,58 @@ from modules.calls.service import call_service
 from pipeline.context import build_call_context
 from pipeline.post_call import run_post_call_pipeline
 from pipeline.credit_tracker import create_credit_tracker
+
+
+def _pcm_to_wav(pcm_audio: bytes, sample_rate: int, num_channels: int) -> bytes:
+    """Wrap raw 16-bit PCM in a WAV container for upload/playback."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wf:
+        wf.setnchannels(num_channels)
+        wf.setsampwidth(2)  # 16-bit PCM
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_audio)
+    return buffer.getvalue()
+
+
+def _create_audio_buffer() -> tuple[AudioBufferProcessor, dict, asyncio.Event]:
+    """Create an AudioBufferProcessor and wire a reliable capture handler.
+
+    Pipecat's ``on_audio_data`` handler signature is:
+      (buffer, audio, sample_rate, num_channels)
+
+    With ``buffer_size=0``, audio is emitted once on ``stop_recording()``.
+    """
+    audio_buffer = AudioBufferProcessor(
+        num_channels=1,
+        buffer_size=0,
+        enable_turn_audio=False,
+        auto_start_recording=True,
+    )
+    capture: dict = {
+        "audio": b"",
+        "sample_rate": 16000,
+        "num_channels": 1,
+    }
+    ready = asyncio.Event()
+
+    @audio_buffer.event_handler("on_audio_data")
+    async def on_audio_data(buffer, audio, sample_rate, num_channels):
+        if audio:
+            capture["audio"] = bytes(audio)
+            capture["sample_rate"] = sample_rate or capture["sample_rate"]
+            capture["num_channels"] = num_channels or capture["num_channels"]
+            logger.info(
+                f"[bot] Captured recording chunk: {len(capture['audio'])} bytes "
+                f"@ {capture['sample_rate']}Hz x{capture['num_channels']}"
+            )
+        ready.set()
+
+    @audio_buffer.event_handler("on_recording_stopped")
+    async def on_recording_stopped(buffer):
+        # Always unblock disconnect waiters (even when no audio was captured).
+        ready.set()
+
+    return audio_buffer, capture, ready
 
 
 # ── TTS Factory ───────────────────────────────────────────────────────────────
@@ -174,6 +229,9 @@ async def run_bot(
 
     # ── 1. Fetch all context in parallel ──────────────────────────────────────
     state: CallState = await build_call_context(call_id, phone_number)
+    # Start timing as early as possible so duration is never left at 0.
+    state.call_started_at = time.monotonic()
+    state.call_started_wall = time.time()
 
     # ── 2. Build initial system prompt ────────────────────────────────────────
     system_prompt = build_system_prompt(state)
@@ -213,6 +271,8 @@ async def run_bot(
 
         transcript_collector = TranscriptCollector(state)
         credit_tracker = create_credit_tracker(state)
+        # Must sit AFTER transport.output() so both user + bot audio are captured.
+        audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
 
         pipeline = Pipeline([
             transport.input(),
@@ -220,6 +280,7 @@ async def run_bot(
             credit_tracker,
             llm,
             transport.output(),
+            audio_buffer,
             assistant_aggregator,
         ])
 
@@ -260,6 +321,8 @@ async def run_bot(
 
         transcript_collector = TranscriptCollector(state)
         credit_tracker = create_credit_tracker(state)
+        # Must sit AFTER transport.output() so both user + bot audio are captured.
+        audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
 
         pipeline = Pipeline([
             transport.input(),
@@ -270,6 +333,7 @@ async def run_bot(
             llm,
             tts,
             transport.output(),
+            audio_buffer,
             assistant_aggregator,
         ])
 
@@ -290,9 +354,15 @@ async def run_bot(
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info(f"[bot] Client connected — call {call_id}")
+        # Refresh timing at actual media connect (excludes pre-connect setup).
+        state.call_started_at = time.monotonic()
+        state.call_started_wall = time.time()
 
         try:
-            await call_service.start_call(call_id, phone_number)
+            call = await call_service.start_call(call_id, phone_number)
+            # CreditUsage.call_id refs the Mongo Call `_id`, not the Plivo UUID.
+            state.db_call_id = call.id
+            logger.info(f"[bot] Registered call in DB — mongo_id={call.id}")
         except Exception as e:
             logger.warning(f"[bot] Could not register call in DB: {e}")
 
@@ -317,8 +387,62 @@ async def run_bot(
     async def on_client_disconnected(transport, client):
         logger.info(f"[bot] Client disconnected — call {call_id}")
 
-        duration_seconds = 0
-        asyncio.create_task(run_post_call_pipeline(state, duration_seconds))
+        # Snapshot audio BEFORE stop_recording() — that method clears buffers after
+        # scheduling on_audio_data as a background task (not awaited).
+        snapshot_pcm = b""
+        snapshot_rate = audio_buffer.sample_rate or 16000
+        snapshot_channels = audio_buffer.num_channels
+        try:
+            if audio_buffer.has_audio():
+                audio_buffer._align_track_buffers()
+                snapshot_pcm = audio_buffer.merge_audio_buffers()
+        except Exception as e:
+            logger.warning(f"[bot] Could not snapshot audio buffers: {e}")
+
+        try:
+            await audio_buffer.stop_recording()
+            try:
+                await asyncio.wait_for(recording_ready.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.warning("[bot] Timed out waiting for recording_stopped event")
+        except Exception as e:
+            logger.error(f"[bot] Failed to stop audio recording: {e}")
+
+        pcm_audio = recorded_audio.get("audio") or snapshot_pcm or b""
+        sample_rate = int(recorded_audio.get("sample_rate") or snapshot_rate or 16000)
+        num_channels = int(recorded_audio.get("num_channels") or snapshot_channels or 1)
+
+        recording_bytes = None
+        if pcm_audio:
+            recording_bytes = _pcm_to_wav(pcm_audio, sample_rate, num_channels)
+            logger.info(
+                f"[bot] Recorded {len(pcm_audio)} PCM bytes → {len(recording_bytes)} WAV bytes "
+                f"@ {sample_rate}Hz x{num_channels}"
+            )
+        else:
+            logger.warning(f"[bot] No audio captured for call {call_id}")
+
+        # Prefer wall-clock duration; fall back to monotonic / audio length.
+        duration_candidates: list[int] = []
+        if state.call_started_wall:
+            duration_candidates.append(max(0, int(time.time() - state.call_started_wall)))
+        if state.call_started_at:
+            duration_candidates.append(max(0, int(time.monotonic() - state.call_started_at)))
+        if pcm_audio and sample_rate > 0:
+            duration_candidates.append(
+                max(0, len(pcm_audio) // (sample_rate * max(1, num_channels) * 2))
+            )
+        duration_seconds = max(duration_candidates) if duration_candidates else 0
+        logger.info(f"[bot] Call duration calculated as {duration_seconds}s")
+
+        asyncio.create_task(
+            run_post_call_pipeline(
+                state,
+                duration_seconds,
+                recording_bytes,
+                recording_content_type="audio/wav",
+            )
+        )
 
         await task.cancel()
 

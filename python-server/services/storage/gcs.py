@@ -16,10 +16,8 @@ class GCSStorage:
         bucket_name: str,
         project_id: Optional[str] = None,
         credentials_path: Optional[str] = None,
-        presigned_url_expiry: int = 3600,
     ) -> None:
         self.bucket_name = bucket_name
-        self.presigned_url_expiry = presigned_url_expiry
         
         if credentials_path:
             creds = Credentials.from_service_account_file(credentials_path)
@@ -52,19 +50,13 @@ class GCSStorage:
             raise
     
     async def get_recording_url(self, file_path: str) -> Optional[str]:
-        """Generate a signed URL for the recording."""
+        """Get the direct HTTPS URL for the recording."""
         try:
-            loop = asyncio.get_event_loop()
+            # Clean leading slashes if present to ensure proper URL formatting
+            clean_path = file_path.lstrip("/")
+            url = f"https://storage.googleapis.com/{self.bucket_name}/{clean_path}"
             
-            def _get_url():
-                blob = self._bucket.blob(file_path)
-                return blob.generate_signed_url(
-                    version="v4",
-                    expiration=self.presigned_url_expiry
-                )
-            
-            url = await loop.run_in_executor(None, _get_url)
-            logger.info(f"[GCS] Generated signed URL for {file_path}")
+            logger.info(f"[GCS] Generated direct URL for {file_path}")
             return url
         except Exception as e:
             logger.error(f"[GCS] Failed to generate URL for {file_path}: {e}")

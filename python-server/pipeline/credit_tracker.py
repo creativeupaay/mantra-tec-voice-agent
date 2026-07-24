@@ -2,20 +2,17 @@
 
 This module provides a lightweight frame processor that tracks credit usage
 for STT, LLM, and TTS services during live calls without adding latency.
+
+Costs are estimated in USD from published list rates (see credit_usage.pricing).
 """
 
 import asyncio
-from typing import Optional
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
-    SystemFrame,
-    TranscriptionFrame,
-    TTSTextFrame,
-    LLMFullResponseEndFrame,
     MetricsFrame,
 )
-from pipecat.metrics.metrics import MetricsData, LLMUsageMetricsData, TTSUsageMetricsData, LLMTokenUsage
+from pipecat.metrics.metrics import MetricsData, LLMUsageMetricsData, TTSUsageMetricsData
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from agent.state import CallState
 
@@ -24,55 +21,63 @@ class CreditTracker(FrameProcessor):
     """Lightweight frame processor that tracks credit usage from Pipecat metrics.
 
     Listens for MetricsFrame containing LLM/TTS usage data and records
-    credits to the database asynchronously (non-blocking).
+    estimated USD cost to the database asynchronously (non-blocking).
     """
 
     def __init__(self, state: CallState):
         super().__init__()
         self.state = state
         self._pending_tasks: set[asyncio.Task] = set()
+        # Accumulate totals so post-call can skip duplicate duration fallbacks
+        self.state.llm_tokens_tracked = 0
+        self.state.tts_chars_tracked = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
-        # Let base class update internal state
         await super().process_frame(frame, direction)
 
-        # Track credit usage from metrics frames (non-blocking)
         if isinstance(frame, MetricsFrame) and direction == FrameDirection.UPSTREAM:
             for metric_data in frame.data:
                 self._handle_metric(metric_data)
 
-        # Always forward the frame
         await self.push_frame(frame, direction)
 
     def _handle_metric(self, metric: MetricsData):
         """Process a single metric and record credit usage if applicable."""
         try:
-            # LLM token usage
             if isinstance(metric, LLMUsageMetricsData):
                 tokens = metric.value
-                prompt_tokens = tokens.prompt_tokens
-                completion_tokens = tokens.completion_tokens
-                total_tokens = tokens.total_tokens
-                
+                prompt_tokens = int(getattr(tokens, "prompt_tokens", 0) or 0)
+                completion_tokens = int(getattr(tokens, "completion_tokens", 0) or 0)
+                total_tokens = int(
+                    getattr(tokens, "total_tokens", None)
+                    or (prompt_tokens + completion_tokens)
+                    or 0
+                )
+
                 if total_tokens > 0:
-                    # Determine which LLM service based on processor name
-                    processor = metric.processor.lower()
+                    processor = (metric.processor or "").lower()
                     service = self._determine_llm_service(processor)
-                    
-                    # Schedule async credit recording (don't await - non-blocking)
+                    self.state.llm_tokens_tracked = (
+                        getattr(self.state, "llm_tokens_tracked", 0) + total_tokens
+                    )
+
                     task = asyncio.create_task(
-                        self._record_llm_usage(service, prompt_tokens, completion_tokens, total_tokens)
+                        self._record_llm_usage(
+                            service, prompt_tokens, completion_tokens, total_tokens
+                        )
                     )
                     self._pending_tasks.add(task)
                     task.add_done_callback(self._pending_tasks.discard)
 
-            # TTS character usage
             elif isinstance(metric, TTSUsageMetricsData):
-                chars = metric.value
+                chars = int(metric.value or 0)
                 if chars > 0:
-                    processor = metric.processor.lower()
+                    processor = (metric.processor or "").lower()
                     service = self._determine_tts_service(processor)
-                    
+                    self.state.tts_chars_tracked = (
+                        getattr(self.state, "tts_chars_tracked", 0) + chars
+                    )
+
                     task = asyncio.create_task(
                         self._record_tts_usage(service, chars)
                     )
@@ -82,93 +87,115 @@ class CreditTracker(FrameProcessor):
         except Exception as e:
             logger.debug(f"[credit-tracker] Error processing metric: {e}")
 
+    def _resolve_db_call_id(self) -> str | None:
+        """Return the MongoDB Call `_id` used by CreditUsage.call_id refs."""
+        return getattr(self.state, "db_call_id", None)
+
     def _determine_llm_service(self, processor: str) -> str:
         """Map processor name to our ServiceType."""
-        if "gemini" in processor:
-            return "gemini"
-        elif "openrouter" in processor:
+        if "openrouter" in processor:
             return "openrouter"
-        return "gemini"  # default
+        if "gemini" in processor or "google" in processor:
+            return "gemini"
+        return "gemini"
 
     def _determine_tts_service(self, processor: str) -> str:
         """Map processor name to our ServiceType."""
         if "cartesia" in processor:
             return "cartesia"
-        elif "elevenlabs" in processor:
+        if "elevenlabs" in processor or "eleven" in processor:
             return "elevenlabs"
-        elif "deepgram" in processor:
+        if "deepgram" in processor:
             return "deepgram"
-        return "deepgram"  # default
+        return "deepgram"
 
-    async def _record_llm_usage(self, service: str, prompt_tokens: int, completion_tokens: int, total_tokens: int):
-        """Record LLM token usage to credit system."""
+    def _service_enum(self, service: str, fallback: str):
+        from modules.credit_usage.model import ServiceType
+
+        try:
+            return ServiceType[(service or fallback).upper()]
+        except KeyError:
+            return ServiceType[fallback.upper()]
+
+    async def _record_llm_usage(
+        self,
+        service: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+    ):
+        """Record LLM token usage as estimated USD."""
         try:
             from modules.credit_usage.service import get_credit_usage_service
-            from modules.credit_usage.model import ServiceType
+            from modules.credit_usage.pricing import estimate_llm_cost
             from modules.identity.model import PyObjectId
-            
-            user_id = getattr(self.state, 'user_id', None)
-            if not user_id:
+
+            db_call_id = self._resolve_db_call_id()
+            if not db_call_id:
                 return
-            
-            # Estimate credits: ~1 credit per 1000 tokens (adjustable)
-            # This is a rough estimate - adjust based on actual pricing
-            credits = max(1, total_tokens // 1000)
-            
-            # Convert string to ServiceType enum
-            try:
-                service_enum = ServiceType[service.upper()]
-            except KeyError:
-                service_enum = ServiceType.GEMINI
-            
+
+            estimate = estimate_llm_cost(service, prompt_tokens, completion_tokens)
+            # Avoid zero-dollar rows that hide activity — keep a tiny floor only when
+            # tokens exist but round to 0 at 6dp (extremely rare).
+            amount = estimate.estimated_usd if estimate.estimated_usd > 0 else 0.000001
+
             await get_credit_usage_service().record_usage(
-                user_id=PyObjectId(user_id),
-                amount=credits,
-                description=f"LLM ({service}) - {total_tokens} tokens",
-                service=service_enum,
+                call_id=PyObjectId(db_call_id),
+                amount=amount,
+                description=(
+                    f"LLM ({service}) — {total_tokens:,} tokens "
+                    f"({prompt_tokens:,} in / {completion_tokens:,} out) "
+                    f"≈ ${amount:.6f}"
+                ),
+                service=self._service_enum(service, "gemini"),
                 metadata={
-                    "call_id": self.state.call_id,
+                    "plivo_call_id": self.state.call_id,
                     "service": service,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
+                    "api": "llm",
+                    "calculation": estimate.calculation,
+                    "rates": estimate.rates,
+                    **estimate.metadata,
+                },
             )
-            logger.info(f"[credit-tracker] Recorded {credits} credits for LLM ({service}): {total_tokens} tokens")
+            logger.info(
+                f"[credit-tracker] LLM ({service}): {total_tokens} tokens → ${amount:.6f}"
+            )
         except Exception as e:
             logger.debug(f"[credit-tracker] Failed to record LLM usage: {e}")
 
     async def _record_tts_usage(self, service: str, chars: int):
-        """Record TTS character usage to credit system."""
+        """Record TTS character usage as estimated USD."""
         try:
             from modules.credit_usage.service import get_credit_usage_service
-            from modules.credit_usage.model import ServiceType
+            from modules.credit_usage.pricing import estimate_tts_cost
             from modules.identity.model import PyObjectId
-            
-            user_id = getattr(self.state, 'user_id', None)
-            if not user_id:
+
+            db_call_id = self._resolve_db_call_id()
+            if not db_call_id:
                 return
-            
-            # Estimate credits: ~1 credit per 1000 characters
-            credits = max(1, chars // 1000)
-            
-            try:
-                service_enum = ServiceType[service.upper()]
-            except KeyError:
-                service_enum = ServiceType.DEEPGRAM
-            
+
+            estimate = estimate_tts_cost(service, chars)
+            amount = estimate.estimated_usd if estimate.estimated_usd > 0 else 0.000001
+
             await get_credit_usage_service().record_usage(
-                user_id=PyObjectId(user_id),
-                amount=credits,
-                description=f"TTS ({service}) - {chars} chars",
-                service=service_enum,
+                call_id=PyObjectId(db_call_id),
+                amount=amount,
+                description=(
+                    f"TTS ({service}) — {chars:,} chars ≈ ${amount:.6f}"
+                ),
+                service=self._service_enum(service, "deepgram"),
                 metadata={
-                    "call_id": self.state.call_id,
+                    "plivo_call_id": self.state.call_id,
                     "service": service,
-                    "characters": chars,
-                }
+                    "api": "tts",
+                    "calculation": estimate.calculation,
+                    "rates": estimate.rates,
+                    **estimate.metadata,
+                },
             )
-            logger.info(f"[credit-tracker] Recorded {credits} credits for TTS ({service}): {chars} chars")
+            logger.info(
+                f"[credit-tracker] TTS ({service}): {chars} chars → ${amount:.6f}"
+            )
         except Exception as e:
             logger.debug(f"[credit-tracker] Failed to record TTS usage: {e}")
 

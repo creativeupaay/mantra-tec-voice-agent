@@ -10,10 +10,12 @@ export interface ICall {
   duration?: number
   status: CallStatus
   is_red_flag: boolean
+  is_red_flagged?: boolean
   call_category?: CallCategory
   red_flag_reason?: string
   guardrail_triggered?: string
   recording_url?: string
+  recording_path?: string
   transcript?: string
   call_summary?: string
   call_outcome?: string

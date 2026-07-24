@@ -82,7 +82,7 @@ const CallReportPage: FC = () => {
             <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Status</p>
             <p className="text-lg font-medium capitalize flex items-center gap-2">
               {data.status}
-              {data.is_red_flag && <span className="text-xs px-2 py-0.5 border border-red-500 text-red-600 rounded-full font-bold">FLAGGED</span>}
+              {(data.is_red_flag || data.is_red_flagged) && <span className="text-xs px-2 py-0.5 border border-red-500 text-red-600 rounded-full font-bold">FLAGGED</span>}
             </p>
           </div>
           <div>

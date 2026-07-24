@@ -27,8 +27,18 @@ export interface ICreditUsage {
     | "platform";
   metadata?: {
     duration_seconds?: number;
+    duration_minutes?: number;
     tokens_prompt?: number;
     tokens_completion?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    characters?: number;
+    estimated_usd?: number;
+    billing_unit?: string;
+    calculation?: string;
+    api?: string;
+    rates?: Record<string, number>;
     [key: string]: any;
   };
   createdAt: string;

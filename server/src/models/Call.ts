@@ -2,9 +2,17 @@ import mongoose, { Schema, model } from "mongoose";
 
 export type CallStatus = "live" | "resolved" | "escalated" | "missed";
 
-export type CallStatus = 'live' | 'resolved' | 'escalated' | 'missed'
+export type CallCategory =
+  | "support"
+  | "sales"
+  | "booking"
+  | "inquiry"
+  | "feedback"
+  | "complaint"
+  | "technical"
+  | "billing";
 
-// Call record schema for voice agent calls
+// Call record schema for voice agent calls — keep in sync with python-server Call model
 const callSchema = new Schema(
   {
     call_id: { type: String, required: true, unique: true }, // Plivo call UUID
@@ -41,6 +49,7 @@ const callSchema = new Schema(
     // Red flag fields
     is_red_flagged: { type: Boolean, default: false },
     red_flag_reason: { type: String },
+    guardrail_triggered: { type: String },
   },
   { timestamps: true },
 );
@@ -57,15 +66,7 @@ export interface ICall {
   transcript?: string;
   call_summary?: string;
   detected_intent?: string;
-  call_category?:
-    | "support"
-    | "sales"
-    | "booking"
-    | "inquiry"
-    | "feedback"
-    | "complaint"
-    | "technical"
-    | "billing";
+  call_category?: CallCategory;
   call_outcome?: string;
   recording_url?: string;
   recording_path?: string;

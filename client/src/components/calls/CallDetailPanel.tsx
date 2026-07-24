@@ -30,7 +30,7 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
             <h3 className="text-[16px] font-semibold text-text-primary">
               {selectedCall.caller_name ?? selectedCall.phone_number}
             </h3>
-            {selectedCall.is_red_flag && (
+            {selectedCall.is_red_flag || selectedCall.is_red_flagged ? (
               <span
                 className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium"
                 style={{
@@ -41,7 +41,7 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
                 <Flag size={10} strokeWidth={2} />
                 Red Flag
               </span>
-            )}
+            ) : null}
           </div>
           <p className="text-[13px] text-text-muted tabular-nums">{selectedCall.phone_number}</p>
         </div>
@@ -108,22 +108,31 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
           value={<StatusDot status={selectedCall.status} label={STATUS_LABELS[selectedCall.status]} />}
         />
 
-        {/* Outcome */}
-        {selectedCall.call_outcome && (
-          <DetailField label="Outcome" value={selectedCall.call_outcome.replace(/_/g, ' ')} />
-        )}
+        {/* Category — always show so empty docs are obvious */}
+        <DetailField
+          label="Category"
+          value={
+            <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-surface-page border border-border capitalize">
+              {selectedCall.call_category ?? 'inquiry'}
+            </span>
+          }
+        />
 
-        {/* Category */}
-        {selectedCall.call_category && (
-          <DetailField
-            label="Category"
-            value={
-              <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-surface-page border border-border">
-                {selectedCall.call_category}
-              </span>
-            }
-          />
-        )}
+        {/* Outcome */}
+        <DetailField
+          label="Outcome"
+          value={
+            selectedCall.call_outcome
+              ? selectedCall.call_outcome.replace(/_/g, ' ')
+              : '—'
+          }
+        />
+
+        {/* Call ID */}
+        <DetailField
+          label="Call ID"
+          value={<span className="font-mono text-[12px] text-text-secondary break-all">{selectedCall.call_id}</span>}
+        />
 
         {/* Guardrail triggered */}
         {selectedCall.guardrail_triggered && (
@@ -138,7 +147,7 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
         )}
 
         {/* Red flag warning */}
-        {selectedCall.is_red_flag && (
+        {(selectedCall.is_red_flag || selectedCall.is_red_flagged) && (
           <div
             className="flex items-start gap-3 p-3 rounded-xl border"
             style={{
@@ -166,61 +175,83 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
         )}
 
         {/* Call Summary */}
-        {selectedCall.call_summary && (
-          <div
-            className="group cursor-pointer p-3 -mx-3 rounded-xl hover:bg-surface-page transition-colors border border-transparent hover:border-border"
-            onClick={() => openModal('Call Summary', selectedCall.call_summary!)}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider">
-                Call Summary
-              </p>
-              <Maximize2 size={12} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <p className="text-[14px] leading-relaxed text-text-primary line-clamp-3">
-              {selectedCall.call_summary}
+        <div
+          className={`group p-3 -mx-3 rounded-xl border border-transparent ${
+            selectedCall.call_summary
+              ? 'cursor-pointer hover:bg-surface-page hover:border-border transition-colors'
+              : ''
+          }`}
+          onClick={() => {
+            if (selectedCall.call_summary) {
+              openModal('Call Summary', selectedCall.call_summary)
+            }
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider">
+              Call Summary
             </p>
+            {selectedCall.call_summary && (
+              <Maximize2 size={12} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
           </div>
-        )}
+          <p className="text-[14px] leading-relaxed text-text-primary line-clamp-3">
+            {selectedCall.call_summary || '—'}
+          </p>
+        </div>
 
         {/* Transcript */}
-        {selectedCall.transcript && (
-          <div
-            className="group cursor-pointer p-3 -mx-3 rounded-xl hover:bg-surface-page transition-colors border border-transparent hover:border-border"
-            onClick={() => openModal('Full Transcript', selectedCall.transcript!)}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <FileText size={13} strokeWidth={1.75} className="text-text-muted" />
-                <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider">
-                  Transcript
-                </p>
-              </div>
-              <Maximize2 size={12} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div
+          className={`group p-3 -mx-3 rounded-xl border border-transparent ${
+            selectedCall.transcript
+              ? 'cursor-pointer hover:bg-surface-page hover:border-border transition-colors'
+              : ''
+          }`}
+          onClick={() => {
+            if (selectedCall.transcript) {
+              openModal('Full Transcript', selectedCall.transcript)
+            }
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <FileText size={13} strokeWidth={1.75} className="text-text-muted" />
+              <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider">
+                Transcript
+              </p>
             </div>
+            {selectedCall.transcript && (
+              <Maximize2 size={12} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
+          </div>
+          {selectedCall.transcript ? (
             <div className="bg-surface-page border border-border rounded-xl p-4 max-h-40 overflow-hidden relative">
               <pre className="text-[13px] leading-relaxed text-text-primary whitespace-pre-wrap font-sans">
                 {selectedCall.transcript}
               </pre>
               <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface-page to-transparent" />
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="text-[14px] text-text-primary">—</p>
+          )}
+        </div>
 
         {/* Recording */}
-        {selectedCall.recording_url && (
-          <div>
-            <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider mb-2">
-              Recording
-            </p>
+        <div>
+          <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider mb-2">
+            Recording
+          </p>
+          {selectedCall.recording_url ? (
             <AudioPlayer 
               src={selectedCall.recording_url} 
               callId={selectedCall.call_id}
               title={`Call ${selectedCall.call_id}`}
               showFullscreen
             />
-          </div>
-        )}
+          ) : (
+            <p className="text-[14px] text-text-primary">—</p>
+          )}
+        </div>
       </div>
     </div>
   )

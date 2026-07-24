@@ -1,10 +1,11 @@
 /**
  * Formats a duration in seconds into a human-readable string (e.g., "2m 5s").
  */
-export const formatDuration = (secs: number | undefined): string => {
-  if (secs === undefined) return 'In progress'
-  const m = Math.floor(secs / 60)
-  const s = secs % 60
+export const formatDuration = (secs: number | undefined | null): string => {
+  if (secs === undefined || secs === null) return 'In progress'
+  const total = Math.max(0, Math.floor(secs))
+  const m = Math.floor(total / 60)
+  const s = total % 60
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
