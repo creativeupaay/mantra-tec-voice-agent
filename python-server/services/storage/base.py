@@ -68,21 +68,8 @@ class StorageFactory:
                 project_id=kwargs.get("project_id"),
                 credentials_path=kwargs.get("credentials_path"),
             )
-        elif provider == "azure":
-            from .azure import AzureStorage
-            return AzureStorage(
-                container_name=kwargs.get("container_name"),
-                connection_string=kwargs.get("connection_string"),
-            )
         elif provider == "local":
             from .local import LocalStorage
             return LocalStorage(base_path=kwargs.get("base_path", "./recordings"))
-        elif provider == "gcs":
-            from .gcs import GCSStorage
-            return GCSStorage(
-                bucket_name=kwargs.get("bucket_name"),
-                project_id=kwargs.get("project_id"),
-                credentials_path=kwargs.get("credentials_path"),
-            )
         else:
             raise ValueError(f"Unknown storage provider: {provider}")

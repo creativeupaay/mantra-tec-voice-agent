@@ -19,6 +19,8 @@ class CallState:
     # ── Core identifiers ──────────────────────────────────────────────────────
     call_id: str
     phone_number: str
+    # MongoDB `_id` of the Call document (used by CreditUsage.call_id ObjectId refs)
+    db_call_id: Optional[str] = None
 
     # ── Context fetched in parallel on connect ────────────────────────────────
     identity: Optional[Identity] = None
@@ -29,6 +31,12 @@ class CallState:
 
     # ── Detected / updated during the call ───────────────────────────────────
     preferred_language: str = "hinglish"   # "en" | "hi" | "hinglish"
+    call_started_at: Optional[float] = None  # monotonic clock when call timing started
+    call_started_wall: Optional[float] = None  # wall-clock time.time() for duration
 
     # ── Transcript accumulation (used by post-call pipeline in Phase 4) ───────
     transcript_lines: List[str] = field(default_factory=list)
+
+    # ── Credit tracking accumulators (updated by CreditTracker) ───────────────
+    llm_tokens_tracked: int = 0
+    tts_chars_tracked: int = 0

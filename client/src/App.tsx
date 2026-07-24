@@ -2,8 +2,10 @@ import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import SettingsPage from './pages/SettingsPage'
 import CallsPage from './pages/CallsPage'
+import CallReportPage from './pages/CallReportPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import UsagePage from './pages/UsagePage'
+import ProfilePage from './pages/ProfilePage'
 import LoginPage from './pages/LoginPage'
 import MainLayout from './layouts/MainLayout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -13,21 +15,30 @@ function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       
-      <Route path="/" element={<MainLayout />}>
+      {/* Standalone protected routes (no MainLayout) */}
+      <Route path="/calls/:id/report" element={
+        <ProtectedRoute>
+          <CallReportPage />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/" element={
+        <ProtectedRoute>
+          <MainLayout />
+        </ProtectedRoute>
+      }>
         <Route index element={<HomePage />} />
-        <Route path="calls" element={
-          <ProtectedRoute><CallsPage /></ProtectedRoute>
-        } />
-        <Route path="analytics" element={
-          <ProtectedRoute><AnalyticsPage /></ProtectedRoute>
-        } />
+        <Route path="calls" element={<CallsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="usage" element={
           <ProtectedRoute allowedRoles={['super_admin']}><UsagePage /></ProtectedRoute>
         } />
-        <Route path="settings" element={
-          <ProtectedRoute><SettingsPage /></ProtectedRoute>
-        } />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
+
+      {/* Fallback for unmatched routes */}
+      <Route path="*" element={<LoginPage />} />
     </Routes>
   )
 }

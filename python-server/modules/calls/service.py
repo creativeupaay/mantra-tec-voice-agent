@@ -1,10 +1,16 @@
 """Calls service — business logic for call lifecycle management."""
 
-from modules.calls.model import CallCategory
 from typing import List, Optional
 
 from config.database import get_db
-from modules.calls.model import Call, CallCreate, CallUpdate, CallRecording
+from modules.calls.model import (
+    Call,
+    CallCategory,
+    CallCreate,
+    CallRecording,
+    CallStatus,
+    CallUpdate,
+)
 from modules.calls.repository import CallRepository
 from services.storage.base import StorageProvider, StorageFactory
 from env_config import settings
@@ -19,14 +25,11 @@ class CallService:
         storage_provider = settings.storage_provider
         if not storage_provider:
             return None
-        
+
         return StorageFactory.create(
             provider=storage_provider,
             bucket_name=settings.recording_bucket_name,
-            region=settings.recording_region,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            endpoint_url=settings.s3_endpoint_url,
+            project_id=settings.gcp_project_id,
         )
 
     async def start_call(self, call_id: str, phone_number: str) -> Call:
@@ -69,6 +72,8 @@ class CallService:
         intent: Optional[str] = None,
         call_category: Optional[CallCategory] = None,
         outcome: Optional[str] = None,
+        status: Optional[CallStatus] = None,
+        caller_name: Optional[str] = None,
         recording_url: Optional[str] = None,
         recording_path: Optional[str] = None,
         is_red_flagged: Optional[bool] = None,
@@ -76,10 +81,15 @@ class CallService:
         guardrail_triggered: Optional[str] = None,
     ) -> Optional[Call]:
         """Persist post-call data once the post-call pipeline completes."""
+        # Keep legacy `is_red_flag` in sync with `is_red_flagged` for the UI.
+        is_red_flag = is_red_flagged if is_red_flagged is not None else None
+
         return await self._repo().update(
             call_id,
             CallUpdate(
+                caller_name=caller_name,
                 duration=duration,
+                status=status,
                 transcript=transcript,
                 call_summary=summary,
                 detected_intent=intent,
@@ -87,6 +97,7 @@ class CallService:
                 call_outcome=outcome,
                 recording_url=recording_url,
                 recording_path=recording_path,
+                is_red_flag=is_red_flag,
                 is_red_flagged=is_red_flagged,
                 red_flag_reason=red_flag_reason,
                 guardrail_triggered=guardrail_triggered,

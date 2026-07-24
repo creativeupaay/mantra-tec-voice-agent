@@ -1,6 +1,19 @@
 import { Request, Response, NextFunction } from 'express'
 import { Call } from '../models/Call.js'
 
+/** Normalize call docs so the client always receives complete UI fields. */
+function normalizeCall(call: Record<string, any>) {
+  const isFlagged = Boolean(call.is_red_flag || call.is_red_flagged)
+  return {
+    ...call,
+    status: call.status || 'live',
+    is_red_flag: isFlagged,
+    is_red_flagged: isFlagged,
+    call_category: call.call_category || 'inquiry',
+    duration: typeof call.duration === 'number' ? call.duration : undefined,
+  }
+}
+
 // Get all calls
 export const getAllCalls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -11,7 +24,7 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
     
     res.json({
       success: true,
-      data: calls
+      data: calls.map((call) => normalizeCall(call as Record<string, any>))
     })
   } catch (error) {
     next(error)
@@ -30,7 +43,7 @@ export const getCallById = async (req: Request, res: Response, next: NextFunctio
     
     res.json({
       success: true,
-      data: call
+      data: normalizeCall(call as Record<string, any>)
     })
   } catch (error) {
     next(error)
