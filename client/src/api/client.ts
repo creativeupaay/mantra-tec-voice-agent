@@ -8,7 +8,6 @@ import {
 import {
   ICallListResponse,
   ICallResponse,
-  ICallRecordingResponse,
 } from "../types/call";
 
 export interface ICreditUsage {
@@ -211,14 +210,24 @@ export const analyticsApi = {
     ),
 };
 
+/** Absolute URL for streaming a call recording (token via query for <audio> tags). */
+export const getCallRecordingStreamUrl = (callDbId: string): string => {
+  const token = localStorage.getItem("token");
+  const base = `${API_BASE_URL}/calls/${callDbId}/recording`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+};
+
 // Call endpoints
 export const callApi = {
   getAll: () => apiClient.get<ICallListResponse>("/calls"),
 
   getById: (id: string) => apiClient.get<ICallResponse>("/calls/" + id),
 
+  /** Stream recording bytes from the private GCS proxy (ADC on server). */
   getRecording: (id: string) =>
-    apiClient.get<ICallRecordingResponse>("/calls/" + id + "/recording"),
+    apiClient.get<Blob>(`/calls/${id}/recording`, { responseType: "blob" }),
+
+  getRecordingStreamUrl: getCallRecordingStreamUrl,
 };
 
 // Agent endpoints

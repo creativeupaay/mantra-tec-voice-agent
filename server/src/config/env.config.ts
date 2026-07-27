@@ -7,6 +7,10 @@ interface EnvConfig {
   MONGODB_URI: string
   JWT_SECRET: string
   CLIENT_URL: string
+  /** Private GCS bucket for call recordings (ADC auth). */
+  GCS_BUCKET_NAME: string
+  /** Optional GCP project ID for the Storage client. */
+  GCP_PROJECT_ID: string
 }
 
 const getEnvVar = (key: string, fallback?: string): string => {
@@ -22,6 +26,8 @@ export const env: EnvConfig = {
   MONGODB_URI: getEnvVar('MONGODB_URI'), // No fallback - required
   JWT_SECRET: getEnvVar('JWT_SECRET'), // No fallback - required
   CLIENT_URL: getEnvVar('CLIENT_URL'), // No fallback - required
+  GCS_BUCKET_NAME: getEnvVar('GCS_BUCKET_NAME', ''),
+  GCP_PROJECT_ID: getEnvVar('GCP_PROJECT_ID', ''),
 }
 
 export const validateEnv = (): void => {

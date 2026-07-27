@@ -241,9 +241,9 @@ const CallDetailPanel: FC<CallDetailPanelProps> = ({ selectedCall, setSelectedCa
           <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider mb-2">
             Recording
           </p>
-          {selectedCall.recording_url ? (
-            <AudioPlayer 
-              src={selectedCall.recording_url} 
+          {selectedCall.recording_url || selectedCall.recording_path ? (
+            <AudioPlayer
+              callDbId={selectedCall._id}
               callId={selectedCall.call_id}
               title={`Call ${selectedCall.call_id}`}
               showFullscreen

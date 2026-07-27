@@ -32,10 +32,3 @@ export interface ICallResponse {
   success: boolean
   data: ICall
 }
-
-export interface ICallRecordingResponse {
-  success: boolean
-  data: {
-    recording_url: string
-  }
-}

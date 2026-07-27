@@ -24,19 +24,22 @@ export const isAdmin = authorize(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export const isSuperAdmin = authorize(UserRole.SUPER_ADMIN)
 
 // Main authenticate middleware
+// Accepts Bearer header or `?token=` query (needed for <audio>/<a> media requests).
 export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const token = req.headers.authorization?.split(' ')[1]
-    
+    const headerToken = req.headers.authorization?.split(' ')[1]
+    const queryToken = typeof req.query.token === 'string' ? req.query.token : undefined
+    const token = headerToken || queryToken
+
     if (!token) {
       res.status(401).json({ success: false, message: 'No token provided' })
       return
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; role?: string }
-    
+
     const user = await User.findById(decoded.id).select('-password')
-    
+
     if (!user) {
       res.status(401).json({ success: false, message: 'Invalid token' })
       return

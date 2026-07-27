@@ -1,4 +1,4 @@
-import { FC, useRef, useState, useEffect, useCallback } from 'react'
+import { FC, useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Volume2,
   VolumeX,
@@ -10,9 +10,11 @@ import {
   Pause,
   Play,
 } from 'lucide-react'
+import { callApi } from '../../api/client'
 
 interface AudioPlayerProps {
-  src: string
+  /** MongoDB call document `_id` — streams via authenticated backend proxy. */
+  callDbId: string
   callId?: string
   title?: string
   showFullscreen?: boolean
@@ -26,7 +28,7 @@ const formatTime = (seconds: number): string => {
 }
 
 export const AudioPlayer: FC<AudioPlayerProps> = ({
-  src,
+  callDbId,
   callId,
   title = 'Call Recording',
   showFullscreen = true,
@@ -45,6 +47,19 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
   const [showSpeedMenu, setShowSpeedMenu] = useState(false)
 
   const playbackRates = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
+  // Token in query so <audio> can send Range requests without Authorization headers.
+  const src = useMemo(() => callApi.getRecordingStreamUrl(callDbId), [callDbId])
+
+  // Reset player state when the recording source changes
+  useEffect(() => {
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
+    setBuffered(0)
+    setError(null)
+    setIsLoading(true)
+  }, [src])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -86,7 +101,7 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
       audio.removeEventListener('waiting', handleWaiting)
       audio.removeEventListener('canplay', handleCanPlay)
     }
-  }, [])
+  }, [src])
 
   useEffect(() => {
     if (audioRef.current) {
@@ -196,14 +211,22 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
     [handlePlayPause, seekBy, handleMuteToggle]
   )
 
-  const handleDownload = useCallback(() => {
-    const a = document.createElement('a')
-    a.href = src
-    a.download = `${title || 'recording'}-${callId || 'call'}.mp3`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  }, [src, title, callId])
+  const handleDownload = useCallback(async () => {
+    try {
+      const response = await callApi.getRecording(callDbId)
+      const blob = response.data
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${title || 'recording'}-${callId || 'call'}.wav`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download recording')
+    }
+  }, [callDbId, title, callId])
 
   const handleOpenNewTab = useCallback(() => {
     window.open(src, '_blank')
@@ -408,7 +431,7 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
         )}
       </div>
 
-      <audio ref={audioRef} src={src} preload="metadata" crossOrigin="anonymous" />
+      <audio ref={audioRef} src={src} preload="metadata" />
     </div>
   )
 }
