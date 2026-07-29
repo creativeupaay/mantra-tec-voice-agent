@@ -23,6 +23,13 @@ class Settings:
     # ── Plivo (telephony transport) ──────────────────────────────────────────
     plivo_auth_id: str
     plivo_auth_token: str
+    plivo_phone_number: str  # Caller ID / Answer-app number (E.164)
+
+    # ── Public URLs (Cloud Run / ngrok) ───────────────────────────────────────
+    # Prefer explicit URLs so Plivo Answer/Stream work behind load balancers.
+    public_base_url: str     # e.g. https://voice-agent-xxxx.run.app
+    public_ws_url: str       # optional override, e.g. wss://….run.app/ws/plivo
+    port: int
 
     # ── Deepgram (STT / optional TTS) ───────────────────────────────────────
     deepgram_api_key: str
@@ -125,6 +132,11 @@ def _load() -> Settings:
         # Plivo
         plivo_auth_id=os.getenv("PLIVO_AUTH_ID", ""),
         plivo_auth_token=os.getenv("PLIVO_AUTH_TOKEN", ""),
+        plivo_phone_number=os.getenv("PLIVO_PHONE_NUMBER", ""),
+        # Public URLs
+        public_base_url=os.getenv("PUBLIC_BASE_URL", "").rstrip("/"),
+        public_ws_url=os.getenv("PUBLIC_WS_URL", "").rstrip("/"),
+        port=int(os.getenv("PORT", "8000")),
         # Deepgram
         deepgram_api_key=os.getenv("DEEPGRAM_API_KEY", ""),
         # ElevenLabs

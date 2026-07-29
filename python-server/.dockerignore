@@ -1,0 +1,22 @@
+# Build context hygiene for Cloud Run images
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+mantra_tech_voice_agent.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+.env
+.env.*
+!.env.example
+.git/
+.gitignore
+*.md
+!README.md
+test_*.py
+scripts/
+.python-version
+recordings/

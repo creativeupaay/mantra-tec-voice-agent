@@ -14,18 +14,31 @@ Supports multiple storage backends for call recordings:
 
 ## Call Recording Flow
 
-```python
-# In bot.py or webhook handler:
-from pipeline.post_call import run_post_call_pipeline
+Recording is captured **in-process** via Pipecat's ``AudioBufferProcessor``
+(not Plivo cloud recording). On disconnect, PCM is wrapped as WAV and uploaded
+to the configured storage provider as ``recordings/{plivo_call_id}.wav``.
 
-# After call completion:
-recording_bytes = get_recording_from_plivo(call_id)
+```python
+# Handled automatically in pipeline/bot.py on_client_disconnected:
 await run_post_call_pipeline(
     state=call_state,
     duration_seconds=call_duration,
-    recording_content=recording_bytes  # Optional - will be uploaded to configured storage
+    recording_content=recording_bytes,  # WAV bytes from AudioBuffer
+    recording_content_type="audio/wav",
 )
 ```
+
+## Plivo endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET/POST | `/plivo/answer` | Answer URL — returns bidirectional Stream XML |
+| POST | `/plivo/call` | Initiate outbound agent call |
+| GET/POST | `/plivo/hangup` | Optional hangup callback (logging) |
+| WS | `/ws/plivo` | Bidirectional media stream |
+
+Set Plivo Application Answer URL to ``https://<host>/plivo/answer`` and
+``PUBLIC_BASE_URL`` to the same public host.
 
 ## Models
 
