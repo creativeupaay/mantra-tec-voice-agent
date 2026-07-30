@@ -4,12 +4,14 @@ Generates short-lived access tokens that allow the agent participant to join
 a specific LiveKit room. Tokens are generated server-side and never exposed
 publicly.
 
+Imports from livekit.api are lazy (inside the function) so that if the
+livekit extra is not installed the server still starts — the error only
+surfaces when a token is actually requested.
+
 Usage::
 
     token = generate_agent_token(room_name="my-room", participant_identity="agent")
 """
-
-from livekit.api import AccessToken, VideoGrants
 
 from env_config import settings
 
@@ -33,7 +35,16 @@ def generate_agent_token(
 
     Raises:
         ValueError: If LIVEKIT_API_KEY or LIVEKIT_API_SECRET are not configured.
+        ImportError: If livekit-api is not installed (pipecat-ai[livekit] missing).
     """
+    # Lazy import — keeps the module importable even without the livekit extra.
+    try:
+        from livekit.api import AccessToken, VideoGrants
+    except ImportError as exc:
+        raise ImportError(
+            "livekit-api is not installed. Run: uv add \"pipecat-ai[livekit]\""
+        ) from exc
+
     if not settings.livekit_api_key or not settings.livekit_api_secret:
         raise ValueError(
             "LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set to generate agent tokens."

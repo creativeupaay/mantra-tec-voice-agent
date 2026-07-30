@@ -34,7 +34,6 @@ from loguru import logger
 
 from env_config import settings
 from pipeline.bot import run_bot
-from services.livekit.token import generate_agent_token
 
 # LiveKit SDK — gated so the server still starts if the extra is not installed.
 try:
@@ -47,11 +46,6 @@ except ImportError:
         "Run: uv add \"pipecat-ai[livekit]\""
     )
 
-try:
-    from pipecat.transports.services.livekit import LiveKitParams, LiveKitTransport
-    _TRANSPORT_AVAILABLE = True
-except ImportError:
-    _TRANSPORT_AVAILABLE = False
 
 router = APIRouter(prefix="/livekit", tags=["livekit"])
 
@@ -94,10 +88,19 @@ async def _join_room(room_name: str, phone_number: str, call_id: str) -> None:
     returned immediately.  The active WebRTC connection keeps the Cloud Run
     container alive for the duration of the call.
     """
-    if not _TRANSPORT_AVAILABLE:
+    # Lazy imports — only fail here, not at server startup.
+    try:
+        from pipecat.transports.services.livekit import LiveKitParams, LiveKitTransport
+    except ImportError:
         logger.error(
             "[livekit] LiveKitTransport unavailable — install pipecat-ai[livekit]"
         )
+        return
+
+    try:
+        from services.livekit.token import generate_agent_token
+    except ImportError:
+        logger.error("[livekit] generate_agent_token unavailable — livekit-api missing")
         return
 
     logger.info(
@@ -218,7 +221,6 @@ async def livekit_status() -> dict:
     """Check that LiveKit integration is wired up correctly."""
     return {
         "livekit_sdk_available": _LIVEKIT_AVAILABLE,
-        "transport_available": _TRANSPORT_AVAILABLE,
         "url_configured": bool(settings.livekit_url),
         "api_key_configured": bool(settings.livekit_api_key),
         "api_secret_configured": bool(settings.livekit_api_secret),
