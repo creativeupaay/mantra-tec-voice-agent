@@ -28,16 +28,18 @@ def _exotel_params(request: Request, form: dict[str, Any] | None = None) -> dict
     return merged
 
 
-@router.post("/answer", operation_id="exotel_answer")
+@router.api_route("/answer", methods=["GET", "POST"], operation_id="exotel_answer")
 async def exotel_answer(request: Request) -> Response:
     """Webhook endpoint for Exotel inbound calls.
     
     Returns ExoML instructing Exotel to connect the audio stream to our WebSocket.
     """
-    try:
-        form_data = dict(await request.form())
-    except Exception:
-        form_data = {}
+    form_data = {}
+    if request.method == "POST":
+        try:
+            form_data = dict(await request.form())
+        except Exception:
+            pass
 
     params = _exotel_params(request, form_data)
     
