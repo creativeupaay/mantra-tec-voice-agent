@@ -13,7 +13,7 @@ from loguru import logger
 
 from env_config import settings
 from services.exotel.xml import build_stream_xml, build_websocket_url
-from services.plivo.urls import resolve_websocket_url  # Reuse generic WS resolver
+from services.plivo.urls import resolve_public_base_url
 
 router = APIRouter(prefix="/exotel", tags=["exotel"])
 
@@ -53,8 +53,11 @@ async def exotel_answer(request: Request) -> Response:
     )
 
     # Base websocket URL (e.g., wss://my-app.run.app/ws/exotel)
-    ws_base = resolve_websocket_url(request)
-    ws_base = ws_base.replace("/exotel/answer", "/ws/exotel")
+    base = resolve_public_base_url(request)
+    if base.startswith("https://"):
+        ws_base = "wss://" + base[len("https://") :] + "/ws/exotel"
+    else:
+        ws_base = "ws://" + base[len("http://") :] + "/ws/exotel"
     
     # Pass metadata via the WS connection so we know the caller identity
     body = {
