@@ -247,8 +247,8 @@ async def run_bot(
     # arrival, which kills tool calls before they finish.
     # We ONLY need the LLMAssistantAggregator to catch FunctionCallResultFrames and
     # feed tool results back into the GeminiLiveLLMService context.
-    from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
-    _, assistant_aggregator = LLMContextAggregatorPair(context)
+    from pipecat.processors.aggregators.llm_response_universal import LLMAssistantAggregator
+    assistant_aggregator = LLMAssistantAggregator(context)
 
 
     if gemini_mode:
