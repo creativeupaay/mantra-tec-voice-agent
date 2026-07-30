@@ -67,13 +67,26 @@ def _build_receiver() -> "WebhookReceiver":
     )
 
 
-def _extract_phone(attributes: dict) -> str:
-    """Pull the caller's E.164 phone number from SIP participant attributes."""
-    return (
-        attributes.get(_SIP_PHONE_ATTR)
-        or attributes.get("phoneNumber")
-        or "unknown"
-    )
+def _extract_phone(attributes: dict, identity: str = "") -> str:
+    """Pull the caller's E.164 phone number from SIP participant attributes.
+
+    LiveKit SIP may use different attribute keys across versions/configurations.
+    We check all known variants, then fall back to parsing the identity string.
+    """
+    # Primary attributes used by LiveKit SIP service
+    for key in ("sip.phoneNumber", "phoneNumber", "sip.from", "from", "sip.caller"):
+        val = attributes.get(key, "")
+        if val and val not in ("unknown", ""):
+            return val
+
+    # Last resort: the SIP participant identity is often "sip_+91XXXXXXXXXX"
+    # or "sip_<number>@domain" — extract the phone portion.
+    if identity.startswith("sip_"):
+        candidate = identity[4:].split("@")[0]  # strip "sip_" prefix and @domain
+        if candidate:
+            return candidate
+
+    return "unknown"
 
 
 def _is_agent(identity: str) -> bool:
@@ -188,7 +201,7 @@ async def livekit_webhook(
             return Response(status_code=200)
 
         room_name = room.name
-        phone_number = _extract_phone(attributes)
+        phone_number = _extract_phone(attributes, identity)
         call_id = str(uuid.uuid4())
 
         logger.info(

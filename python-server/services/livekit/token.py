@@ -39,6 +39,8 @@ def generate_agent_token(
     """
     # Lazy import — keeps the module importable even without the livekit extra.
     try:
+        import datetime
+
         from livekit.api import AccessToken, VideoGrants
     except ImportError as exc:
         raise ImportError(
@@ -54,7 +56,7 @@ def generate_agent_token(
         AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
         .with_identity(participant_identity)
         .with_name(participant_name)
-        .with_ttl(ttl_seconds)
+        .with_ttl(datetime.timedelta(seconds=ttl_seconds))
         .with_grants(
             VideoGrants(
                 room_join=True,
