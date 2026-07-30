@@ -163,7 +163,7 @@ async def exotel_websocket_endpoint(
     await websocket.accept()
 
     try:
-        from pipecat.serializers.exotel import ExotelFrameSerializer
+        from services.exotel.serializer import MantraExotelSerializer
 
         _, call_data = await parse_telephony_websocket(websocket)
         call_id = call_data.get("call_id", "unknown_call")
@@ -178,7 +178,7 @@ async def exotel_websocket_endpoint(
             f"direction={stream_body.get('direction', 'unknown')}"
         )
 
-        serializer = ExotelFrameSerializer(
+        serializer = MantraExotelSerializer(
             stream_sid=call_data["stream_id"],
         )
 
