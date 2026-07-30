@@ -23,6 +23,7 @@ from config.database import init_db
 from config.redis_client import init_redis
 from env_config import settings
 from pipeline.bot import run_bot
+from routes.livekit import router as livekit_router
 from routes.plivo import resolve_phone_from_stream_query
 from routes.plivo import router as plivo_router
 from routes.v1 import router as v1_router
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, title="Mantra Tech Voice Agent API")
 app.include_router(v1_router)
 app.include_router(plivo_router)
+app.include_router(livekit_router)
 
 # Mount static files
 os.makedirs("static", exist_ok=True)

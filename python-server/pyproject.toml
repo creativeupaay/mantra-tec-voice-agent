@@ -5,7 +5,7 @@ description = "Mantra Tech AI Voice Agent — Pipecat + LangGraph + MongoDB"
 requires-python = ">=3.10"
 dependencies = [
     # ── Voice pipeline ────────────────────────────────────────────────────────
-    "pipecat-ai[deepgram,elevenlabs,openrouter,runner,silero,webrtc,websocket]",
+    "pipecat-ai[deepgram,elevenlabs,livekit,openrouter,runner,silero,webrtc,websocket]",
     "pipecat-ai-whisker",
     "pipecat-ai-tail",
     # ── Database ──────────────────────────────────────────────────────────────

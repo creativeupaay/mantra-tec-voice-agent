@@ -25,6 +25,11 @@ class Settings:
     plivo_auth_token: str
     plivo_phone_number: str  # Caller ID / Answer-app number (E.164)
 
+    # ── LiveKit (WebRTC / SIP transport) ─────────────────────────────────────
+    livekit_url: str         # e.g. wss://my-project.livekit.cloud
+    livekit_api_key: str
+    livekit_api_secret: str
+
     # ── Public URLs (Cloud Run / ngrok) ───────────────────────────────────────
     # Prefer explicit URLs so Plivo Answer/Stream work behind load balancers.
     public_base_url: str     # e.g. https://voice-agent-xxxx.run.app
@@ -133,6 +138,10 @@ def _load() -> Settings:
         plivo_auth_id=os.getenv("PLIVO_AUTH_ID", ""),
         plivo_auth_token=os.getenv("PLIVO_AUTH_TOKEN", ""),
         plivo_phone_number=os.getenv("PLIVO_PHONE_NUMBER", ""),
+        # LiveKit
+        livekit_url=os.getenv("LIVEKIT_URL", "").rstrip("/"),
+        livekit_api_key=os.getenv("LIVEKIT_API_KEY", ""),
+        livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", ""),
         # Public URLs
         public_base_url=os.getenv("PUBLIC_BASE_URL", "").rstrip("/"),
         public_ws_url=os.getenv("PUBLIC_WS_URL", "").rstrip("/"),
