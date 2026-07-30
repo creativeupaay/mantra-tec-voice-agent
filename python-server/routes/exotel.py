@@ -8,7 +8,7 @@ Point your Exotel flow's Connect Applet / Stream Applet at ``/exotel/answer``.
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from loguru import logger
 
 from env_config import settings
@@ -65,7 +65,7 @@ async def exotel_answer(request: Request) -> Response:
     }
     
     ws_url = build_websocket_url(ws_base, body)
-    xml_response = build_stream_xml(ws_url)
-
-    logger.debug(f"[exotel] Returning ExoML:\n{xml_response}")
-    return Response(content=xml_response, media_type="application/xml")
+    
+    # Exotel Stream Applet expects a JSON response with the "url" key
+    logger.debug(f"[exotel] Returning dynamic WebSocket URL: {ws_url}")
+    return JSONResponse(content={"url": ws_url})
