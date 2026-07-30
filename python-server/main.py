@@ -23,6 +23,7 @@ from config.database import init_db
 from config.redis_client import init_redis
 from env_config import settings
 from pipeline.bot import run_bot
+from routes.exotel import router as exotel_router
 from routes.livekit import router as livekit_router
 from routes.plivo import resolve_phone_from_stream_query
 from routes.plivo import router as plivo_router
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, title="Mantra Tech Voice Agent API")
 app.include_router(v1_router)
 app.include_router(plivo_router)
+app.include_router(exotel_router)
 app.include_router(livekit_router)
 
 # Mount static files
@@ -146,6 +148,53 @@ async def plivo_websocket_endpoint(
         await run_bot(transport, call_id, phone_number)
     except Exception as e:
         logger.error(f"[server] WebSocket error: {e}")
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+@app.websocket("/ws/exotel")
+async def exotel_websocket_endpoint(
+    websocket: WebSocket,
+    body: str | None = Query(None, description="Base64 JSON with from/to/phone_number"),
+):
+    """WebSocket endpoint for Exotel AgentStream (bidirectional media)."""
+    await websocket.accept()
+
+    try:
+        from pipecat.serializers.exotel import ExotelFrameSerializer
+
+        _, call_data = await parse_telephony_websocket(websocket)
+        call_id = call_data.get("call_id", "unknown_call")
+        
+        phone_number, stream_body = resolve_phone_from_stream_query(
+            body_param=body,
+            call_data_from=call_data.get("from"),
+        )
+
+        logger.info(
+            f"[server] Exotel WS connected — call_id={call_id} phone={phone_number} "
+            f"direction={stream_body.get('direction', 'unknown')}"
+        )
+
+        serializer = ExotelFrameSerializer(
+            stream_sid=call_data["stream_id"],
+        )
+
+        transport = FastAPIWebsocketTransport(
+            websocket=websocket,
+            params=FastAPIWebsocketParams(
+                audio_in_enabled=True,
+                audio_out_enabled=True,
+                add_wav_header=False,
+                serializer=serializer,
+            ),
+        )
+
+        await run_bot(transport, call_id, phone_number)
+    except Exception as e:
+        logger.error(f"[server] Exotel WebSocket error: {e}")
         try:
             await websocket.close()
         except Exception:
