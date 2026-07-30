@@ -32,15 +32,13 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     Frame,
+    LLMContextFrame,
+    LLMFullResponseEndFrame,
+    LLMMessagesAppendFrame,
+    LLMRunFrame,
     TranscriptionFrame,
     TTSTextFrame,
-    LLMFullResponseEndFrame,
-    LLMRunFrame,
-    LLMMessagesAppendFrame,
-    LLMContextFrame,
 )
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
-from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -51,11 +49,17 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
     UserTurnStoppedMessage,
 )
-from pipecat.runner.types import RunnerArguments, SmallWebRTCRunnerArguments, WebSocketRunnerArguments
+from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.runner.types import (
+    RunnerArguments,
+    SmallWebRTCRunnerArguments,
+    WebSocketRunnerArguments,
+)
 from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.plivo import PlivoFrameSerializer
-from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.services.openrouter.llm import OpenRouterLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
@@ -70,8 +74,8 @@ from config.redis_client import init_redis
 from env_config import settings
 from modules.calls.service import call_service
 from pipeline.context import build_call_context
-from pipeline.post_call import run_post_call_pipeline
 from pipeline.credit_tracker import create_credit_tracker
+from pipeline.post_call import run_post_call_pipeline
 
 
 def _pcm_to_wav(pcm_audio: bytes, sample_rate: int, num_channels: int) -> bytes:
@@ -244,11 +248,10 @@ async def run_bot(
 
     # Gemini Live has its own native VAD and turn detection — we must NOT use the
     # LLMUserAggregator because it broadcasts InterruptionFrames on every transcription
-    # arrival, which kills tool calls before they finish.
-    # We ONLY need the LLMAssistantAggregator to catch FunctionCallResultFrames and
-    # feed tool results back into the GeminiLiveLLMService context.
-    from pipecat.processors.aggregators.llm_response_universal import LLMAssistantAggregator
-    assistant_aggregator = LLMAssistantAggregator(context)
+    # In Pipecat 1.5.0, realtime_service_mode strictly requires BOTH aggregators
+    # to be created together and placed in the pipeline so they both get a TaskManager.
+    from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
 
     if gemini_mode:
@@ -278,6 +281,7 @@ async def run_bot(
             transport.input(),
             transcript_collector,
             credit_tracker,
+            user_aggregator,
             llm,
             transport.output(),
             audio_buffer,
