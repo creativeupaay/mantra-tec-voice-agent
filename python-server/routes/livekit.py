@@ -90,7 +90,7 @@ async def _join_room(room_name: str, phone_number: str, call_id: str) -> None:
     """
     # Lazy imports — only fail here, not at server startup.
     try:
-        from pipecat.transports.services.livekit import LiveKitParams, LiveKitTransport
+        from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
     except ImportError:
         logger.error(
             "[livekit] LiveKitTransport unavailable — install pipecat-ai[livekit]"
