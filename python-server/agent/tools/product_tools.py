@@ -106,11 +106,11 @@ async def handle(params: FunctionCallParams) -> None:
         
         # We use the async client (`client.aio`) for the one-shot generation
         # to ensure it doesn't block the Pipecat event loop.
-        # Note: We must hardcode a standard text model (like gemini-2.5-flash).
+        # Note: We must hardcode a standard text model (like gemini-3.5-flash-lite).
         # We cannot use settings.gemini_model here because if it's set to a
         # live-preview model, Google's REST API will reject it with a 404.
         response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.5-flash-lite",
             contents=query,
             config={"system_instruction": system_prompt}
         )

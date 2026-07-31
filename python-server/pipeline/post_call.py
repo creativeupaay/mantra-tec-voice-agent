@@ -110,7 +110,7 @@ async def run_post_call_pipeline(
             client = genai.Client(api_key=settings.gemini_api_key)
 
             gemini_raw_response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash-lite",
                 contents=[
                     types.Part.from_text(text=f"Transcript:\n\n{transcript_text}")
                 ],
@@ -403,7 +403,7 @@ async def run_post_call_pipeline(
                     metadata={
                         "plivo_call_id": state.call_id,
                         "api": "post_call_llm",
-                        "model": "gemini-2.5-flash",
+                        "model": "gemini-3.5-flash-lite",
                         "calculation": post.calculation,
                         "rates": post.rates,
                         **post.metadata,
