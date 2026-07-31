@@ -153,7 +153,7 @@ export const getCallAnalytics = async (
         { detected_intent: { $exists: true, $nin: [null, ''] } },
         { call_category: { $exists: true, $nin: [null, ''] } },
       ]
-    }).select('detected_intent call_category').lean()
+    } as any).select('detected_intent call_category').lean()
 
     const normalizeIntent = (raw?: string, category?: string): string => {
       if (category && category !== 'inquiry') {
