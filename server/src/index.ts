@@ -13,10 +13,18 @@ const app = express();
 // Connect to database
 connectDB();
 
+const allowedOrigins = env.CLIENT_URL.split(',').map(url => url.trim().replace(/\/$/, ""));
+
 // Middleware
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   }),
 );
