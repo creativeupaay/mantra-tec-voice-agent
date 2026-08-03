@@ -171,21 +171,13 @@ def _build_tts():
 
 # ── Gemini Live Watchers ──────────────────────────────────────────────────────
 
-class TranscriptCollector(FrameProcessor):
-    """Passive frame processor that logs transcription frames for Phase 4.
-
-    IMPORTANT: Pipecat's FrameProcessor base class only auto-forwards SystemFrame
-    subclasses. All other frames (audio, LLMContextFrame, etc.) MUST be pushed
-    explicitly, otherwise they are silently dropped and never reach GeminiLiveLLMService.
-    """
+class UserTranscriptCollector(FrameProcessor):
+    """Passive frame processor that logs user transcriptions going UPSTREAM."""
     def __init__(self, state):
         super().__init__()
         self.state = state
-        self._assistant_buffer = []
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
-        # Let the base class update internal processor state (start/cancel/pause hooks).
-        # IMPORTANT: the base class does NOT push any frame downstream — we must do it.
         await super().process_frame(frame, direction)
 
         if isinstance(frame, TranscriptionFrame) and direction == FrameDirection.UPSTREAM:
@@ -194,7 +186,20 @@ class TranscriptCollector(FrameProcessor):
                 logger.info(f"[bot] Transcript — user: {content}")
                 self.state.transcript_lines.append(f"user: {content}")
 
-        elif isinstance(frame, TTSTextFrame) and direction == FrameDirection.DOWNSTREAM:
+        await self.push_frame(frame, direction)
+
+
+class AssistantTranscriptCollector(FrameProcessor):
+    """Passive frame processor that logs assistant transcriptions going DOWNSTREAM."""
+    def __init__(self, state):
+        super().__init__()
+        self.state = state
+        self._assistant_buffer = []
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, TTSTextFrame) and direction == FrameDirection.DOWNSTREAM:
             self._assistant_buffer.append(frame.text)
 
         elif isinstance(frame, LLMFullResponseEndFrame) and direction == FrameDirection.DOWNSTREAM:
@@ -204,8 +209,6 @@ class TranscriptCollector(FrameProcessor):
                 self.state.transcript_lines.append(f"assistant: {content}")
             self._assistant_buffer = []
 
-        # Always forward every frame — including StartFrame, EndFrame, CancelFrame, audio, etc.
-        # The base FrameProcessor updates internal state but never propagates frames itself.
         await self.push_frame(frame, direction)
 
 
@@ -272,17 +275,19 @@ async def run_bot(
         )
         llm.register_function(None, agent_graph.dispatch)
 
-        transcript_collector = TranscriptCollector(state)
+        user_transcript_collector = UserTranscriptCollector(state)
+        assistant_transcript_collector = AssistantTranscriptCollector(state)
         credit_tracker = create_credit_tracker(state)
         # Must sit AFTER transport.output() so both user + bot audio are captured.
         audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
 
         pipeline = Pipeline([
             transport.input(),
-            transcript_collector,
             credit_tracker,
             user_aggregator,
+            user_transcript_collector,
             llm,
+            assistant_transcript_collector,
             transport.output(),
             audio_buffer,
             assistant_aggregator,
@@ -323,7 +328,8 @@ async def run_bot(
             ),
         )
 
-        transcript_collector = TranscriptCollector(state)
+        user_transcript_collector = UserTranscriptCollector(state)
+        assistant_transcript_collector = AssistantTranscriptCollector(state)
         credit_tracker = create_credit_tracker(state)
         # Must sit AFTER transport.output() so both user + bot audio are captured.
         audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
@@ -331,11 +337,12 @@ async def run_bot(
         pipeline = Pipeline([
             transport.input(),
             stt,
-            transcript_collector,
+            user_transcript_collector,
             credit_tracker,
             user_aggregator,
             llm,
             tts,
+            assistant_transcript_collector,
             transport.output(),
             audio_buffer,
             assistant_aggregator,
