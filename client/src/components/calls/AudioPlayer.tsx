@@ -84,7 +84,7 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
           audioEl.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
           audioEl.error.code === MediaError.MEDIA_ERR_DECODE
         ) {
-          msg = 'Recording file not found in storage bucket or expired (>30 days deletion policy)'
+          msg = 'Recording file not found in storage'
         } else {
           msg = audioEl.error.message || 'Media player error loading recording'
         }

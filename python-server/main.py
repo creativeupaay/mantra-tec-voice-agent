@@ -37,10 +37,6 @@ async def lifespan(app: FastAPI):
     logger.info("[server] Starting up...")
     await init_db()
     await init_redis()
-    try:
-        await call_service.cleanup_old_recordings(30)
-    except Exception as e:
-        logger.warning(f"[server] Failed to run startup 30-day recording cleanup: {e}")
     yield
     logger.info("[server] Shutting down...")
 

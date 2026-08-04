@@ -1,6 +1,6 @@
 /**
- * Google Cloud Storage client using Application Default Credentials (ADC)
- * with support for 30-day object lifecycle management and local file fallback.
+ * Google Cloud Storage client using Application Default Credentials (ADC) or Service Account JSON key,
+ * with local file fallback streaming.
  */
 import { Storage, File } from '@google-cloud/storage'
 import fs from 'fs'
@@ -11,41 +11,30 @@ let storageClient: Storage | null = null
 
 function getStorage(): Storage {
   if (!storageClient) {
-    storageClient = new Storage({
+    const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS
+    const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+
+    let options: any = {
       ...(env.GCP_PROJECT_ID ? { projectId: env.GCP_PROJECT_ID } : {}),
-    })
+    }
+
+    if (keyFilename && fs.existsSync(keyFilename)) {
+      options.keyFilename = keyFilename
+    } else if (credentialsJson) {
+      try {
+        options.credentials = JSON.parse(credentialsJson)
+      } catch {
+        // Ignore json parse error
+      }
+    }
+
+    storageClient = new Storage(options)
   }
   return storageClient
 }
 
 export function isGcsConfigured(): boolean {
   return Boolean(env.GCS_BUCKET_NAME)
-}
-
-/**
- * Ensure GCS bucket has a lifecycle rule configured to delete objects older than specified days (default 30).
- */
-export async function ensureBucketLifecycleRule(days: number = 30): Promise<void> {
-  if (!isGcsConfigured()) return
-  try {
-    const bucket = getStorage().bucket(env.GCS_BUCKET_NAME)
-    const [metadata] = await bucket.getMetadata()
-    const lifecycle = metadata.lifecycle || {}
-    const rules: Array<any> = lifecycle.rule || []
-
-    const hasRule = rules.some(
-      (r) => r.action?.type === 'Delete' && r.condition?.age === days
-    )
-    if (!hasRule) {
-      await bucket.addLifecycleRule({
-        action: 'Delete' as any,
-        condition: { age: days },
-      })
-      console.log(`[GCS] Applied ${days}-day deletion lifecycle rule to bucket '${env.GCS_BUCKET_NAME}'`)
-    }
-  } catch (error: any) {
-    console.warn(`[GCS] Could not set ${days}-day lifecycle rule on bucket '${env.GCS_BUCKET_NAME}':`, error.message || error)
-  }
 }
 
 /**
@@ -121,7 +110,7 @@ export interface RecordingObject {
   size: number
 }
 
-/** Fetch recording metadata from the private bucket (ADC). */
+/** Fetch recording metadata from the GCS bucket. */
 export async function getRecordingObject(objectPath: string): Promise<RecordingObject | null> {
   if (!isGcsConfigured()) {
     throw new Error('GCS_BUCKET_NAME is not configured')

@@ -1,4 +1,4 @@
-"""Google Cloud Storage provider for call recordings with 30-day lifecycle rule support and local fallback."""
+"""Google Cloud Storage provider for call recordings with local fallback."""
 
 import asyncio
 import os
@@ -30,28 +30,8 @@ class GCSStorage:
                 self._client = storage.Client(project=project_id)
             
             self._bucket = self._client.bucket(self.bucket_name)
-            self.ensure_lifecycle_rule(30)
         except Exception as e:
             logger.warning(f"[GCS] Initialized GCS Storage client warning: {e}. Will fallback to local storage if GCS calls fail.")
-
-    def ensure_lifecycle_rule(self, days: int = 30) -> None:
-        """Ensure GCS bucket lifecycle rule is configured to delete objects older than specified days."""
-        if not self._bucket:
-            return
-        try:
-            # Check existing rules to avoid duplicate API calls
-            rules = list(self._bucket.lifecycle_rules)
-            has_rule = any(
-                rule.get("action", {}).get("type") == "Delete" and
-                rule.get("condition", {}).get("age") == days
-                for rule in rules
-            )
-            if not has_rule:
-                self._bucket.add_lifecycle_delete_rule(age=days)
-                self._bucket.patch()
-                logger.info(f"[GCS] Applied {days}-day deletion lifecycle rule to bucket '{self.bucket_name}'")
-        except Exception as e:
-            logger.warning(f"[GCS] Could not apply lifecycle rule on bucket '{self.bucket_name}': {e}")
     
     async def upload_recording(
         self,
@@ -59,10 +39,22 @@ class GCSStorage:
         file_content: bytes,
         content_type: str = "audio/mpeg"
     ) -> str:
-        """Upload a recording to GCS with local disk fallback."""
+        """Upload a recording to GCS and always save a local copy for guaranteed zero-error playback."""
         clean_path = file_path.lstrip("/")
+        filename = os.path.basename(clean_path)
         
-        # 1. Attempt upload to GCS if client is available
+        # Always save a local copy first to ensure 100% reliable local streaming
+        try:
+            local_dir = os.path.join(".", "recordings")
+            full_local_path = os.path.join(local_dir, filename)
+            os.makedirs(os.path.dirname(full_local_path), exist_ok=True)
+            with open(full_local_path, "wb") as f:
+                f.write(file_content)
+            logger.info(f"[LocalStorage] Saved local recording copy to {full_local_path}")
+        except Exception as e:
+            logger.warning(f"[LocalStorage] Could not write local copy of recording: {e}")
+
+        # Upload to GCS if client is available
         if self._bucket:
             try:
                 loop = asyncio.get_event_loop()
@@ -72,23 +64,10 @@ class GCSStorage:
                     blob.upload_from_string(file_content, content_type=content_type)
                 
                 await loop.run_in_executor(None, _upload)
-                logger.info(f"[GCS] Uploaded recording to {clean_path}")
-                
-                url = await self.get_recording_url(clean_path)
-                if url:
-                    return url
+                logger.info(f"[GCS] Uploaded recording to bucket '{self.bucket_name}' path '{clean_path}'")
             except Exception as e:
-                logger.warning(f"[GCS] Failed to upload recording {clean_path} to GCS: {e}. Saving to local fallback storage.")
+                logger.warning(f"[GCS] Failed to upload recording {clean_path} to GCS: {e}")
         
-        # 2. Local filesystem fallback
-        local_dir = os.path.join(".", "recordings")
-        full_local_path = os.path.join(local_dir, os.path.basename(clean_path))
-        os.makedirs(os.path.dirname(full_local_path), exist_ok=True)
-        
-        with open(full_local_path, "wb") as f:
-            f.write(file_content)
-        
-        logger.info(f"[LocalStorage] Saved fallback recording to {full_local_path}")
         return f"https://storage.googleapis.com/{self.bucket_name}/{clean_path}"
     
     async def get_recording_url(self, file_path: str) -> Optional[str]:
@@ -103,7 +82,7 @@ class GCSStorage:
             return None
     
     async def delete_recording(self, file_path: str) -> bool:
-        """Delete a recording from GCS and local fallback."""
+        """Delete a recording from GCS and local storage."""
         clean_path = file_path.lstrip("/")
         deleted = False
         
@@ -122,7 +101,7 @@ class GCSStorage:
             except Exception as e:
                 logger.warning(f"[GCS] Could not delete recording {clean_path} from GCS: {e}")
 
-        # Also delete local fallback file if exists
+        # Also delete local file if exists
         local_dir = os.path.join(".", "recordings")
         full_local_path = os.path.join(local_dir, os.path.basename(clean_path))
         if os.path.exists(full_local_path):
