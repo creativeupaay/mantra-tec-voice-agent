@@ -78,7 +78,18 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
     const handleEnded = () => setIsPlaying(false)
     const handleError = (e: Event) => {
       const audioEl = e.target as HTMLAudioElement
-      setError(audioEl.error?.message || 'Failed to load audio')
+      let msg = 'Failed to load audio recording'
+      if (audioEl.error) {
+        if (
+          audioEl.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+          audioEl.error.code === MediaError.MEDIA_ERR_DECODE
+        ) {
+          msg = 'Recording file not found in storage bucket or expired (>30 days deletion policy)'
+        } else {
+          msg = audioEl.error.message || 'Media player error loading recording'
+        }
+      }
+      setError(msg)
       setIsLoading(false)
     }
     const handleWaiting = () => setIsLoading(true)
@@ -223,8 +234,12 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download recording')
+    } catch (err: any) {
+      if (err.response?.status === 404 || err.message?.includes('404')) {
+        setError('Recording file not found in cloud storage or local fallback')
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to download recording')
+      }
     }
   }, [callDbId, title, callId])
 

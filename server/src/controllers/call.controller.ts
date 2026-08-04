@@ -1,9 +1,12 @@
+import fs from 'fs'
 import { Request, Response, NextFunction } from 'express'
 import { Call } from '../models/Call.js'
 import {
   getRecordingObject,
   isGcsConfigured,
   resolveRecordingObjectPath,
+  getLocalRecordingPath,
+  guessContentType,
 } from '../services/gcs.service.js'
 
 /** Normalize call docs so the client always receives complete UI fields. */
@@ -63,19 +66,11 @@ export const getCallById = async (req: Request, res: Response, next: NextFunctio
 }
 
 /**
- * Stream a call recording from the private GCS bucket (ADC).
+ * Stream a call recording from the private GCS bucket (ADC) with local file fallback.
  * Supports HTTP Range requests for seeking in media players.
  */
 export const getCallRecording = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    if (!isGcsConfigured()) {
-      res.status(503).json({
-        success: false,
-        message: 'Recording storage is not configured (GCS_BUCKET_NAME)',
-      })
-      return
-    }
-
     const call = await Call.findById(req.params.id).lean()
 
     if (!call) {
@@ -90,50 +85,70 @@ export const getCallRecording = async (req: Request, res: Response, next: NextFu
       return
     }
 
-    const recording = await getRecordingObject(objectPath)
+    let recording: any = null
 
-    if (!recording) {
-      res.status(404).json({ success: false, message: 'Recording file not found in storage' })
-      return
+    if (isGcsConfigured()) {
+      try {
+        recording = await getRecordingObject(objectPath)
+      } catch (err: any) {
+        console.warn(`[GCS] Error fetching ${objectPath} from GCS, checking local fallback:`, err.message || err)
+      }
     }
 
-    const { file, contentType, size } = recording
-    const rangeHeader = req.headers.range
+    if (recording) {
+      const { file, contentType, size } = recording
+      const rangeHeader = req.headers.range
 
-    res.setHeader('Accept-Ranges', 'bytes')
-    res.setHeader('Content-Type', contentType)
-    res.setHeader('Cache-Control', 'private, no-store')
-    res.setHeader(
-      'Content-Disposition',
-      `inline; filename="recording-${call.call_id || call._id}"`,
-    )
+      res.setHeader('Accept-Ranges', 'bytes')
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Cache-Control', 'private, no-store')
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="recording-${call.call_id || call._id}"`,
+      )
 
-    // Partial content for seeking
-    if (rangeHeader && size > 0) {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
+      if (rangeHeader && size > 0) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
 
-      if (!match) {
-        res.status(416).setHeader('Content-Range', `bytes */${size}`).end()
+        if (!match) {
+          res.status(416).setHeader('Content-Range', `bytes */${size}`).end()
+          return
+        }
+
+        const start = match[1] ? parseInt(match[1], 10) : 0
+        const end = match[2] ? parseInt(match[2], 10) : size - 1
+
+        if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) {
+          res.status(416).setHeader('Content-Range', `bytes */${size}`).end()
+          return
+        }
+
+        const safeEnd = Math.min(end, size - 1)
+        const chunkSize = safeEnd - start + 1
+
+        res.status(206)
+        res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${size}`)
+        res.setHeader('Content-Length', chunkSize)
+
+        const stream = file.createReadStream({ start, end: safeEnd })
+        stream.on('error', (err: any) => {
+          console.error('[GCS] Stream error:', err)
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: 'Failed to stream recording' })
+          } else {
+            res.destroy(err)
+          }
+        })
+        stream.pipe(res)
         return
       }
 
-      const start = match[1] ? parseInt(match[1], 10) : 0
-      const end = match[2] ? parseInt(match[2], 10) : size - 1
-
-      if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) {
-        res.status(416).setHeader('Content-Range', `bytes */${size}`).end()
-        return
+      if (size > 0) {
+        res.setHeader('Content-Length', size)
       }
 
-      const safeEnd = Math.min(end, size - 1)
-      const chunkSize = safeEnd - start + 1
-
-      res.status(206)
-      res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${size}`)
-      res.setHeader('Content-Length', chunkSize)
-
-      const stream = file.createReadStream({ start, end: safeEnd })
-      stream.on('error', (err) => {
+      const stream = file.createReadStream()
+      stream.on('error', (err: any) => {
         console.error('[GCS] Stream error:', err)
         if (!res.headersSent) {
           res.status(500).json({ success: false, message: 'Failed to stream recording' })
@@ -145,20 +160,51 @@ export const getCallRecording = async (req: Request, res: Response, next: NextFu
       return
     }
 
-    if (size > 0) {
-      res.setHeader('Content-Length', size)
+    // Check local filesystem fallback
+    const localFilePath = getLocalRecordingPath(objectPath)
+    if (localFilePath) {
+      const stat = fs.statSync(localFilePath)
+      const size = stat.size
+      const contentType = guessContentType(localFilePath)
+      const rangeHeader = req.headers.range
+
+      res.setHeader('Accept-Ranges', 'bytes')
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Cache-Control', 'private, no-store')
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="recording-${call.call_id || call._id}"`,
+      )
+
+      if (rangeHeader && size > 0) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
+        if (match) {
+          const start = match[1] ? parseInt(match[1], 10) : 0
+          const end = match[2] ? parseInt(match[2], 10) : size - 1
+          if (!Number.isNaN(start) && !Number.isNaN(end) && start <= end && start < size) {
+            const safeEnd = Math.min(end, size - 1)
+            const chunkSize = safeEnd - start + 1
+            res.status(206)
+            res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${size}`)
+            res.setHeader('Content-Length', chunkSize)
+
+            const stream = fs.createReadStream(localFilePath, { start, end: safeEnd })
+            stream.pipe(res)
+            return
+          }
+        }
+      }
+
+      if (size > 0) {
+        res.setHeader('Content-Length', size)
+      }
+
+      const stream = fs.createReadStream(localFilePath)
+      stream.pipe(res)
+      return
     }
 
-    const stream = file.createReadStream()
-    stream.on('error', (err) => {
-      console.error('[GCS] Stream error:', err)
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, message: 'Failed to stream recording' })
-      } else {
-        res.destroy(err)
-      }
-    })
-    stream.pipe(res)
+    res.status(404).json({ success: false, message: 'Recording file not found in cloud storage or local storage' })
   } catch (error) {
     next(error)
   }

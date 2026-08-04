@@ -4,14 +4,28 @@ import connectDB from "./config/database";
 import { apiRouter } from "./routes";
 import { errorHandler, notFound } from "./middleware/error.middleware";
 import { env, validateEnv } from "./config/env.config";
+import { ensureBucketLifecycleRule } from "./services/gcs.service";
+import { cleanupExpiredRecordings } from "./services/cleanup.service";
 
 // Validate environment variables on startup
 validateEnv();
 
 const app = express();
 
-// Connect to database
-connectDB();
+// Connect to database and run lifecycle / cleanup jobs
+connectDB().then(() => {
+  // 1. Ensure GCS bucket 30-day deletion rule is set
+  ensureBucketLifecycleRule(30);
+
+  // 2. Run initial 30-day recording cleanup
+  cleanupExpiredRecordings(30);
+
+  // 3. Schedule daily recording cleanup (every 24 hours)
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+  setInterval(() => {
+    cleanupExpiredRecordings(30);
+  }, TWENTY_FOUR_HOURS);
+});
 
 const allowedOrigins = env.CLIENT_URL.split(',').map(url => url.trim().replace(/\/$/, ""));
 

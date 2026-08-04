@@ -112,5 +112,68 @@ class CallService:
     async def get_call(self, call_id: str) -> Optional[Call]:
         return await self._repo().find_by_call_id(call_id)
 
+    async def cleanup_old_recordings(self, days: int = 30) -> int:
+        """
+        Delete recordings older than specified days (default 30) from storage and update DB records.
+        """
+        from datetime import datetime, timedelta, timezone
+        from loguru import logger
+
+        db = get_db()
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_iso = cutoff_date.isoformat()
+
+        # Query calls created before cutoff date with recording references
+        query = {
+            "$and": [
+                {
+                    "$or": [
+                        {"timestamp": {"$lt": cutoff_iso}},
+                        {"created_at": {"$lt": cutoff_date}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"recording_path": {"$ne": None, "$exists": True}},
+                        {"recording_url": {"$ne": None, "$exists": True}},
+                    ]
+                }
+            ]
+        }
+
+        cursor = db.calls.find(query)
+        expired_calls = await cursor.to_list(length=500)
+
+        if not expired_calls:
+            logger.info(f"[cleanup] No expired recordings (> {days} days) found to purge.")
+            return 0
+
+        logger.info(f"[cleanup] Purging {len(expired_calls)} expired call recordings older than {days} days...")
+        storage = self._get_storage_provider()
+        cleaned_count = 0
+
+        for doc in expired_calls:
+            call_id = doc.get("call_id")
+            recording_path = doc.get("recording_path") or f"recordings/{call_id}.wav"
+
+            if storage and recording_path:
+                try:
+                    await storage.delete_recording(recording_path)
+                except Exception as e:
+                    logger.warning(f"[cleanup] Failed to delete recording {recording_path} for {call_id}: {e}")
+
+            await db.calls.update_one(
+                {"_id": doc["_id"]},
+                {
+                    "$unset": {"recording_url": "", "recording_path": ""},
+                    "$set": {"recording_deleted_at": datetime.now(timezone.utc).isoformat()}
+                }
+            )
+            cleaned_count += 1
+
+        logger.info(f"[cleanup] Successfully purged {cleaned_count} expired recordings.")
+        return cleaned_count
+
 
 call_service = CallService()
+

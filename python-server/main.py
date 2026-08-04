@@ -27,6 +27,7 @@ from routes.exotel import router as exotel_router
 from routes.livekit import router as livekit_router
 from routes.plivo import resolve_phone_from_stream_query
 from routes.plivo import router as plivo_router
+from modules.calls.service import call_service
 from routes.v1 import router as v1_router
 
 
@@ -36,8 +37,13 @@ async def lifespan(app: FastAPI):
     logger.info("[server] Starting up...")
     await init_db()
     await init_redis()
+    try:
+        await call_service.cleanup_old_recordings(30)
+    except Exception as e:
+        logger.warning(f"[server] Failed to run startup 30-day recording cleanup: {e}")
     yield
     logger.info("[server] Shutting down...")
+
 
 
 app = FastAPI(lifespan=lifespan, title="Mantra Tech Voice Agent API")
