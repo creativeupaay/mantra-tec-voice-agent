@@ -1,11 +1,27 @@
 import { FC, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { notificationApi, INotification } from '../api/client'
-import { Bell, CheckCheck, Trash2, AlertCircle, AlertTriangle, Info, CheckCircle2, PhoneCall, CreditCard, ShieldAlert, Ticket } from 'lucide-react'
+import { notificationApi, callApi, INotification } from '../api/client'
+import { ICall } from '../types/call'
+import {
+  Bell,
+  CheckCheck,
+  Trash2,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
+  PhoneCall,
+  CreditCard,
+  ShieldAlert,
+  Ticket,
+  User,
+  ArrowRight,
+} from 'lucide-react'
 
 // ── Time Ago Formatter ────────────────────────────────────────────────────────
-const timeAgo = (dateString: string): string => {
+const timeAgo = (dateString?: string): string => {
+  if (!dateString) return 'Recent'
   const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return 'Recent'
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000)
   if (seconds < 60) return 'Just now'
   const minutes = Math.floor(seconds / 60)
@@ -16,7 +32,6 @@ const timeAgo = (dateString: string): string => {
   return `${days}d ago`
 }
 
-// ── Icon & Color Resolver ─────────────────────────────────────────────────────
 const getSeverityConfig = (severity: string, category: string) => {
   switch (severity) {
     case 'error':
@@ -74,20 +89,40 @@ const getSeverityConfig = (severity: string, category: string) => {
   }
 }
 
-export const NotificationDropdown: FC = () => {
+interface NotificationDropdownProps {
+  escalatedCalls?: ICall[]
+  onOpenEscalatedCall?: (callId: string) => void
+}
+
+export const NotificationDropdown: FC<NotificationDropdownProps> = ({
+  escalatedCalls = [],
+  onOpenEscalatedCall,
+}) => {
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<INotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'escalated'>('all')
   const dropdownRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
+  const [internalEscalated, setInternalEscalated] = useState<ICall[]>([])
+  
+  const activeEscalatedCalls = escalatedCalls.length > 0 ? escalatedCalls : internalEscalated
+  const pendingEscalatedList = activeEscalatedCalls.filter((c) => c.status === 'escalated')
+  const pendingEscalatedCount = pendingEscalatedList.length
+
   const fetchNotifications = async () => {
     try {
-      const res = await notificationApi.getNotifications()
-      if (res.data.success) {
-        setNotifications(res.data.data.notifications)
-        setUnreadCount(res.data.data.unreadCount)
+      const [notifRes, callsRes] = await Promise.all([
+        notificationApi.getNotifications(),
+        callApi.getAll(),
+      ])
+      if (notifRes.data.success) {
+        setNotifications(notifRes.data.data.notifications)
+        setUnreadCount(notifRes.data.data.unreadCount)
+      }
+      if (callsRes.data?.success && Array.isArray(callsRes.data.data)) {
+        setInternalEscalated(callsRes.data.data.filter((c: ICall) => c.status === 'escalated'))
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err)
@@ -96,9 +131,18 @@ export const NotificationDropdown: FC = () => {
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 30 seconds for background updates
-    const interval = setInterval(fetchNotifications, 30000)
-    return () => clearInterval(interval)
+    const interval = setInterval(fetchNotifications, 15000)
+
+    // Listen for live call status resolution events across the app
+    const handleStatusUpdate = () => {
+      fetchNotifications()
+    }
+    window.addEventListener('call-status-updated', handleStatusUpdate)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('call-status-updated', handleStatusUpdate)
+    }
   }, [])
 
   // Close dropdown on outside click
@@ -115,10 +159,10 @@ export const NotificationDropdown: FC = () => {
   const handleMarkAsRead = async (id: string, link?: string) => {
     try {
       await notificationApi.markAsRead(id)
-      setNotifications(prev =>
-        prev.map(n => (n._id === id ? { ...n, read: true } : n))
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, read: true } : n))
       )
-      setUnreadCount(prev => Math.max(0, prev - 1))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
       if (link) {
         setIsOpen(false)
         navigate(link)
@@ -131,7 +175,7 @@ export const NotificationDropdown: FC = () => {
   const handleMarkAllAsRead = async () => {
     try {
       await notificationApi.markAllAsRead()
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (err) {
       console.error('Failed to mark all read:', err)
@@ -152,49 +196,65 @@ export const NotificationDropdown: FC = () => {
     e.stopPropagation()
     try {
       await notificationApi.deleteNotification(id)
-      setNotifications(prev => {
-        const item = prev.find(n => n._id === id)
-        if (item && !item.read) setUnreadCount(count => Math.max(0, count - 1))
-        return prev.filter(n => n._id !== id)
+      setNotifications((prev) => {
+        const item = prev.find((n) => n._id === id)
+        if (item && !item.read) setUnreadCount((count) => Math.max(0, count - 1))
+        return prev.filter((n) => n._id !== id)
       })
     } catch (err) {
       console.error('Failed to delete notification:', err)
     }
   }
 
-  const filteredNotifications = notifications.filter(n =>
-    activeTab === 'unread' ? !n.read : true
-  )
+  const handleOpenEscalatedItem = (call: ICall) => {
+    setIsOpen(false)
+    const targetId = call._id || call.call_id
+    if (onOpenEscalatedCall) {
+      onOpenEscalatedCall(targetId)
+    } else {
+      navigate(`/calls?callId=${targetId}&tab=escalated`)
+    }
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-lg hover:bg-surface-page focus:outline-none"
-        title="Notifications"
+        className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-xl hover:bg-surface-page focus:outline-none cursor-pointer"
+        title="Notifications & Escalations"
       >
         <Bell size={20} strokeWidth={1.75} />
-        {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-white leading-none shadow-sm">
-            {unreadCount > 99 ? '99+' : unreadCount}
+        {pendingEscalatedCount > 0 ? (
+          <span className="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse">
+            {pendingEscalatedCount}
           </span>
+        ) : (
+          unreadCount > 0 && (
+            <span className="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-white leading-none shadow-xs">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )
         )}
       </button>
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] bg-surface-card border border-border rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[520px] animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] bg-surface-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[540px] animate-in fade-in slide-in-from-top-2 duration-150">
           
           {/* Header */}
           <div className="p-4 border-b border-border flex items-center justify-between bg-surface-card">
             <div className="flex items-center space-x-2">
               <h3 className="text-[15px] font-semibold text-text-primary">Notifications</h3>
-              {unreadCount > 0 && (
-                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-accent-bg text-accent">
-                  {unreadCount} new
+              {pendingEscalatedCount > 0 ? (
+                <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-red-500/15 text-red-500 border border-red-500/30">
+                  {pendingEscalatedCount} critical
                 </span>
-              )}
+              ) : unreadCount > 0 ? (
+                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-accent-bg text-accent">
+                  {unreadCount} unread
+                </span>
+              ) : null}
             </div>
 
             {notifications.length > 0 && (
@@ -202,20 +262,20 @@ export const NotificationDropdown: FC = () => {
                 {unreadCount > 0 && (
                   <button
                     onClick={handleMarkAllAsRead}
-                    className="flex items-center space-x-1 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+                    className="flex items-center space-x-1 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
                     title="Mark all as read"
                   >
                     <CheckCheck size={14} />
-                    <span>Mark all read</span>
+                    <span>Mark read</span>
                   </button>
                 )}
                 <button
                   onClick={handleClearAll}
-                  className="flex items-center space-x-1 text-[12px] font-medium text-text-secondary hover:text-[#C1554A] transition-colors"
+                  className="flex items-center space-x-1 text-[12px] font-medium text-text-secondary hover:text-[#C1554A] transition-colors cursor-pointer"
                   title="Clear all notifications"
                 >
                   <Trash2 size={13} />
-                  <span>Clear all</span>
+                  <span>Clear</span>
                 </button>
               </div>
             )}
@@ -225,40 +285,108 @@ export const NotificationDropdown: FC = () => {
           <div className="px-4 py-2 border-b border-border bg-surface-page/50 flex space-x-2">
             <button
               onClick={() => setActiveTab('all')}
-              className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
+              className={`px-3 py-1 text-[12px] font-medium rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'all'
-                  ? 'bg-surface-card text-text-primary shadow-sm border border-border'
+                  ? 'bg-surface-card text-text-primary shadow-2xs border border-border font-semibold'
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
-              All ({notifications.length})
+              All ({notifications.length + pendingEscalatedCount})
             </button>
             <button
-              onClick={() => setActiveTab('unread')}
-              className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
-                activeTab === 'unread'
-                  ? 'bg-surface-card text-text-primary shadow-sm border border-border'
+              onClick={() => setActiveTab('escalated')}
+              className={`px-3 py-1 text-[12px] font-medium rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'escalated'
+                  ? 'bg-surface-card text-red-500 shadow-2xs border border-red-500/30 font-semibold'
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
-              Unread ({unreadCount})
+              <span>Escalated</span>
+              {pendingEscalatedCount > 0 && (
+                <span className="px-1.5 py-0.2 text-[10px] font-mono rounded-full bg-red-500/20 text-red-500 font-bold">
+                  {pendingEscalatedCount}
+                </span>
+              )}
             </button>
           </div>
 
-          {/* Notification Items List */}
+          {/* List Content */}
           <div className="flex-1 overflow-y-auto divide-y divide-border scrollbar-thin">
-            {filteredNotifications.length === 0 ? (
+            {/* 1. Pending Escalated Calls Section */}
+            {pendingEscalatedList.map((call) => {
+              const targetId = call._id || call.call_id
+              const reason =
+                call.red_flag_reason ||
+                call.guardrail_triggered ||
+                call.detected_intent ||
+                'Agent Escalation Required'
+
+              return (
+                <div
+                  key={targetId}
+                  onClick={() => handleOpenEscalatedItem(call)}
+                  className="p-4 bg-red-500/5 hover:bg-red-500/10 cursor-pointer transition-colors space-y-2 border-l-4 border-l-red-500"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-red-500 flex items-center gap-1.5 uppercase tracking-wider">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Critical Call Escalation
+                    </span>
+                    <span className="text-[11px] text-text-muted font-mono">
+                      {timeAgo(call.timestamp)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-text-muted" />
+                      {call.caller_name || call.phone_number}
+                    </p>
+                    <p className="text-[11px] font-medium text-red-500/90 mt-0.5">
+                      Escalation Reason: {reason}
+                    </p>
+                  </div>
+
+                  {call.call_summary && (
+                    <p className="text-xs text-text-secondary line-clamp-2 bg-surface-card p-2 rounded-lg border border-border">
+                      {call.call_summary}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/15 text-red-500 font-bold">
+                      Escalated
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenEscalatedItem(call)
+                      }}
+                      className="text-xs font-medium text-accent hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Open Call</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* 2. Standard Notifications Section */}
+            {activeTab === 'all' && notifications.length === 0 && pendingEscalatedCount === 0 && (
               <div className="p-8 text-center flex flex-col items-center justify-center">
                 <div className="w-10 h-10 rounded-full bg-surface-page flex items-center justify-center mb-2 border border-border">
                   <Bell size={18} className="text-text-muted" />
                 </div>
                 <p className="text-[13px] font-medium text-text-primary">No notifications</p>
                 <p className="text-[12px] text-text-muted mt-0.5">
-                  {activeTab === 'unread' ? "You're all caught up!" : "No notifications yet."}
+                  All customer calls are operating normally!
                 </p>
               </div>
-            ) : (
-              filteredNotifications.map(notification => {
+            )}
+
+            {activeTab === 'all' &&
+              notifications.map((notification) => {
                 const config = getSeverityConfig(notification.severity, notification.category)
                 const IconComponent = config.icon
 
@@ -270,12 +398,10 @@ export const NotificationDropdown: FC = () => {
                       !notification.read ? 'bg-surface-page/70 hover:bg-surface-page' : 'hover:bg-surface-page/50'
                     }`}
                   >
-                    {/* Severity Icon */}
                     <div className={`w-8 h-8 rounded-lg ${config.bg} ${config.border} border flex items-center justify-center shrink-0 mt-0.5`}>
                       <IconComponent size={16} className={config.iconColor} />
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-0.5">
                         <span className="text-[13px] font-semibold text-text-primary truncate">
@@ -290,14 +416,13 @@ export const NotificationDropdown: FC = () => {
                       </p>
                     </div>
 
-                    {/* Unread indicator & Delete */}
                     <div className="flex items-center space-x-1 shrink-0 self-center">
                       {!notification.read && (
                         <div className="w-2 h-2 rounded-full bg-accent shrink-0 group-hover:hidden" />
                       )}
                       <button
-                        onClick={e => handleDelete(e, notification._id)}
-                        className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-[#C1554A] transition-all p-1"
+                        onClick={(e) => handleDelete(e, notification._id)}
+                        className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-[#C1554A] transition-all p-1 cursor-pointer"
                         title="Delete notification"
                       >
                         <Trash2 size={14} />
@@ -305,17 +430,15 @@ export const NotificationDropdown: FC = () => {
                     </div>
                   </div>
                 )
-              })
-            )}
+              })}
           </div>
 
           {/* Footer */}
           <div className="p-3 border-t border-border bg-surface-page/50 text-center">
             <span className="text-[11px] text-text-muted">
-              System notifications auto-expire after 30 days
+              Live notifications active • Click any item to inspect call details
             </span>
           </div>
-
         </div>
       )}
     </div>

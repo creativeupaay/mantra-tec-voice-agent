@@ -195,6 +195,22 @@ export const getCallAnalytics = async (
       .limit(5)
       .lean();
 
+    // ── 6. Escalated calls ──────────────────────────────────────────────────
+    const escalatedCalls = await Call.find({ status: "escalated" })
+      .select(
+        "call_id caller_name phone_number call_summary detected_intent status timestamp is_red_flag is_red_flagged duration transcript red_flag_reason guardrail_triggered call_category",
+      )
+      .sort({ timestamp: -1 })
+      .lean();
+
+    // ── 7. Recent resolved calls ───────────────────────────────────────────
+    const recentResolved = await Call.find({ status: "resolved" })
+      .select(
+        "call_id caller_name phone_number call_summary detected_intent status timestamp is_red_flag is_red_flagged duration transcript red_flag_reason guardrail_triggered call_category",
+      )
+      .sort({ timestamp: -1 })
+      .lean();
+
     res.json({
       success: true,
       data: {
@@ -203,8 +219,11 @@ export const getCallAnalytics = async (
         statusBreakdown,
         intentBreakdown,
         recentRedFlags,
+        escalatedCalls,
+        recentResolved,
       },
     });
+
   } catch (error) {
     next(error);
   }

@@ -241,7 +241,7 @@ async def run_bot(
     state.call_started_wall = time.time()
 
     # ── 2. Build initial system prompt ────────────────────────────────────────
-    system_prompt = build_system_prompt(state)
+    system_prompt = build_system_prompt(state, voice_mode=settings.voice_mode)
 
     # For classic mode, the system prompt goes into the messages list as role:system.
     messages = [] if gemini_mode else [{"role": "system", "content": system_prompt}]

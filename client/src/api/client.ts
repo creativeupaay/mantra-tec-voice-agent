@@ -66,7 +66,42 @@ export interface ICallAnalytics {
     status: string;
     timestamp: string;
   }[];
+  escalatedCalls?: {
+    _id: string;
+    call_id: string;
+    caller_name?: string;
+    phone_number: string;
+    call_summary?: string;
+    detected_intent?: string;
+    status: string;
+    timestamp: string;
+    is_red_flag?: boolean;
+    is_red_flagged?: boolean;
+    duration?: number;
+    transcript?: string;
+    red_flag_reason?: string;
+    guardrail_triggered?: string;
+    call_category?: string;
+  }[];
+  recentResolved?: {
+    _id: string;
+    call_id: string;
+    caller_name?: string;
+    phone_number: string;
+    call_summary?: string;
+    detected_intent?: string;
+    status: string;
+    timestamp: string;
+    is_red_flag?: boolean;
+    is_red_flagged?: boolean;
+    duration?: number;
+    transcript?: string;
+    red_flag_reason?: string;
+    guardrail_triggered?: string;
+    call_category?: string;
+  }[];
 }
+
 
 export interface INotification {
   _id: string;
@@ -223,12 +258,30 @@ export const callApi = {
 
   getById: (id: string) => apiClient.get<ICallResponse>("/calls/" + id),
 
+  updateStatus: async (id: string, status: string) => {
+    try {
+      return await apiClient.post<{ success: boolean; message: string; data: ICallResponse["data"] }>(
+        `/calls/${encodeURIComponent(id)}/status`,
+        { status },
+      );
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        return await apiClient.patch<{ success: boolean; message: string; data: ICallResponse["data"] }>(
+          `/calls/${encodeURIComponent(id)}`,
+          { status },
+        );
+      }
+      throw err;
+    }
+  },
+
   /** Stream recording bytes from the private GCS proxy (ADC on server). */
   getRecording: (id: string) =>
     apiClient.get<Blob>(`/calls/${id}/recording`, { responseType: "blob" }),
 
   getRecordingStreamUrl: getCallRecordingStreamUrl,
 };
+
 
 // Agent endpoints
 export const agentApi = {

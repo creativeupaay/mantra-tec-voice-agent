@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { Search, Flag, ChevronDown, Calendar } from 'lucide-react'
+import { Search, Flag, ChevronDown, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
 import { CallStatus } from '../../types/call'
 
 export type DateFilterPreset =
@@ -24,16 +24,9 @@ interface CallFiltersProps {
   setDateFrom: (val: string) => void
   dateTo: string
   setDateTo: (val: string) => void
+  escalatedCount?: number
+  resolvedCount?: number
 }
-
-const FILTER_OPTIONS: { label: string; value: CallStatus | 'all' | 'flagged' }[] = [
-  { label: 'All Calls', value: 'all' },
-  { label: 'Live', value: 'live' },
-  { label: 'Resolved', value: 'resolved' },
-  { label: 'Escalated', value: 'escalated' },
-  { label: 'Missed', value: 'missed' },
-  { label: 'Red Flag', value: 'flagged' },
-]
 
 const DATE_PRESETS: { label: string; value: DateFilterPreset }[] = [
   { label: 'All time', value: 'all' },
@@ -61,7 +54,18 @@ const CallFilters: FC<CallFiltersProps> = ({
   setDateFrom,
   dateTo,
   setDateTo,
+  escalatedCount = 0,
+  resolvedCount = 0,
 }) => {
+  const FILTER_OPTIONS: { label: string; value: CallStatus | 'all' | 'flagged'; badge?: number; icon?: any }[] = [
+    { label: 'All Calls', value: 'all' },
+    { label: 'Escalated', value: 'escalated', badge: escalatedCount, icon: AlertTriangle },
+    { label: 'Resolved', value: 'resolved', badge: resolvedCount, icon: CheckCircle },
+    { label: 'Live', value: 'live' },
+    { label: 'Missed', value: 'missed' },
+    { label: 'Red Flag', value: 'flagged', icon: Flag },
+  ]
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col sm:flex-row gap-3">
@@ -73,7 +77,7 @@ const CallFilters: FC<CallFiltersProps> = ({
           />
           <input
             type="text"
-            placeholder="Search by name, number, or intent…"
+            placeholder="Search by customer name, phone number, intent, or escalation reason…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 bg-surface-card border border-border rounded-xl text-[14px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-border-strong transition-colors"
@@ -150,27 +154,45 @@ const CallFilters: FC<CallFiltersProps> = ({
         </div>
       )}
 
+      {/* Main Filter Tabs */}
       <div className="flex items-center gap-2 flex-wrap">
-        {FILTER_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => setActiveFilter(opt.value)}
-            className={`px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
-              activeFilter === opt.value
-                ? 'bg-text-primary text-surface-card border-text-primary'
-                : 'bg-surface-card text-text-secondary border-border hover:border-border-strong hover:text-text-primary'
-            }`}
-          >
-            {opt.label === 'Red Flag' ? (
-              <span className="flex items-center gap-1.5">
-                <Flag size={12} strokeWidth={2} />
-                {opt.label}
-              </span>
-            ) : (
-              opt.label
-            )}
-          </button>
-        ))}
+        {FILTER_OPTIONS.map(opt => {
+          const Icon = opt.icon
+          const isActive = activeFilter === opt.value
+          const isEscalated = opt.value === 'escalated'
+          
+          return (
+            <button
+              key={opt.value}
+              onClick={() => setActiveFilter(opt.value)}
+              className={`px-3 py-1.5 rounded-xl text-[13px] font-semibold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                isActive
+                  ? isEscalated
+                    ? 'bg-red-500 text-white border-red-500 shadow-xs'
+                    : 'bg-text-primary text-surface-card border-text-primary'
+                  : isEscalated && (opt.badge ?? 0) > 0
+                    ? 'bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20'
+                    : 'bg-surface-card text-text-secondary border-border hover:border-border-strong hover:text-text-primary'
+              }`}
+            >
+              {Icon && <Icon size={13} strokeWidth={2} />}
+              <span>{opt.label}</span>
+              {opt.badge !== undefined && (
+                <span
+                  className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : isEscalated && opt.badge > 0
+                        ? 'bg-red-500 text-white'
+                        : 'bg-surface-page text-text-secondary border border-border'
+                  }`}
+                >
+                  {opt.badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

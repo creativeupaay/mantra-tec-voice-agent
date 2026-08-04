@@ -104,6 +104,7 @@ async def run_post_call_pipeline(
     gemini_prompt_tokens = 0
     gemini_completion_tokens = 0
     gemini_raw_response = None
+    is_bulk = False
 
     if has_transcript:
         try:
@@ -119,7 +120,16 @@ async def run_post_call_pipeline(
                         "You are a post-call analyst for Mantra Tech. Analyze the following transcript "
                         "and extract a detailed summary, the primary intent, and categorize the call. "
                         "Determine if a support ticket or sales lead still needs to be created. "
-                        "Flag if the agent lacked knowledge or detected sensitive/disallowed content."
+                        "Flag if the agent lacked knowledge or detected sensitive/disallowed content.\n\n"
+                        "CRITICAL RULE FOR AI CALL SUMMARY:\n"
+                        "If the conversation is identified as a Bulk Order, Wholesale Enquiry, Enterprise Purchase, "
+                        "Government Purchase, Institutional Purchase, or RFQ (Request for Quotation):\n"
+                        "The summary MUST start with the clear heading 'BULK' (on its own line before the summary text).\n"
+                        "Example:\n"
+                        "BULK\n\n"
+                        "Customer from ABC Technologies requested a quotation for 250 biometric attendance devices. "
+                        "The agent collected the organisation name, email, location, required quantity and guided the customer to contact the Sales Team at sales@mantratec.com.\n\n"
+                        "For all normal customer conversations, generate the summary WITHOUT adding the BULK heading."
                     ),
                     response_mime_type="application/json",
                     response_schema=PostCallExtraction,
@@ -129,6 +139,33 @@ async def run_post_call_pipeline(
             # Parse the JSON response into PostCallExtraction
             import json
             extraction = PostCallExtraction(**json.loads(gemini_raw_response.text or "{}"))
+
+            # Enforce Rule 4 for AI Call Summary (BULK heading)
+            raw_summary = (extraction.summary or "").strip()
+            lower_summary = raw_summary.lower()
+            lower_intent = (extraction.intent or "").lower()
+
+            # Inspect only user lines so agent's template phrases aren't false positives
+            user_transcript_lines = [line.lower() for line in state.transcript_lines if line.lower().startswith("user:")]
+            user_transcript_text = " ".join(user_transcript_lines)
+
+            is_bulk = False
+            bulk_terms = [
+                "bulk", "wholesale", "enterprise quantity", "enterprise purchase", "enterprise",
+                "government quantity", "government purchase", "government",
+                "institutional quantity", "institutional purchase", "institutional",
+                "rfq", "request for quotation", "quotation"
+            ]
+            if any(term in lower_intent for term in bulk_terms) or any(term in lower_summary for term in bulk_terms) or raw_summary.startswith("BULK"):
+                is_bulk = True
+            elif any(term in user_transcript_text for term in bulk_terms):
+                is_bulk = True
+
+            if is_bulk:
+                if not raw_summary.startswith("BULK"):
+                    if raw_summary.lower().startswith("bulk"):
+                        raw_summary = raw_summary[4:].lstrip(":\n\r\t ")
+                    extraction.summary = f"BULK\n\n{raw_summary}"
 
             from modules.credit_usage.pricing import extract_gemini_usage, estimate_tokens_from_text
             gemini_prompt_tokens, gemini_completion_tokens, _ = extract_gemini_usage(
@@ -276,17 +313,19 @@ async def run_post_call_pipeline(
                 logger.error(f"[post-call] Failed to update special_notes in memory: {e}")
 
         # ── 5. Fallback Integrations (Optional) ───────────────────────────────────
-        # If LLM detected a lead is required and the caller has no identity/CRM match
-        if extraction.requires_lead and not state.crm_lead and not state.crm_contact:
+        # If LLM detected a lead is required or call is a Bulk Order and the caller has no identity/CRM match
+        if (extraction.requires_lead or is_bulk) and not state.crm_lead and not state.crm_contact:
             try:
-                logger.info(f"[post-call] Auto-creating lead for {state.phone_number}")
-                name = state.identity.name if state.identity and state.identity.name else "Unknown Caller"
-                await crm_service.create_lead({
+                logger.info(f"[post-call] Auto-creating Zoho CRM lead for {state.phone_number}")
+                name = caller_name or (state.identity.name if state.identity and state.identity.name else "Unknown Caller")
+                lead_payload = {
                     "Last_Name": name,
                     "Phone": state.phone_number,
                     "Description": extraction.summary,
-                    "Lead_Source": "Voice Agent",
-                })
+                    "Lead_Source": "Voice Agent - Bulk Order" if is_bulk else "Voice Agent",
+                }
+                res = await crm_service.create_lead(lead_payload)
+                logger.info(f"[post-call] Successfully created Zoho CRM lead: {res}")
             except Exception as e:
                 logger.warning(f"[post-call] Auto-create lead failed: {e}")
 

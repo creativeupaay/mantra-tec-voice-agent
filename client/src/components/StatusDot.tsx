@@ -7,34 +7,46 @@ interface StatusDotProps {
 }
 
 const StatusDot: FC<StatusDotProps> = ({ status, label }) => {
-  const getDotStyle = (): React.CSSProperties => {
-    switch (status) {
+  const safeStatus = (status || 'resolved').toLowerCase() as CallStatus
+  const displayLabel = label || (typeof safeStatus === 'string' ? safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1) : 'Resolved')
+
+  const getPillStyles = (): { bg: string; dot: string } => {
+    switch (safeStatus) {
       case 'resolved':
-        return { backgroundColor: 'var(--color-status-resolved)' }
+        return {
+          bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+          dot: 'bg-emerald-500',
+        }
       case 'escalated':
-        return { backgroundColor: 'var(--color-status-escalated)' }
+        return {
+          bg: 'bg-red-500/10 text-red-600 border-red-500/20',
+          dot: 'bg-red-500',
+        }
       case 'missed':
-        return { backgroundColor: 'var(--color-status-missed)' }
+        return {
+          bg: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+          dot: 'bg-amber-500',
+        }
       case 'live':
-        return { backgroundColor: 'var(--color-status-live)' }
+        return {
+          bg: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+          dot: 'bg-blue-500 animate-pulse',
+        }
       default:
-        return { backgroundColor: 'var(--color-text-muted)' }
+        return {
+          bg: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
+          dot: 'bg-slate-400',
+        }
     }
   }
 
-  const safeStatus = status || 'resolved'
-  const displayLabel = label || (typeof safeStatus === 'string' ? safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1) : 'Resolved')
+  const styles = getPillStyles()
 
   return (
-    <div className="flex items-center space-x-2">
-      <div
-        className={`w-2 h-2 rounded-full shrink-0 ${safeStatus === 'live' ? 'animate-live-pulse' : ''}`}
-        style={getDotStyle()}
-      />
-      <span className="text-[13px] font-medium text-text-secondary capitalize">
-        {displayLabel}
-      </span>
-    </div>
+    <span className={`inline-flex items-center justify-center gap-1.5 w-[96px] py-1 px-2.5 rounded-full text-[11px] font-semibold tracking-wide border shadow-2xs ${styles.bg}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${styles.dot}`} />
+      <span className="capitalize truncate">{displayLabel}</span>
+    </span>
   )
 }
 
