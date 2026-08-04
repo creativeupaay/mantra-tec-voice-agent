@@ -21,21 +21,42 @@ GET_CRM_SCHEMA = FunctionSchema(
 CREATE_LEAD_SCHEMA = FunctionSchema(
     name="create_lead_in_crm",
     description=(
-        "Register a new lead in Zoho CRM for a caller who is not yet in the system. "
-        "Use this when a new caller expresses interest in Mantra Tech's products or services."
+        "Register a new lead in Zoho CRM for callers whose query is regarding orders that cannot be made "
+        "directly on the Servico website (such as bulk orders, wholesale enquiries, RFQs, or products not on Servico). "
+        "Collect and pass all available details: name, company, email, city, country, subject, and detailed description."
     ),
     properties={
         "name": {
             "type": "string",
-            "description": "Full name of the caller.",
+            "description": "Full name of the caller/customer (e.g. 'Suman Lamsal').",
         },
         "company": {
             "type": "string",
-            "description": "Company or business name (if the caller mentions it).",
+            "description": "Company or organisation name (e.g. 'Soft Crunch').",
+        },
+        "email": {
+            "type": "string",
+            "description": "Email address of the customer (e.g. 'softcrunch.net@gmail.com').",
+        },
+        "city": {
+            "type": "string",
+            "description": "City of delivery or location (e.g. 'kathmandu').",
+        },
+        "country": {
+            "type": "string",
+            "description": "Country of delivery or location (e.g. 'Nepal').",
+        },
+        "subject": {
+            "type": "string",
+            "description": "Concise subject of lead (e.g. 'Bulk Order Enquiry - Mantra Biometric Devices').",
+        },
+        "description": {
+            "type": "string",
+            "description": "Detailed description of customer requirement (e.g. 'I need mantra device in a bulk in nepal. You can connect me in WhatsApp').",
         },
         "notes": {
             "type": "string",
-            "description": "Summary of the caller's requirements or reason for calling.",
+            "description": "Additional notes or reason for calling.",
         },
     },
     required=["name"],
@@ -78,22 +99,33 @@ async def handle_get_crm(params: FunctionCallParams) -> None:
 
 async def handle_create_lead(params: FunctionCallParams) -> None:
     state = params.app_resources
-    name: str = params.arguments.get("name", "Unknown")
+    name: str = params.arguments.get("name", "Unknown Caller")
     company: str = params.arguments.get("company", "")
-    notes: str = params.arguments.get("notes", "")
+    email: str = params.arguments.get("email", "")
+    city: str = params.arguments.get("city", "")
+    country: str = params.arguments.get("country", "")
+    subject: str = params.arguments.get("subject", "")
+    description: str = params.arguments.get("description", "") or params.arguments.get("notes", "")
 
     phone = state.phone_number if state else "unknown"
 
     name_parts = name.strip().split()
+    last_name = name_parts[-1] if name_parts else "Unknown"
+    first_name = " ".join(name_parts[:-1]) if len(name_parts) > 1 else ""
+
     lead_data: dict = {
-        "Last_Name": name_parts[-1] if name_parts else "Unknown",
-        "First_Name": " ".join(name_parts[:-1]) if len(name_parts) > 1 else "",
+        "Last_Name": last_name,
+        "First_Name": first_name,
+        "Company": company if company else "Individual / Pending",
         "Phone": phone,
-        "Lead_Source": "Voice Agent",
-        "Description": notes,
+        "Mobile": phone,
+        "Email": email,
+        "City": city,
+        "Country": country,
+        "Subject": subject or f"Voice Lead - {name}",
+        "Description": description or f"Lead created via Voice Agent for {name}",
+        "Lead_Source": "Voice Agent - Bulk Order" if "bulk" in (subject + description).lower() else "Voice Agent",
     }
-    if company:
-        lead_data["Company"] = company
 
     try:
         result = await crm_service.create_lead(lead_data)
@@ -101,7 +133,7 @@ async def handle_create_lead(params: FunctionCallParams) -> None:
         if state:
             state.crm_lead = lead_data  # optimistic state update
         await params.result_callback(
-            f"Lead created in Zoho CRM (ID: {lead_id}). "
+            f"Lead successfully created in Zoho CRM (ID: {lead_id}). "
             "Our sales team will follow up with you soon."
         )
     except Exception as e:

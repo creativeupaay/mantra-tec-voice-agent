@@ -16,6 +16,9 @@ class BaseCRMService(ABC):
     async def create_lead(self, data: dict[str, Any]) -> dict[str, Any]: ...
 
     @abstractmethod
+    async def update_lead(self, lead_id: str, data: dict[str, Any]) -> dict[str, Any]: ...
+
+    @abstractmethod
     async def get_lead(self, lead_id: str) -> dict[str, Any] | None: ...
 
     @abstractmethod
@@ -32,6 +35,9 @@ class StubCRMService(BaseCRMService):
 
     async def create_lead(self, data: dict[str, Any]) -> dict[str, Any]:
         return {"id": "stub_lead_id", **data}
+
+    async def update_lead(self, lead_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return {"id": lead_id, **data}
 
     async def get_lead(self, lead_id: str) -> dict[str, Any] | None:
         return None

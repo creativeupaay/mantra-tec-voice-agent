@@ -67,10 +67,34 @@ class PostCallExtraction(BaseModel):
         ..., description="True if a support ticket needs to be created but wasn't created during the call."
     )
     requires_lead: bool = Field(
-        ..., description="True if the caller is a prospective lead but wasn't created as a lead during the call."
+        ..., description="True if the caller is a prospective lead (especially bulk orders, wholesale, RFQs, or products not on Servico website) but wasn't created as a lead during the call."
     )
     caller_name: Optional[str] = Field(
-        None, description="The name of the caller if they introduced themselves or shared their name during the call (e.g. 'Manish')."
+        None, description="The name of the caller if mentioned (e.g. 'Suman Lamsal')."
+    )
+    company: Optional[str] = Field(
+        None, description="Company or organisation name mentioned by caller (e.g. 'Soft Crunch')."
+    )
+    email: Optional[str] = Field(
+        None, description="Email address mentioned by caller (e.g. 'softcrunch.net@gmail.com')."
+    )
+    city: Optional[str] = Field(
+        None, description="City mentioned for delivery or location (e.g. 'kathmandu')."
+    )
+    country: Optional[str] = Field(
+        None, description="Country mentioned for delivery or location (e.g. 'Nepal')."
+    )
+    subject: Optional[str] = Field(
+        None, description="Concise subject of enquiry (e.g. 'Bulk Order Enquiry - Mantra Biometric Devices')."
+    )
+    product_requested: Optional[str] = Field(
+        None, description="Product(s) requested by customer."
+    )
+    quantity: Optional[str] = Field(
+        None, description="Quantity requested by customer."
+    )
+    requirement_description: Optional[str] = Field(
+        None, description="Detailed requirement description (e.g. 'I need mantra device in a bulk in nepal. You can connect me in WhatsApp')."
     )
     is_red_flagged: bool = Field(
         default=False, description="True if the call contains sensitive content, disallowed topics, or the agent lacked knowledge."
@@ -317,11 +341,26 @@ async def run_post_call_pipeline(
         if (extraction.requires_lead or is_bulk) and not state.crm_lead and not state.crm_contact:
             try:
                 logger.info(f"[post-call] Auto-creating Zoho CRM lead for {state.phone_number}")
-                name = caller_name or (state.identity.name if state.identity and state.identity.name else "Unknown Caller")
+                name = caller_name or extraction.caller_name or (state.identity.name if state.identity and state.identity.name else "Unknown Caller")
+                name_parts = name.strip().split()
+                last_name = name_parts[-1] if name_parts else "Unknown"
+                first_name = " ".join(name_parts[:-1]) if len(name_parts) > 1 else ""
+
+                desc = extraction.requirement_description or extraction.summary
+                if extraction.product_requested and "product" not in desc.lower():
+                    desc = f"Product Requested: {extraction.product_requested}\nQuantity: {extraction.quantity or 'N/A'}\n\n{desc}"
+
                 lead_payload = {
-                    "Last_Name": name,
+                    "Last_Name": last_name,
+                    "First_Name": first_name,
+                    "Company": extraction.company or "Individual / Pending",
                     "Phone": state.phone_number,
-                    "Description": extraction.summary,
+                    "Mobile": state.phone_number,
+                    "Email": extraction.email or "",
+                    "City": extraction.city or "",
+                    "Country": extraction.country or "",
+                    "Subject": extraction.subject or (f"Bulk Order Enquiry - {extraction.product_requested or 'Mantra Devices'}" if is_bulk else f"Voice Lead - {name}"),
+                    "Description": desc,
                     "Lead_Source": "Voice Agent - Bulk Order" if is_bulk else "Voice Agent",
                 }
                 res = await crm_service.create_lead(lead_payload)
