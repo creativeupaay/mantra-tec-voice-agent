@@ -1,4 +1,4 @@
-"""Google Cloud Storage provider for call recordings with local fallback."""
+"""Google Cloud Storage provider for call recordings with local fallback and robust error reporting."""
 
 import asyncio
 import os
@@ -26,8 +26,16 @@ class GCSStorage:
             if credentials_path and os.path.exists(credentials_path):
                 creds = Credentials.from_service_account_file(credentials_path)
                 self._client = storage.Client(project=project_id, credentials=creds)
+                logger.info(f"[GCS] Initialized GCS client using service account key file: {credentials_path}")
+            elif os.getenv("GOOGLE_APPLICATION_CREDENTIALS") and os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")):
+                key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+                creds = Credentials.from_service_account_file(key_path)
+                self._client = storage.Client(project=project_id, credentials=creds)
+                logger.info(f"[GCS] Initialized GCS client using GOOGLE_APPLICATION_CREDENTIALS: {key_path}")
             else:
+                # Default ADC (Cloud Run attached Service Account / ADC)
                 self._client = storage.Client(project=project_id)
+                logger.info(f"[GCS] Initialized GCS client using Default Application Credentials (ADC) for project '{project_id}'")
             
             self._bucket = self._client.bucket(self.bucket_name)
         except Exception as e:
@@ -37,24 +45,25 @@ class GCSStorage:
         self,
         file_path: str,
         file_content: bytes,
-        content_type: str = "audio/mpeg"
+        content_type: str = "audio/wav"
     ) -> str:
-        """Upload a recording to GCS and always save a local copy for guaranteed zero-error playback."""
+        """Upload a recording to GCS bucket and save local fallback copies."""
         clean_path = file_path.lstrip("/")
         filename = os.path.basename(clean_path)
         
-        # Always save a local copy first to ensure 100% reliable local streaming
+        # 1. Always save local copies first to guarantee zero audio loss
         try:
-            local_dir = os.path.join(".", "recordings")
-            full_local_path = os.path.join(local_dir, filename)
-            os.makedirs(os.path.dirname(full_local_path), exist_ok=True)
-            with open(full_local_path, "wb") as f:
-                f.write(file_content)
-            logger.info(f"[LocalStorage] Saved local recording copy to {full_local_path}")
+            p1 = os.path.join(".", "recordings", filename)
+            p2 = os.path.join("..", "server", "recordings", filename)
+            for p in (p1, p2):
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "wb") as f:
+                    f.write(file_content)
+            logger.info(f"[LocalStorage] Saved local recording copies for {filename} ({len(file_content)} bytes)")
         except Exception as e:
             logger.warning(f"[LocalStorage] Could not write local copy of recording: {e}")
 
-        # Upload to GCS if client is available
+        # 2. Upload to GCS bucket
         if self._bucket:
             try:
                 loop = asyncio.get_event_loop()
@@ -64,9 +73,12 @@ class GCSStorage:
                     blob.upload_from_string(file_content, content_type=content_type)
                 
                 await loop.run_in_executor(None, _upload)
-                logger.info(f"[GCS] Uploaded recording to bucket '{self.bucket_name}' path '{clean_path}'")
+                logger.info(f"[GCS] SUCCESS: Uploaded {len(file_content)} bytes to bucket '{self.bucket_name}', path '{clean_path}'")
             except Exception as e:
-                logger.warning(f"[GCS] Failed to upload recording {clean_path} to GCS: {e}")
+                logger.error(
+                    f"[GCS] UPLOAD ERROR: Failed to upload recording '{clean_path}' to GCS bucket '{self.bucket_name}'. "
+                    f"Ensure Cloud Run Service Account has 'Storage Object Admin' role in GCP IAM. Error: {e}"
+                )
         
         return f"https://storage.googleapis.com/{self.bucket_name}/{clean_path}"
     
@@ -75,7 +87,6 @@ class GCSStorage:
         try:
             clean_path = file_path.lstrip("/")
             url = f"https://storage.googleapis.com/{self.bucket_name}/{clean_path}"
-            logger.info(f"[GCS] Generated direct URL for {file_path}")
             return url
         except Exception as e:
             logger.error(f"[GCS] Failed to generate URL for {file_path}: {e}")
@@ -101,15 +112,14 @@ class GCSStorage:
             except Exception as e:
                 logger.warning(f"[GCS] Could not delete recording {clean_path} from GCS: {e}")
 
-        # Also delete local file if exists
-        local_dir = os.path.join(".", "recordings")
-        full_local_path = os.path.join(local_dir, os.path.basename(clean_path))
-        if os.path.exists(full_local_path):
-            try:
-                os.remove(full_local_path)
-                logger.info(f"[LocalStorage] Deleted local recording file {full_local_path}")
-                deleted = True
-            except Exception as e:
-                logger.warning(f"[LocalStorage] Could not delete {full_local_path}: {e}")
+        # Also delete local files if existing
+        for p in (os.path.join(".", "recordings", os.path.basename(clean_path)), os.path.join("..", "server", "recordings", os.path.basename(clean_path))):
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                    logger.info(f"[LocalStorage] Deleted local recording file {p}")
+                    deleted = True
+                except Exception as e:
+                    logger.warning(f"[LocalStorage] Could not delete {p}: {e}")
 
         return deleted

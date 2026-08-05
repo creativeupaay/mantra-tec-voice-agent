@@ -1,36 +1,33 @@
 /**
- * Google Cloud Storage client using Application Default Credentials (ADC) or Service Account JSON key,
- * with local file fallback streaming.
+ * Google Cloud Storage client using Application Default Credentials (ADC), Service Account Key,
+ * or direct HTTPS public fetch, with local file fallback.
  */
 import { Storage, File } from '@google-cloud/storage'
 import fs from 'fs'
 import path from 'path'
 import { env } from '../config/env.config.js'
 
-let storageClient: Storage | null = null
-
 function getStorage(): Storage {
-  if (!storageClient) {
-    const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS
-    const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+  const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 
-    let options: any = {
-      ...(env.GCP_PROJECT_ID ? { projectId: env.GCP_PROJECT_ID } : {}),
-    }
+  let options: any = {}
 
-    if (keyFilename && fs.existsSync(keyFilename)) {
-      options.keyFilename = keyFilename
-    } else if (credentialsJson) {
-      try {
-        options.credentials = JSON.parse(credentialsJson)
-      } catch {
-        // Ignore json parse error
-      }
-    }
-
-    storageClient = new Storage(options)
+  if (env.GCP_PROJECT_ID) {
+    options.projectId = env.GCP_PROJECT_ID
   }
-  return storageClient
+
+  if (keyFilename && fs.existsSync(keyFilename)) {
+    options.keyFilename = keyFilename
+  } else if (credentialsJson) {
+    try {
+      options.credentials = JSON.parse(credentialsJson)
+    } catch {
+      // Ignore json parse error
+    }
+  }
+
+  return new Storage(options)
 }
 
 export function isGcsConfigured(): boolean {
@@ -110,25 +107,70 @@ export interface RecordingObject {
   size: number
 }
 
-/** Fetch recording metadata from the GCS bucket. */
+/** Fetch recording metadata from the GCS bucket. Multi-candidate path check. */
 export async function getRecordingObject(objectPath: string): Promise<RecordingObject | null> {
   if (!isGcsConfigured()) {
     throw new Error('GCS_BUCKET_NAME is not configured')
   }
 
   const bucket = getStorage().bucket(env.GCS_BUCKET_NAME)
-  const file = bucket.file(objectPath)
-  const [exists] = await file.exists()
 
-  if (!exists) return null
+  const filename = path.basename(objectPath)
+  const candidates = Array.from(new Set([
+    objectPath,
+    objectPath.replace(/^\/+/, ''),
+    filename,
+    `recordings/${filename}`,
+  ]))
 
-  const [metadata] = await file.getMetadata()
-  const contentType =
-    (typeof metadata.contentType === 'string' && metadata.contentType) ||
-    guessContentType(objectPath)
-  const size = metadata.size != null ? Number(metadata.size) : 0
+  for (const candidate of candidates) {
+    try {
+      const file = bucket.file(candidate)
+      const [exists] = await file.exists()
+      if (exists) {
+        const [metadata] = await file.getMetadata()
+        const contentType =
+          (typeof metadata.contentType === 'string' && metadata.contentType) ||
+          guessContentType(candidate)
+        const size = metadata.size != null ? Number(metadata.size) : 0
+        return { file, contentType, size }
+      }
+    } catch (err: any) {
+      console.warn(`[GCS] Error checking candidate ${candidate}:`, err.message || err)
+    }
+  }
 
-  return { file, contentType, size }
+  return null
+}
+
+/** Fallback direct HTTPS fetch for public GCS objects. */
+export async function fetchPublicGcsRecording(objectPath: string): Promise<{ data: Buffer; contentType: string } | null> {
+  if (!env.GCS_BUCKET_NAME || !objectPath) return null
+
+  const filename = path.basename(objectPath)
+  const candidatePaths = Array.from(new Set([
+    objectPath.replace(/^\/+/, ''),
+    filename,
+    `recordings/${filename}`,
+  ]))
+
+  for (const cleanPath of candidatePaths) {
+    const publicUrl = `https://storage.googleapis.com/${env.GCS_BUCKET_NAME}/${cleanPath}`
+    try {
+      const res = await fetch(publicUrl)
+      if (res.ok) {
+        const arrayBuffer = await res.arrayBuffer()
+        const data = Buffer.from(arrayBuffer)
+        const contentType = res.headers.get('content-type') || guessContentType(cleanPath)
+        console.log(`[GCS] Successfully fetched ${data.length} bytes via public HTTPS URL: ${publicUrl}`)
+        return { data, contentType }
+      }
+    } catch (err: any) {
+      console.warn(`[GCS] Public HTTPS fetch failed for ${publicUrl}:`, err.message || err)
+    }
+  }
+
+  return null
 }
 
 /** Check if recording exists on local filesystem as fallback. */

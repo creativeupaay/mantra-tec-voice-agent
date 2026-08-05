@@ -7,15 +7,19 @@ interface EnvConfig {
   MONGODB_URI: string
   JWT_SECRET: string
   CLIENT_URL: string
-  /** Private GCS bucket for call recordings (ADC auth). */
+  /** Private GCS bucket for call recordings. */
   GCS_BUCKET_NAME: string
   /** Optional GCP project ID for the Storage client. */
   GCP_PROJECT_ID: string
+  /** Path to GCP service account JSON key file. */
+  GOOGLE_APPLICATION_CREDENTIALS?: string
+  /** Inlined GCP service account JSON string. */
+  GOOGLE_SERVICE_ACCOUNT_JSON?: string
 }
 
 const getEnvVar = (key: string, fallback?: string): string => {
   const value = process.env[key]
-  if (!value && !fallback) {
+  if (!value && fallback === undefined) {
     throw new Error(`Missing required environment variable: ${key}`)
   }
   return value || fallback!
@@ -23,11 +27,13 @@ const getEnvVar = (key: string, fallback?: string): string => {
 
 export const env: EnvConfig = {
   PORT: getEnvVar('PORT', '5000'),
-  MONGODB_URI: getEnvVar('MONGODB_URI'), // No fallback - required
-  JWT_SECRET: getEnvVar('JWT_SECRET'), // No fallback - required
-  CLIENT_URL: getEnvVar('CLIENT_URL'), // No fallback - required
-  GCS_BUCKET_NAME: getEnvVar('GCS_BUCKET_NAME', ''),
-  GCP_PROJECT_ID: getEnvVar('GCP_PROJECT_ID', ''),
+  MONGODB_URI: getEnvVar('MONGODB_URI'),
+  JWT_SECRET: getEnvVar('JWT_SECRET'),
+  CLIENT_URL: getEnvVar('CLIENT_URL'),
+  GCS_BUCKET_NAME: getEnvVar('GCS_BUCKET_NAME', 'mantra-tec'),
+  GCP_PROJECT_ID: getEnvVar('GCP_PROJECT_ID', 'mantra-tec'),
+  GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  GOOGLE_SERVICE_ACCOUNT_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
 }
 
 export const validateEnv = (): void => {
