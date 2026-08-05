@@ -36,9 +36,10 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
 export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { email, password } = req.body
+    const rawEmail = String(req.body.email || '').trim().toLowerCase()
+    const password = String(req.body.password || '').trim()
 
-    const user = await User.findOne({ email })
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${rawEmail}$`, 'i') } })
     if (!user) {
       res.status(401).json({ success: false, message: 'Invalid credentials' })
       return

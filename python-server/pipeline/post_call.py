@@ -281,6 +281,21 @@ async def run_post_call_pipeline(
             f"[post-call] Finalized call {state.call_id} "
             f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome})"
         )
+
+        if call_status == CallStatus.ESCALATED:
+            try:
+                from services.email.notifier import send_escalation_email
+                await send_escalation_email(
+                    call_id=state.call_id,
+                    caller_name=caller_name,
+                    phone_number=state.phone_number,
+                    call_category=extraction.call_category.value if hasattr(extraction.call_category, 'value') else str(extraction.call_category),
+                    call_summary=extraction.summary,
+                    transcript=transcript_text or None,
+                )
+                logger.info(f"[post-call] Triggered escalation email notification for call {state.call_id}")
+            except Exception as e:
+                logger.error(f"[post-call] Failed to trigger escalation email notification: {e}")
     except Exception as e:
         logger.error(f"[post-call] Failed to finalize call {state.call_id}: {e}")
 

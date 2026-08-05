@@ -78,18 +78,20 @@ const HomePage: FC = () => {
         analyticsRes,
         allCallsRes,
       ] = await Promise.all([
-        isSuperAdmin ? analyticsApi.getDashboard() : Promise.resolve({ data: { data: null, success: false } }),
-        analyticsApi.getCallAnalytics(),
-        callApi.getAll(),
+        isSuperAdmin
+          ? analyticsApi.getDashboard().catch(() => ({ data: { data: null, success: false } }))
+          : Promise.resolve({ data: { data: null, success: false } }),
+        analyticsApi.getCallAnalytics().catch(() => ({ data: { data: null, success: false } })),
+        callApi.getAll().catch(() => ({ data: { data: [], success: true } })),
       ])
 
       // 1. Process all calls list
-      if (allCallsRes.data?.success && Array.isArray(allCallsRes.data.data)) {
+      if (allCallsRes?.data?.success && Array.isArray(allCallsRes.data.data)) {
         setCallsList(allCallsRes.data.data)
       }
 
       // 2. Process Platform Analytics
-      if (isSuperAdmin && platformRes.data.success && platformRes.data.data) {
+      if (isSuperAdmin && platformRes?.data?.success && platformRes.data.data) {
         const pa = platformRes.data.data
         setPlatformStats({
           totalUsers: pa.totalUsers || 0,
@@ -100,7 +102,7 @@ const HomePage: FC = () => {
       }
 
       // 3. Process Call Analytics for charts
-      if (analyticsRes.data.success && analyticsRes.data.data) {
+      if (analyticsRes?.data?.success && analyticsRes.data.data) {
         const ca = analyticsRes.data.data
         setCallVolume(ca.callVolume || [])
         setIntentBreakdown(ca.intentBreakdown || [])

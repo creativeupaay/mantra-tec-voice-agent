@@ -1,13 +1,14 @@
 import { FC } from 'react'
 import { Outlet, NavLink, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { Home, Phone, BarChart2, Settings, Activity, LogOut, User as UserIcon } from 'lucide-react'
+import { Home, Phone, BarChart2, Settings, Activity, LogOut } from 'lucide-react'
 import { NotificationDropdown } from '../components/NotificationDropdown'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home, exact: true },
   { to: '/calls', label: 'Calls', icon: Phone },
   { to: '/analytics', label: 'Analytics', icon: BarChart2 },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 const MainLayout: FC = () => {
@@ -82,14 +83,6 @@ const MainLayout: FC = () => {
                 )
               })}
 
-              {/* Settings — disabled (coming soon) */}
-              <li>
-                <div className="flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md cursor-not-allowed opacity-40 select-none text-text-secondary">
-                  <Settings size={20} strokeWidth={1.75} />
-                  <span>Settings</span>
-                </div>
-              </li>
-
               {/* Super Admin only — Usage */}
               {user?.role === 'super_admin' && (
                 <li className="mt-6">
@@ -111,13 +104,9 @@ const MainLayout: FC = () => {
           </nav>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-hidden h-full">
-          <div className="h-full p-6 lg:p-8 overflow-y-auto scrollbar-thin">
-            <div className="max-w-7xl mx-auto h-full">
-              <Outlet />
-            </div>
-          </div>
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto p-8">
+          <Outlet />
         </main>
       </div>
     </div>

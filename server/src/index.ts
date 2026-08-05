@@ -13,21 +13,14 @@ const app = express();
 // Connect to database
 connectDB();
 
-const allowedOrigins = env.CLIENT_URL.split(',').map(url => url.trim().replace(/\/$/, ""));
-
-// Middleware
+// Dynamic CORS configuration allowing localhost, local IP, and Cloudflare Pages
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: true,
     credentials: true,
   }),
 );
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 

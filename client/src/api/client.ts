@@ -38,250 +38,244 @@ export interface ICreditUsage {
     calculation?: string;
     api?: string;
     rates?: Record<string, number>;
-    [key: string]: any;
   };
+  timestamp: string;
   createdAt: string;
 }
 
-export interface ICallAnalytics {
-  kpis: {
-    totalCalls: number;
-    resolvedCount: number;
-    escalatedCount: number;
-    missedCount: number;
-    liveCount: number;
-    redFlagCount: number;
-    avgDurationSeconds: number;
+export interface ICreditBalanceResponse {
+  success: boolean;
+  data: {
+    credit_balance: number;
   };
-  callVolume: { date: string; count: number }[];
-  statusBreakdown: { name: string; value: number }[];
-  intentBreakdown: { intent: string; count: number }[];
-  recentRedFlags: {
-    _id: string;
-    call_id: string;
-    caller_name?: string;
-    phone_number: string;
-    call_summary?: string;
-    detected_intent?: string;
-    status: string;
-    timestamp: string;
-  }[];
-  escalatedCalls?: {
-    _id: string;
-    call_id: string;
-    caller_name?: string;
-    phone_number: string;
-    call_summary?: string;
-    detected_intent?: string;
-    status: string;
-    timestamp: string;
-    is_red_flag?: boolean;
-    is_red_flagged?: boolean;
-    duration?: number;
-    transcript?: string;
-    red_flag_reason?: string;
-    guardrail_triggered?: string;
-    call_category?: string;
-  }[];
-  recentResolved?: {
-    _id: string;
-    call_id: string;
-    caller_name?: string;
-    phone_number: string;
-    call_summary?: string;
-    detected_intent?: string;
-    status: string;
-    timestamp: string;
-    is_red_flag?: boolean;
-    is_red_flagged?: boolean;
-    duration?: number;
-    transcript?: string;
-    red_flag_reason?: string;
-    guardrail_triggered?: string;
-    call_category?: string;
-  }[];
 }
 
-
-export interface INotification {
-  _id: string;
-  userId?: string;
-  title: string;
-  message: string;
-  category: 'call' | 'credit' | 'system' | 'agent' | 'ticket' | string;
-  severity: 'info' | 'success' | 'warning' | 'error';
-  read: boolean;
-  link?: string;
-  metadata?: Record<string, any>;
-  createdAt: string;
-  updatedAt: string;
+export interface ICreditUsagesResponse {
+  success: boolean;
+  data: {
+    usages: ICreditUsage[];
+    pagination: {
+      total: number;
+      page: number;
+      pages: number;
+      limit: number;
+    };
+    summary: {
+      totalAmount: number;
+      byService: Record<string, number>;
+    };
+  };
 }
 
+// Production & Local API Base URL Configuration
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8001/api/v1";
+  import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
-// Create axios instance
-const apiClient = axios.create({
+export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
+  withCredentials: true,
 });
 
-// Add token to requests
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Request Interceptor: Attach JWT Token from localStorage
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
 
-// Handle token refresh on 401
+// Response Interceptor: Handle Global 401 Unauthorized
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken,
-          });
-          const { token } = response.data as {
-            success: boolean;
-            token: string;
-          };
-          localStorage.setItem("token", token);
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          return apiClient(originalRequest);
-        }
-      } catch (refreshError) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("refreshToken");
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear authentication state if token is expired/invalid
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
+      // Only redirect if not already on the login page
+      if (window.location.pathname !== "/login") {
         window.location.href = "/login";
-        return Promise.reject(refreshError);
       }
     }
-
     return Promise.reject(error);
   },
 );
 
-// Auth endpoints
+// Helper function to build recording stream URL with auth token query param
+export function getCallRecordingStreamUrl(callDbId: string): string {
+  const token = localStorage.getItem("auth_token");
+  const baseUrl = `${API_BASE_URL}/calls/${callDbId}/recording`;
+  return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
+}
+
+// Auth API Functions
 export const authApi = {
-  register: (data: IRegisterData) =>
-    apiClient.post<IAuthResponse>("/auth/register", data),
+  login: async (credentials: ILoginCredentials): Promise<IAuthResponse> => {
+    const response = await apiClient.post<IAuthResponse>(
+      "/auth/login",
+      credentials,
+    );
+    if (response.data.success && response.data.token) {
+      localStorage.setItem("auth_token", response.data.token);
+      localStorage.setItem("auth_user", JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
 
-  login: (data: ILoginCredentials) =>
-    apiClient.post<IAuthResponse>("/auth/login", data),
+  register: async (data: IRegisterData): Promise<IAuthResponse> => {
+    const response = await apiClient.post<IAuthResponse>(
+      "/auth/register",
+      data,
+    );
+    if (response.data.success && response.data.token) {
+      localStorage.setItem("auth_token", response.data.token);
+      localStorage.setItem("auth_user", JSON.stringify(response.data.user));
+    }
+    return response.data;
+  },
 
-  getProfile: () =>
-    apiClient.get<{ success: boolean; user: IUser }>("/auth/profile"),
-
-  updateProfile: (data: { name?: string; email?: string }) =>
-    apiClient.put<{ success: boolean; message: string; user: IUser }>("/auth/profile", data),
-
-  changePassword: (data: { currentPassword: string; newPassword: string }) =>
-    apiClient.put<{ success: boolean; message: string }>("/auth/change-password", data),
-};
-
-// Notification endpoints
-export const notificationApi = {
-  getNotifications: () =>
-    apiClient.get<{
-      success: boolean;
-      data: { notifications: INotification[]; unreadCount: number };
-    }>("/notifications"),
-
-  markAsRead: (id: string) =>
-    apiClient.patch<{ success: boolean; data: INotification }>(`/notifications/${id}/read`),
-
-  markAllAsRead: () =>
-    apiClient.patch<{ success: boolean; message: string }>("/notifications/read-all"),
-
-  deleteNotification: (id: string) =>
-    apiClient.delete<{ success: boolean; message: string }>(`/notifications/${id}`),
-
-  deleteAllNotifications: () =>
-    apiClient.delete<{ success: boolean; message: string }>("/notifications/clear-all"),
-};
-
-// Analytics endpoints
-export const analyticsApi = {
-  getDashboard: () =>
-    apiClient.get<{
-      success: boolean;
-      data: {
-        totalUsers: number;
-        totalAgents: number;
-        totalSessions: number;
-        totalCreditsUsed: number;
-        monthlyStats: {
-          _id: { year: number; month: number; day: number };
-          totalUsed: number;
-        }[];
-      };
-    }>("/analytics/analytics"),
-
-  getCreditBalance: () =>
-    apiClient.get<{ success: boolean; data: { creditBalance: number } }>(
-      "/analytics/credit-balance",
-    ),
-
-  getAllCreditUsage: () =>
-    apiClient.get<{ success: boolean; data: ICreditUsage[] }>(
-      "/analytics/credit-usage",
-    ),
-
-  getCallAnalytics: () =>
-    apiClient.get<{ success: boolean; data: ICallAnalytics }>(
-      "/analytics/call-analytics",
-    ),
-};
-
-/** Absolute URL for streaming a call recording (token via query for <audio> tags). */
-export const getCallRecordingStreamUrl = (callDbId: string): string => {
-  const token = localStorage.getItem("token");
-  const base = `${API_BASE_URL}/calls/${callDbId}/recording`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
-};
-
-// Call endpoints
-export const callApi = {
-  getAll: () => apiClient.get<ICallListResponse>("/calls"),
-
-  getById: (id: string) => apiClient.get<ICallResponse>("/calls/" + id),
-
-  updateStatus: async (id: string, status: string) => {
+  logout: async (): Promise<void> => {
     try {
-      return await apiClient.post<{ success: boolean; message: string; data: ICallResponse["data"] }>(
-        `/calls/${encodeURIComponent(id)}/status`,
-        { status },
-      );
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        return await apiClient.patch<{ success: boolean; message: string; data: ICallResponse["data"] }>(
-          `/calls/${encodeURIComponent(id)}`,
-          { status },
-        );
-      }
-      throw err;
+      await apiClient.post("/auth/logout");
+    } finally {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
     }
   },
 
-  /** Stream recording bytes from the private GCS proxy (ADC on server). */
-  getRecording: (id: string) =>
+  getCurrentUser: async (): Promise<IUser | null> => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return null;
+
+    try {
+      const response = await apiClient.get<{
+        success: boolean;
+        user: IUser;
+      }>("/auth/me");
+      if (response.data.success) {
+        localStorage.setItem(
+          "auth_user",
+          JSON.stringify(response.data.user),
+        );
+        return response.data.user;
+      }
+      return null;
+    } catch {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
+      return null;
+    }
+  },
+
+  getStoredUser: (): IUser | null => {
+    const userJson = localStorage.getItem("auth_user");
+    if (!userJson) return null;
+    try {
+      return JSON.parse(userJson);
+    } catch {
+      return null;
+    }
+  },
+
+  getStoredToken: (): string | null => {
+    return localStorage.getItem("auth_token");
+  },
+
+  isAuthenticated: (): boolean => {
+    return Boolean(localStorage.getItem("auth_token"));
+  },
+};
+
+// Credit API Functions (Admin / Usage)
+export const creditApi = {
+  getBalance: async (userId?: string): Promise<ICreditBalanceResponse> => {
+    const url = userId ? `/analytics/credits/balance/${userId}` : "/analytics/credits/balance";
+    const response = await apiClient.get<ICreditBalanceResponse>(url);
+    return response.data;
+  },
+
+  getUsageHistory: async (params?: {
+    page?: number;
+    limit?: number;
+    userId?: string;
+    service?: string;
+  }): Promise<ICreditUsagesResponse> => {
+    const response = await apiClient.get<ICreditUsagesResponse>(
+      "/analytics/credits/history",
+      { params },
+    );
+    return response.data;
+  },
+
+  addCredits: async (data: {
+    userId: string;
+    amount: number;
+    description: string;
+  }): Promise<{ success: boolean; data: { new_balance: number } }> => {
+    const response = await apiClient.post<{
+      success: boolean;
+      data: { new_balance: number };
+    }>("/analytics/credits/add", data);
+    return response.data;
+  },
+};
+
+// Analytics API Functions
+export const analyticsApi = {
+  getDashboard: () => apiClient.get<{ success: boolean; data: any }>('/analytics/analytics'),
+  getCallAnalytics: () => apiClient.get<{ success: boolean; data: any }>('/analytics/call-analytics'),
+  getCreditBalance: (userId?: string) => {
+    const url = userId ? `/analytics/credit-balance/${userId}` : "/analytics/credit-balance";
+    return apiClient.get<ICreditBalanceResponse>(url);
+  },
+  getAllCreditUsage: (params?: any) =>
+    apiClient.get<ICreditUsagesResponse>('/analytics/credit-usage', { params }),
+  addCredits: (data: { userId: string; amount: number; description: string }) =>
+    apiClient.post<{ success: boolean; data: { new_balance: number } }>('/analytics/credits/add', data),
+};
+
+// Notification API Functions
+export const notificationApi = {
+  getAll: () => apiClient.get<{ success: boolean; data: any[] }>('/notifications'),
+  markAsRead: (id: string) => apiClient.patch<{ success: boolean }>(`/notifications/${id}/read`),
+  markAllAsRead: () => apiClient.post<{ success: boolean }>('/notifications/read-all'),
+};
+
+// Calls API Functions
+export const callApi = {
+  getAll: async (): Promise<ICallListResponse> => {
+    const response = await apiClient.get<ICallListResponse>("/calls");
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<ICallResponse> => {
+    const response = await apiClient.get<ICallResponse>(`/calls/${id}`);
+    return response.data;
+  },
+
+  updateStatus: async (
+    id: string,
+    status: "live" | "resolved" | "escalated" | "missed",
+  ): Promise<ICallResponse> => {
+    const response = await apiClient.patch<ICallResponse>(
+      `/calls/${id}/status`,
+      { status },
+    );
+    return response.data;
+  },
+
+  getRecordingBlob: (id: string) =>
     apiClient.get<Blob>(`/calls/${id}/recording`, { responseType: "blob" }),
 
   getRecordingStreamUrl: getCallRecordingStreamUrl,
 };
-
 
 // Agent endpoints
 export const agentApi = {
@@ -313,6 +307,14 @@ export const sessionApi = {
     ),
   create: (data: { agentId: string }) => apiClient.post("/sessions", data),
   endSession: (id: string) => apiClient.patch(`/sessions/${id}/end`),
+};
+
+// Settings endpoints
+export const settingsApi = {
+  get: () => apiClient.get<{ success: boolean; data: any }>('/settings'),
+  update: (data: any) => apiClient.put<{ success: boolean; message: string; data: any }>('/settings', data),
+  sendTestEmail: (data: { emails: string[] }) =>
+    apiClient.post<{ success: boolean; message: string }>('/settings/test-email', data),
 };
 
 export default apiClient;

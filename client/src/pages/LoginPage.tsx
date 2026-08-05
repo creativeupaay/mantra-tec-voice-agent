@@ -16,11 +16,12 @@ const LoginPage: FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     try {
-      await login(email, password)
+      await login(email.trim(), password.trim())
       navigate('/')  // redirect to dashboard after login
-    } catch (err) {
-      setError('Invalid credentials')
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Invalid credentials')
     }
   }
 

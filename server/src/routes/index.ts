@@ -5,6 +5,7 @@ import sessionRoutes from './v1/session.routes.js'
 import analyticsRoutes from './v1/analytics.routes.js'
 import callRoutes from './v1/call.routes.js'
 import notificationRoutes from './v1/notification.routes.js'
+import settingsRoutes from './v1/settings.routes.js'
 
 const router = Router()
 
@@ -14,5 +15,6 @@ router.use('/sessions', sessionRoutes)
 router.use('/analytics', analyticsRoutes)
 router.use('/calls', callRoutes)
 router.use('/notifications', notificationRoutes)
+router.use('/settings', settingsRoutes)
 
 export { router as apiRouter }

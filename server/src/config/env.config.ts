@@ -15,6 +15,8 @@ interface EnvConfig {
   GOOGLE_APPLICATION_CREDENTIALS?: string
   /** Inlined GCP service account JSON string. */
   GOOGLE_SERVICE_ACCOUNT_JSON?: string
+  RESEND_API_KEY?: string
+  FROM_EMAIL?: string
 }
 
 const getEnvVar = (key: string, fallback?: string): string => {
@@ -34,6 +36,8 @@ export const env: EnvConfig = {
   GCP_PROJECT_ID: getEnvVar('GCP_PROJECT_ID', 'mantra-tec'),
   GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
   GOOGLE_SERVICE_ACCOUNT_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  FROM_EMAIL: process.env.FROM_EMAIL || 'noreply@creativeupaay.in',
 }
 
 export const validateEnv = (): void => {
