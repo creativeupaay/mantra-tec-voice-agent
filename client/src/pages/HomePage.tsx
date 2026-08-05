@@ -82,12 +82,12 @@ const HomePage: FC = () => {
           ? analyticsApi.getDashboard().catch(() => ({ data: { data: null, success: false } }))
           : Promise.resolve({ data: { data: null, success: false } }),
         analyticsApi.getCallAnalytics().catch(() => ({ data: { data: null, success: false } })),
-        callApi.getAll().catch(() => ({ data: { data: [], success: true } })),
+        callApi.getAll().catch(() => ({ success: true, data: [] as any[] })),
       ])
 
       // 1. Process all calls list
-      if (allCallsRes?.data?.success && Array.isArray(allCallsRes.data.data)) {
-        setCallsList(allCallsRes.data.data)
+      if (allCallsRes?.success && Array.isArray(allCallsRes.data)) {
+        setCallsList(allCallsRes.data)
       }
 
       // 2. Process Platform Analytics

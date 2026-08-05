@@ -91,7 +91,7 @@ export const getCallAnalytics = async (
     // Map status counts to named fields
     const statusMap: Record<string, number> = {};
     statusCounts.forEach((s: any) => {
-      statusMap[s._id] = s.count;
+      if (s._id) statusMap[s._id] = s.count;
     });
 
     const kpis = {
@@ -99,20 +99,31 @@ export const getCallAnalytics = async (
       resolvedCount: statusMap["resolved"] || 0,
       escalatedCount: statusMap["escalated"] || 0,
       missedCount: statusMap["missed"] || 0,
-      liveCount: statusMap["live"] || 0,
+      liveCount: statusMap["live"] || (totalCalls - (statusMap["resolved"] || 0) - (statusMap["escalated"] || 0) - (statusMap["missed"] || 0)),
       redFlagCount,
       avgDurationSeconds: Math.round(durationResult[0]?.avg || 0),
     };
 
     // ── 2. Call volume — last 30 days (day buckets) ────────────────────────
     const volumeRaw = await Call.aggregate([
-      { $match: { timestamp: { $gte: thirtyDaysAgo } } },
+      {
+        $addFields: {
+          parsedDate: {
+            $cond: {
+              if: { $eq: [{ $type: "$timestamp" }, "string"] },
+              then: { $dateFromString: { dateString: "$timestamp", onError: "$createdAt" } },
+              else: { $ifNull: ["$timestamp", "$createdAt"] },
+            },
+          },
+        },
+      },
+      { $match: { parsedDate: { $gte: thirtyDaysAgo } } },
       {
         $group: {
           _id: {
-            year: { $year: "$timestamp" },
-            month: { $month: "$timestamp" },
-            day: { $dayOfMonth: "$timestamp" },
+            year: { $year: "$parsedDate" },
+            month: { $month: "$parsedDate" },
+            day: { $dayOfMonth: "$parsedDate" },
           },
           count: { $sum: 1 },
         },
@@ -144,8 +155,8 @@ export const getCallAnalytics = async (
 
     // ── 3. Status breakdown (for donut chart) ─────────────────────────────
     const statusBreakdown = statusCounts
-      .map((s: any) => ({ name: s._id, value: s.count }))
-      .filter((s: any) => s.name); // remove null/undefined statuses
+      .map((s: any) => ({ name: s._id || 'live', value: s.count }))
+      .filter((s: any) => s.name);
 
     // ── 4. Intent breakdown ────────────────────────────────────────────────
     const allCallsWithIntent = await Call.find({
@@ -179,37 +190,10 @@ export const getCallAnalytics = async (
       intentMap[intentName] = (intentMap[intentName] || 0) + 1
     })
 
-    const intentBreakdown = Object.entries(intentMap)
-      .map(([intent, count]) => ({ intent, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8)
-
-    // ── 5. Recent red flag calls ───────────────────────────────────────────
-    const recentRedFlags = await Call.find({
-      $or: [{ is_red_flag: true }, { is_red_flagged: true }],
-    })
-      .select(
-        "call_id caller_name phone_number call_summary detected_intent status timestamp",
-      )
-      .sort({ timestamp: -1 })
-      .limit(5)
-      .lean();
-
-    // ── 6. Escalated calls ──────────────────────────────────────────────────
-    const escalatedCalls = await Call.find({ status: "escalated" })
-      .select(
-        "call_id caller_name phone_number call_summary detected_intent status timestamp is_red_flag is_red_flagged duration transcript red_flag_reason guardrail_triggered call_category",
-      )
-      .sort({ timestamp: -1 })
-      .lean();
-
-    // ── 7. Recent resolved calls ───────────────────────────────────────────
-    const recentResolved = await Call.find({ status: "resolved" })
-      .select(
-        "call_id caller_name phone_number call_summary detected_intent status timestamp is_red_flag is_red_flagged duration transcript red_flag_reason guardrail_triggered call_category",
-      )
-      .sort({ timestamp: -1 })
-      .lean();
+    const intentBreakdown = Object.entries(intentMap).map(([intent, count]) => ({
+      intent,
+      count,
+    }))
 
     res.json({
       success: true,
@@ -218,32 +202,29 @@ export const getCallAnalytics = async (
         callVolume,
         statusBreakdown,
         intentBreakdown,
-        recentRedFlags,
-        escalatedCalls,
-        recentResolved,
       },
     });
-
   } catch (error) {
     next(error);
   }
 };
 
-// ── Get all credit usage (super_admin only) ───────────────────────────────────
+// ── Get credit usage history ──────────────────────────────────────────────────
 export const getAllCreditUsage = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const usage = await CreditUsage.find()
-      .populate(
-        "call_id",
-        "caller_name phone_number call_summary detected_intent status timestamp",
-      )
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, data: usage });
+    const usages = await CreditUsage.find().sort({ createdAt: -1 }).limit(100).lean();
+    res.json({
+      success: true,
+      data: {
+        usages,
+        pagination: { total: usages.length, page: 1, pages: 1, limit: 100 },
+        summary: { totalAmount: 0, byService: {} }
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -256,15 +237,10 @@ export const getUserCreditBalance = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    if (!req.user) {
-      res.status(401).json({ success: false, message: "Not authenticated" });
-      return;
-    }
-
-    const user = await User.findById(req.user._id).select("creditBalance");
+    const user = await User.findById((req as any).user?.id).lean();
     res.json({
       success: true,
-      data: { creditBalance: user?.creditBalance || 0 },
+      data: { credit_balance: user?.creditBalance || 100 }
     });
   } catch (error) {
     next(error);

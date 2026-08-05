@@ -30,11 +30,14 @@ async def send_escalation_email(
         if not recipients:
             recipients = ["admin@mantratec.com"]
 
-        api_key = os.getenv("RESEND_API_KEY", "")
-        from_email = os.getenv("FROM_EMAIL", "noreply@creativeupaay.in")
+        db_api_key = settings_doc.get("resend_api_key") if settings_doc else None
+        db_from_email = settings_doc.get("resend_from_email") if settings_doc else None
+
+        api_key = (os.getenv("RESEND_API_KEY") or db_api_key or "").strip()
+        from_email = (os.getenv("FROM_EMAIL") or db_from_email or "noreply@creativeupaay.in").strip()
 
         if not api_key:
-            logger.warning("[EmailNotifier] RESEND_API_KEY is not set in python-server/.env")
+            logger.warning("[EmailNotifier] RESEND_API_KEY is not set in environment or database.")
             return
 
         caller_id = caller_name or phone_number or "Unknown Caller"

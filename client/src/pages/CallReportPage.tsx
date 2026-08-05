@@ -19,7 +19,7 @@ const CallReportPage: FC = () => {
       try {
         if (!id) return
         const response = await callApi.getById(id)
-        setData(response.data.data as ICall)
+        setData(response.data as ICall)
       } catch (err) {
         console.error('Failed to fetch call report', err)
       } finally {

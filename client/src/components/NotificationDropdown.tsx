@@ -121,8 +121,8 @@ export const NotificationDropdown: FC<NotificationDropdownProps> = ({
         setNotifications(notifRes.data.data.notifications)
         setUnreadCount(notifRes.data.data.unreadCount)
       }
-      if (callsRes.data?.success && Array.isArray(callsRes.data.data)) {
-        setInternalEscalated(callsRes.data.data.filter((c: ICall) => c.status === 'escalated'))
+      if (callsRes.success && Array.isArray(callsRes.data)) {
+        setInternalEscalated(callsRes.data.filter((c: ICall) => c.status === 'escalated'))
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err)

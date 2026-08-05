@@ -123,7 +123,7 @@ const CallsPage: FC = () => {
     try {
       setIsLoading(true)
       const response = await callApi.getAll()
-      const data = (response.data.data as ICall[]) ?? []
+      const data = (response.data as ICall[]) ?? []
       data.sort((a, b) => getCallTime(b) - getCallTime(a))
       setCalls(data)
 

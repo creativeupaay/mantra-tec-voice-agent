@@ -29,11 +29,11 @@ export async function sendEscalationEmailNotification(callData: CallEscalationDa
       return { success: false, message: 'No valid recipient emails configured' }
     }
 
-    const apiKey = process.env.RESEND_API_KEY || settings.resend_api_key || ''
-    const fromEmail = process.env.FROM_EMAIL || settings.resend_from_email || 'noreply@creativeupaay.in'
+    const apiKey = (process.env.RESEND_API_KEY || settings.resend_api_key || '').trim()
+    const fromEmail = (process.env.FROM_EMAIL || settings.resend_from_email || 'noreply@creativeupaay.in').trim()
 
     if (!apiKey) {
-      console.warn('[EmailService] RESEND_API_KEY is not configured in server/.env')
+      console.warn('[EmailService] RESEND_API_KEY is not configured in process.env or settings.')
       return { success: false, message: 'RESEND_API_KEY is not configured' }
     }
 
