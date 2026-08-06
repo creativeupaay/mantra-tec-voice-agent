@@ -341,7 +341,7 @@ const CallsPage: FC = () => {
         resolvedCount={resolvedCount}
       />
 
-      <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col shadow-2xs">
+      <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col min-h-[600px] lg:min-h-[700px] shadow-2xs">
         <CallTable
           isLoading={isLoading}
           filtered={calls}
@@ -355,10 +355,10 @@ const CallsPage: FC = () => {
 
         {/* Material UI Style Pagination Footer */}
         {!isLoading && totalCalls > 0 && (
-          <div className="px-6 py-3 border-t border-border bg-surface-card flex items-center justify-between text-xs text-text-secondary select-none">
+          <div className="px-4 sm:px-6 py-3 border-t border-border bg-surface-card flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-text-secondary select-none">
             {/* Left: Rows per page selector */}
-            <div className="flex items-center space-x-2">
-              <span className="text-[12px] text-text-muted font-medium">Rows per page:</span>
+            <div className="flex items-center space-x-2 shrink-0">
+              <span className="text-[12px] text-text-muted font-medium whitespace-nowrap">Rows per page:</span>
               <div className="relative">
                 <select
                   value={rowsPerPage}
@@ -378,12 +378,12 @@ const CallsPage: FC = () => {
             </div>
 
             {/* Right: Page Range Indicator & Navigation Buttons */}
-            <div className="flex items-center space-x-4">
-              <span className="text-[12px] font-mono text-text-muted tabular-nums">
+            <div className="flex items-center space-x-3 sm:space-x-4 shrink-0">
+              <span className="text-[12px] font-mono text-text-muted tabular-nums whitespace-nowrap">
                 {totalCalls === 0 ? '0–0 of 0' : `${startIndex + 1}–${endIndex} of ${totalCalls}`}
               </span>
 
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-1 shrink-0">
                 <button
                   onClick={() => setPage(prev => Math.max(1, prev - 1))}
                   disabled={page <= 1}
@@ -393,7 +393,7 @@ const CallsPage: FC = () => {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 
-                <span className="text-[12px] font-semibold text-text-primary px-2 font-mono tabular-nums">
+                <span className="text-[12px] font-semibold text-text-primary px-2 font-mono tabular-nums whitespace-nowrap shrink-0">
                   {page} / {totalPages}
                 </span>
 
