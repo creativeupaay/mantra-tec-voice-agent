@@ -8,10 +8,10 @@ import { Phone, CheckCircle, AlertTriangle, PhoneOff, Flag, Clock } from 'lucide
 
 // ── Status color palette — pulled from design system tokens ───────────────────
 const STATUS_COLORS: Record<string, string> = {
-  resolved:  '#5B8C5A',   // --color-status-resolved
+  resolved: '#5B8C5A',   // --color-status-resolved
   escalated: '#C1554A',   // --color-status-escalated
-  missed:    '#C98A3B',   // --color-status-missed
-  live:      '#2451DA',   // --color-status-live / accent
+  missed: '#C98A3B',   // --color-status-missed
+  live: '#2451DA',   // --color-status-live / accent
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -103,7 +103,13 @@ const AnalyticsPage: FC = () => {
     )
   }
 
-  const { kpis, callVolume, statusBreakdown, intentBreakdown, recentRedFlags } = data
+  const {
+    kpis = { totalCalls: 0, resolvedCount: 0, escalatedCount: 0, missedCount: 0, liveCount: 0, redFlagCount: 0, avgDurationSeconds: 0 },
+    callVolume = [],
+    statusBreakdown = [],
+    intentBreakdown = [],
+    recentRedFlags = []
+  } = data || {}
 
   return (
     <div className="space-y-6 pb-10">
@@ -293,9 +299,9 @@ const AnalyticsPage: FC = () => {
         <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
           <SectionTitle
             title="Red Flag Alerts"
-            sub={recentRedFlags.length > 0 ? `${kpis.redFlagCount} total flagged calls` : 'No flagged calls'}
+            sub={(recentRedFlags || []).length > 0 ? `${kpis.redFlagCount} total flagged calls` : 'No flagged calls'}
           />
-          {recentRedFlags.length === 0 ? (
+          {(recentRedFlags || []).length === 0 ? (
             <div className="p-12 flex flex-col items-center justify-center text-center">
               <div className="w-10 h-10 rounded-full bg-[#5B8C5A]/10 flex items-center justify-center mb-3">
                 <CheckCircle size={18} style={{ color: '#5B8C5A' }} />
@@ -305,7 +311,7 @@ const AnalyticsPage: FC = () => {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {recentRedFlags.map((call) => (
+              {(recentRedFlags || []).map((call) => (
                 <div key={call._id} className="px-6 py-4 hover:bg-surface-page transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">

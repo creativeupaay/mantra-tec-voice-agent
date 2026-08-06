@@ -241,17 +241,41 @@ export const analyticsApi = {
     apiClient.post<{ success: boolean; data: { new_balance: number } }>('/analytics/credits/add', data),
 };
 
+// Notification types
+export interface INotification {
+  _id: string
+  userId?: string
+  title: string
+  message: string
+  category: string
+  severity: 'info' | 'success' | 'warning' | 'error'
+  read: boolean
+  link?: string
+  metadata?: Record<string, any>
+  createdAt: string
+  updatedAt: string
+}
+
 // Notification API Functions
 export const notificationApi = {
-  getAll: () => apiClient.get<{ success: boolean; data: any[] }>('/notifications'),
-  markAsRead: (id: string) => apiClient.patch<{ success: boolean }>(`/notifications/${id}/read`),
-  markAllAsRead: () => apiClient.post<{ success: boolean }>('/notifications/read-all'),
+  getNotifications: () =>
+    apiClient.get<{ success: boolean; data: { notifications: INotification[]; unreadCount: number } }>('/notifications'),
+  getAll: () =>
+    apiClient.get<{ success: boolean; data: { notifications: INotification[]; unreadCount: number } }>('/notifications'),
+  markAsRead: (id: string) =>
+    apiClient.patch<{ success: boolean }>(`/notifications/${id}/read`),
+  markAllAsRead: () =>
+    apiClient.post<{ success: boolean }>('/notifications/read-all'),
+  deleteNotification: (id: string) =>
+    apiClient.delete<{ success: boolean }>(`/notifications/${id}`),
+  deleteAllNotifications: () =>
+    apiClient.delete<{ success: boolean }>('/notifications/clear-all'),
 };
 
 // Calls API Functions
 export const callApi = {
-  getAll: async (): Promise<ICallListResponse> => {
-    const response = await apiClient.get<ICallListResponse>("/calls");
+  getAll: async (params?: Record<string, any>): Promise<ICallListResponse> => {
+    const response = await apiClient.get<ICallListResponse>("/calls", { params });
     return response.data;
   },
 

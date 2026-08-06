@@ -106,10 +106,16 @@ export const NotificationDropdown: FC<NotificationDropdownProps> = ({
   const navigate = useNavigate()
 
   const [internalEscalated, setInternalEscalated] = useState<ICall[]>([])
-  
+  // Track which escalated call IDs have already been "seen" (dropdown opened)
+  const [seenEscalatedIds, setSeenEscalatedIds] = useState<Set<string>>(new Set())
+
   const activeEscalatedCalls = escalatedCalls.length > 0 ? escalatedCalls : internalEscalated
   const pendingEscalatedList = activeEscalatedCalls.filter((c) => c.status === 'escalated')
   const pendingEscalatedCount = pendingEscalatedList.length
+  // Badge only counts escalated calls the user hasn't seen yet
+  const unseenEscalatedCount = pendingEscalatedList.filter(
+    (c) => !seenEscalatedIds.has(c._id || c.call_id)
+  ).length
 
   const fetchNotifications = async () => {
     try {
@@ -220,14 +226,33 @@ export const NotificationDropdown: FC<NotificationDropdownProps> = ({
     <div className="relative" ref={dropdownRef}>
       {/* Bell Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={async () => {
+          const opening = !isOpen
+          setIsOpen(opening)
+          if (opening) {
+            // Mark all currently visible escalated calls as "seen" — clears the red badge
+            // The call list items stay until they are actually resolved
+            const currentIds = new Set(pendingEscalatedList.map((c) => c._id || c.call_id))
+            setSeenEscalatedIds((prev) => new Set([...prev, ...currentIds]))
+            // Mark all standard notifications as read too (clears the blue badge)
+            if (unreadCount > 0) {
+              try {
+                await notificationApi.markAllAsRead()
+                setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+                setUnreadCount(0)
+              } catch {
+                // silent
+              }
+            }
+          }
+        }}
         className="relative text-text-secondary hover:text-text-primary transition-colors p-2 rounded-xl hover:bg-surface-page focus:outline-none cursor-pointer"
         title="Notifications & Escalations"
       >
         <Bell size={20} strokeWidth={1.75} />
-        {pendingEscalatedCount > 0 ? (
+        {unseenEscalatedCount > 0 ? (
           <span className="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse">
-            {pendingEscalatedCount}
+            {unseenEscalatedCount}
           </span>
         ) : (
           unreadCount > 0 && (

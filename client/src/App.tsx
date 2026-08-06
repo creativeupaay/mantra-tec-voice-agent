@@ -3,7 +3,6 @@ import HomePage from './pages/HomePage'
 import SettingsPage from './pages/SettingsPage'
 import CallsPage from './pages/CallsPage'
 import CallReportPage from './pages/CallReportPage'
-import AnalyticsPage from './pages/AnalyticsPage'
 import UsagePage from './pages/UsagePage'
 import ProfilePage from './pages/ProfilePage'
 import LoginPage from './pages/LoginPage'
@@ -29,7 +28,6 @@ function App() {
       }>
         <Route index element={<HomePage />} />
         <Route path="calls" element={<CallsPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="usage" element={
           <ProtectedRoute allowedRoles={['super_admin']}><UsagePage /></ProtectedRoute>

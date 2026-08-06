@@ -76,22 +76,35 @@ const UsagePage: FC = () => {
       analyticsApi.getCreditBalance()
     ])
       .then(([usageRes, balanceRes]) => {
-        setCreditUsage(usageRes.data.data)
-        setCreditBalance(balanceRes.data.data.creditBalance)
+        const usageData = usageRes.data?.data
+        const usagesArray = Array.isArray(usageData)
+          ? usageData
+          : Array.isArray((usageData as any)?.usages)
+            ? (usageData as any).usages
+            : []
+        setCreditUsage(usagesArray)
+
+        const balanceData = balanceRes.data?.data
+        const balanceVal = typeof balanceData === 'number'
+          ? balanceData
+          : ((balanceData as any)?.credit_balance ?? (balanceData as any)?.creditBalance ?? 0)
+        setCreditBalance(balanceVal)
       })
       .catch((err) => console.error(err))
       .finally(() => setIsLoading(false))
   }, [])
 
   const totalSpent = useMemo(() => {
-    return creditUsage
+    const list = Array.isArray(creditUsage) ? creditUsage : []
+    return list
       .filter(u => u.type === 'usage')
       .reduce((sum, curr) => sum + Math.abs(curr.amount), 0)
   }, [creditUsage])
 
   const costByService = useMemo(() => {
+    const list = Array.isArray(creditUsage) ? creditUsage : []
     const breakdown: Record<string, number> = {}
-    creditUsage.forEach(usage => {
+    list.forEach(usage => {
       if (usage.type === 'usage' && usage.service) {
         breakdown[usage.service] = (breakdown[usage.service] || 0) + Math.abs(usage.amount)
       }
@@ -103,6 +116,7 @@ const UsagePage: FC = () => {
   }, [creditUsage])
 
   const dailySpend = useMemo(() => {
+    const list = Array.isArray(creditUsage) ? creditUsage : []
     const days: Record<string, number> = {}
 
     for (let i = 6; i >= 0; i--) {
@@ -111,7 +125,7 @@ const UsagePage: FC = () => {
       days[d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })] = 0
     }
 
-    creditUsage.forEach(usage => {
+    list.forEach(usage => {
       if (usage.type === 'usage') {
         const dateStr = new Date(usage.createdAt).toLocaleDateString('en-US', {
           month: 'short',
@@ -130,7 +144,8 @@ const UsagePage: FC = () => {
   }, [creditUsage])
 
   const totalTokens = useMemo(() => {
-    return creditUsage.reduce((sum, u) => {
+    const list = Array.isArray(creditUsage) ? creditUsage : []
+    return list.reduce((sum, u) => {
       const m = u.metadata || {}
       const t = m.total_tokens
         ?? ((m.prompt_tokens ?? m.tokens_prompt ?? 0) + (m.completion_tokens ?? m.tokens_completion ?? 0))

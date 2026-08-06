@@ -46,7 +46,7 @@ async def send_escalation_email(
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
           <div style="background-color: #ef4444; color: #ffffff; padding: 16px 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h2 style="margin: 0; font-size: 20px; font-weight: bold;">🚨 Escalated Call Notification</h2>
+            <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Escalated Call Notification</h2>
             <p style="margin: 4px 0 0 0; font-size: 14px; opacity: 0.9;">Mantra Tech Voice Agent System</p>
           </div>
 
@@ -78,7 +78,7 @@ async def send_escalation_email(
             {f'<div style="background-color: #f1f5f9; padding: 14px 16px; border-radius: 6px; margin-bottom: 20px;"><h4 style="margin: 0 0 8px 0; color: #334155; font-size: 13px;">Recent Transcript:</h4><pre style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #1e293b;">{transcript[:500] if transcript else ""}</pre></div>' if transcript else ''}
 
             <div style="text-align: center; margin-top: 25px;">
-              <a href="http://localhost:5173/calls" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+              <a href="http://localhost:5173/calls?callId={call_id}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
                 View Escalated Call in Dashboard
               </a>
             </div>

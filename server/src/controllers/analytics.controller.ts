@@ -195,6 +195,11 @@ export const getCallAnalytics = async (
       count,
     }))
 
+    // ── 5. Recent Red Flags ────────────────────────────────────────────────
+    const recentRedFlags = await Call.find({
+      $or: [{ is_red_flag: true }, { is_red_flagged: true }],
+    }).sort({ createdAt: -1 }).limit(5).lean()
+
     res.json({
       success: true,
       data: {
@@ -202,6 +207,7 @@ export const getCallAnalytics = async (
         callVolume,
         statusBreakdown,
         intentBreakdown,
+        recentRedFlags,
       },
     });
   } catch (error) {
@@ -216,7 +222,9 @@ export const getAllCreditUsage = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const usages = await CreditUsage.find().sort({ createdAt: -1 }).limit(100).lean();
+    const isSuperAdmin = (req as any).user?.role === 'super_admin';
+    const filter = isSuperAdmin ? {} : { userId: (req as any).user?._id };
+    const usages = await CreditUsage.find(filter).sort({ createdAt: -1 }).limit(100).lean();
     res.json({
       success: true,
       data: {

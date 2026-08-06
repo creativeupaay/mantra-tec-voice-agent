@@ -31,27 +31,215 @@ function normalizeCall(call: Record<string, any>) {
   }
 }
 
-// Get all calls
+// Safely parse any date input (ISO, Date object, or custom string like "05 Aug 2026 06:39 pm IST")
+function getCallTime(call: Record<string, any>): number {
+  const ts = call.timestamp || call.createdAt
+  if (!ts) return 0
+  if (ts instanceof Date) return isNaN(ts.getTime()) ? 0 : ts.getTime()
+  if (typeof ts === 'number') return ts < 1e11 ? ts * 1000 : ts
+  if (typeof ts === 'string') {
+    let str = ts.trim()
+    if (!str) return 0
+    if (/^\d+$/.test(str)) {
+      const num = parseInt(str, 10)
+      return num < 1e11 ? num * 1000 : num
+    }
+    if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/.test(str)) {
+      str = str.replace(' ', 'T')
+    }
+    const d = new Date(str)
+    if (!isNaN(d.getTime())) return d.getTime()
+  }
+  return 0
+}
+
+function getDatePresetRange(preset: string, dateFrom?: string, dateTo?: string): { startMs: number | null; endMs: number | null } {
+  if (!preset || preset === 'all') return { startMs: null, endMs: null }
+
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+
+  if (preset === 'today') {
+    return { startMs: todayStart.getTime(), endMs: todayEnd.getTime() }
+  }
+
+  if (preset === 'yesterday') {
+    const yStart = new Date(todayStart)
+    yStart.setDate(yStart.getDate() - 1)
+    const yEnd = new Date(todayEnd)
+    yEnd.setDate(yEnd.getDate() - 1)
+    return { startMs: yStart.getTime(), endMs: yEnd.getTime() }
+  }
+
+  if (preset === 'last_7_days') {
+    const s = new Date(todayStart)
+    s.setDate(s.getDate() - 6)
+    return { startMs: s.getTime(), endMs: todayEnd.getTime() }
+  }
+
+  if (preset === 'last_30_days') {
+    const s = new Date(todayStart)
+    s.setDate(s.getDate() - 29)
+    return { startMs: s.getTime(), endMs: todayEnd.getTime() }
+  }
+
+  if (preset === 'custom') {
+    let startMs: number | null = null
+    let endMs: number | null = null
+    if (dateFrom) {
+      const d = new Date(`${dateFrom}T00:00:00`)
+      if (!isNaN(d.getTime())) startMs = d.getTime()
+    }
+    if (dateTo) {
+      const d = new Date(`${dateTo}T23:59:59.999`)
+      if (!isNaN(d.getTime())) endMs = d.getTime()
+    }
+    return { startMs, endMs }
+  }
+
+  return { startMs: null, endMs: null }
+}
+
+// Get all calls with backend pagination, search, status, and date range filters
 export const getAllCalls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const calls = await Call.find()
-      .sort({ timestamp: -1 })
-      .limit(100)
-      .lean()
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string, 10) || 10))
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : ''
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'all'
+    const intent = typeof req.query.intent === 'string' ? req.query.intent.trim() : 'all'
+    const datePreset = typeof req.query.datePreset === 'string' ? req.query.datePreset.trim() : 'all'
+    const dateFrom = typeof req.query.dateFrom === 'string' ? req.query.dateFrom.trim() : ''
+    const dateTo = typeof req.query.dateTo === 'string' ? req.query.dateTo.trim() : ''
+    const callIdParam = typeof req.query.callId === 'string' ? req.query.callId.trim() : ''
+
+    // 1. If explicit callId is passed, return single direct match
+    if (callIdParam) {
+      let singleCall = null
+      if (/^[a-f\d]{24}$/i.test(callIdParam)) {
+        singleCall = await Call.findById(callIdParam).lean()
+      }
+      if (!singleCall) {
+        singleCall = await Call.findOne({ call_id: callIdParam }).lean()
+      }
+      if (singleCall) {
+        const normalized = normalizeCall(singleCall as Record<string, any>)
+        res.json({
+          success: true,
+          data: [normalized],
+          pagination: {
+            total: 1,
+            page: 1,
+            limit,
+            pages: 1,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+          counts: { escalated: 0, resolved: 0 },
+        })
+        return
+      }
+    }
+
+    // 2. Build MongoDB query filter for search, status, and intent
+    const queryConditions: any[] = []
+
+    if (search) {
+      const searchRegex = new RegExp(search, 'i')
+      queryConditions.push({
+        $or: [
+          { caller_name: searchRegex },
+          { phone_number: searchRegex },
+          { call_id: searchRegex },
+          { detected_intent: searchRegex },
+          { call_category: searchRegex },
+          { call_summary: searchRegex },
+          { red_flag_reason: searchRegex },
+          { guardrail_triggered: searchRegex },
+        ],
+      })
+    }
+
+    if (status && status !== 'all') {
+      if (status === 'flagged') {
+        queryConditions.push({
+          $or: [{ is_red_flag: true }, { is_red_flagged: true }],
+        })
+      } else {
+        queryConditions.push({ status })
+      }
+    }
+
+    if (intent && intent !== 'all') {
+      queryConditions.push({ detected_intent: intent })
+    }
+
+    const filter = queryConditions.length > 0 ? { $and: queryConditions } : {}
+
+    // Tab counts for status header
+    const [escalatedCount, resolvedCount] = await Promise.all([
+      Call.countDocuments({ status: 'escalated' }),
+      Call.countDocuments({ status: 'resolved' }),
+    ])
+
+    // Query Mongo documents
+    const rawCalls = await Call.find(filter).lean()
+    let normalized = rawCalls.map(c => normalizeCall(c as Record<string, any>))
+
+    // Apply Date Range Preset filter (robust against string or Date formats)
+    const { startMs, endMs } = getDatePresetRange(datePreset, dateFrom, dateTo)
+    if (startMs !== null || endMs !== null) {
+      normalized = normalized.filter(call => {
+        const time = getCallTime(call)
+        const matchStart = startMs === null || time >= startMs
+        const matchEnd = endMs === null || time <= endMs
+        return matchStart && matchEnd
+      })
+    }
+
+    // Sort strictly by newest call FIRST
+    normalized.sort((a, b) => getCallTime(b) - getCallTime(a))
+
+    // Calculate pagination over filtered dataset
+    const totalCalls = normalized.length
+    const totalPages = Math.max(1, Math.ceil(totalCalls / limit))
+    const currentPage = Math.min(page, totalPages)
+    const startIndex = (currentPage - 1) * limit
+    const pageCalls = normalized.slice(startIndex, startIndex + limit)
 
     res.json({
       success: true,
-      data: calls.map((call) => normalizeCall(call as Record<string, any>))
+      data: pageCalls,
+      pagination: {
+        total: totalCalls,
+        page: currentPage,
+        limit,
+        pages: totalPages,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1,
+      },
+      counts: {
+        escalated: escalatedCount,
+        resolved: resolvedCount,
+      },
     })
   } catch (error) {
     next(error)
   }
 }
 
-// Get call by ID
+// Get call by ID (supports Mongo _id or call_id string)
 export const getCallById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const call = await Call.findById(req.params.id).lean()
+    const id = String(req.params.id || '')
+    let call = null
+    if (/^[a-f\d]{24}$/i.test(id)) {
+      call = await Call.findById(id).lean()
+    }
+    if (!call) {
+      call = await Call.findOne({ call_id: id }).lean()
+    }
 
     if (!call) {
       res.status(404).json({ success: false, message: 'Call not found' })
@@ -60,7 +248,7 @@ export const getCallById = async (req: Request, res: Response, next: NextFunctio
 
     res.json({
       success: true,
-      data: normalizeCall(call as Record<string, any>)
+      data: normalizeCall(call as Record<string, any>),
     })
   } catch (error) {
     next(error)

@@ -26,6 +26,18 @@ export interface ICall {
 export interface ICallListResponse {
   success: boolean
   data: ICall[]
+  pagination?: {
+    total: number
+    page: number
+    limit: number
+    pages: number
+    hasNextPage: boolean
+    hasPreviousPage: boolean
+  }
+  counts?: {
+    escalated: number
+    resolved: number
+  }
 }
 
 export interface ICallResponse {

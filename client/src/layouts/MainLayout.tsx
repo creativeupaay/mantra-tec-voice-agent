@@ -7,7 +7,6 @@ import { NotificationDropdown } from '../components/NotificationDropdown'
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home, exact: true },
   { to: '/calls', label: 'Calls', icon: Phone },
-  { to: '/analytics', label: 'Analytics', icon: BarChart2 },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

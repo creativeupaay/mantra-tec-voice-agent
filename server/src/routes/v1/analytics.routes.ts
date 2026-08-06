@@ -7,12 +7,10 @@ const router = Router()
 // All routes require authentication
 router.use(authenticate)
 
-// Admin + Super Admin routes (client-facing call analytics)
-router.get('/call-analytics', isAdmin, getCallAnalytics)
+// Authenticated routes
+router.get('/call-analytics', getCallAnalytics)
 router.get('/credit-balance', getUserCreditBalance)
-
-// Super Admin only routes (internal platform views)
-router.get('/analytics', isSuperAdmin, getAnalytics)
-router.get('/credit-usage', isSuperAdmin, getAllCreditUsage)
+router.get('/credit-usage', getAllCreditUsage)
+router.get('/analytics', getAnalytics)
 
 export default router

@@ -160,7 +160,7 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
     : 'No AI call summary was generated for this session.'
 
   return (
-    <div className="w-[430px] shrink-0 bg-surface-card rounded-2xl border border-border flex flex-col overflow-hidden shadow-sm animate-in slide-in-from-right-4 duration-200">
+    <div className="w-full h-full bg-surface-card border-l border-border flex flex-col overflow-hidden shadow-2xl">
       {/* 1. Panel Header */}
       <div className="flex items-start justify-between px-6 py-5 border-b border-border bg-surface-card">
         <div className="flex-1 min-w-0">

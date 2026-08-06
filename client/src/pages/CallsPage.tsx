@@ -1,4 +1,5 @@
 import { FC, useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import Modal from '../components/Modal'
 import { callApi } from '../api/client'
@@ -6,7 +7,7 @@ import { ICall, CallStatus } from '../types/call'
 import CallFilters, { DateFilterPreset } from '../components/calls/CallFilters'
 import CallTable from '../components/calls/CallTable'
 import CallDetailPanel from '../components/calls/CallDetailPanel'
-import { CheckCircle, AlertCircle, X } from 'lucide-react'
+import { CheckCircle, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 
 const STATUS_LABELS: Record<CallStatus, string> = {
   live: 'Live',
@@ -96,6 +97,7 @@ const CallsPage: FC = () => {
   const [calls, setCalls] = useState<ICall[]>([])
   const [selectedCall, setSelectedCall] = useState<ICall | null>(null)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | CallStatus | 'flagged'>(
     (urlTab as any) || 'all'
   )
@@ -106,6 +108,14 @@ const CallsPage: FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalTitle, setModalTitle] = useState('')
   const [modalContent, setModalContent] = useState('')
+
+  // Backend Pagination state
+  const [page, setPage] = useState(1)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [totalCalls, setTotalCalls] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [escalatedCount, setEscalatedCount] = useState(0)
+  const [resolvedCount, setResolvedCount] = useState(0)
 
   const [isLoading, setIsLoading] = useState(true)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
@@ -118,24 +128,50 @@ const CallsPage: FC = () => {
     }, 4500)
   }
 
-  // Fetch calls list from API
+  // Debounce search input for 300ms before sending backend search request
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [activeFilter, intentFilter, datePreset, dateFrom, dateTo])
+
+  // Fetch paginated calls list from backend API
   const fetchCalls = async () => {
     try {
       setIsLoading(true)
-      const response = await callApi.getAll()
-      const data = (response.data as ICall[]) ?? []
-      data.sort((a, b) => getCallTime(b) - getCallTime(a))
-      setCalls(data)
+      const response = await callApi.getAll({
+        page,
+        limit: rowsPerPage,
+        search: debouncedSearch,
+        status: activeFilter,
+        intent: intentFilter,
+        datePreset,
+        dateFrom,
+        dateTo,
+      })
 
-      // If URL specified callId, auto select it
-      if (urlCallId) {
-        const found = data.find(c => c._id === urlCallId || c.call_id === urlCallId)
-        if (found) {
-          setSelectedCall(found)
-        }
+      const data = response.data ?? []
+      setCalls(data)
+      if (response.pagination) {
+        setTotalCalls(response.pagination.total)
+        setTotalPages(response.pagination.pages)
+      } else {
+        setTotalCalls(data.length)
+        setTotalPages(1)
+      }
+      if (response.counts) {
+        setEscalatedCount(response.counts.escalated)
+        setResolvedCount(response.counts.resolved)
       }
     } catch (err) {
-      console.error('Failed to fetch calls', err)
+      console.error('Failed to fetch paginated calls', err)
     } finally {
       setIsLoading(false)
     }
@@ -143,6 +179,19 @@ const CallsPage: FC = () => {
 
   useEffect(() => {
     fetchCalls()
+  }, [page, rowsPerPage, debouncedSearch, activeFilter, intentFilter, datePreset, dateFrom, dateTo])
+
+  // Email Deep-Link Handling: fetch only the targeted single call by callId and open drawer
+  useEffect(() => {
+    if (urlCallId) {
+      callApi.getById(urlCallId)
+        .then((res) => {
+          if (res && res.success && res.data) {
+            setSelectedCall(res.data)
+          }
+        })
+        .catch((err) => console.error('Failed to fetch deep-linked call:', err))
+    }
   }, [urlCallId])
 
   // Sync urlTab if set
@@ -151,10 +200,6 @@ const CallsPage: FC = () => {
       setActiveFilter(urlTab as any)
     }
   }, [urlTab])
-
-  // Count metrics for tabs
-  const escalatedCount = useMemo(() => calls.filter(c => c.status === 'escalated').length, [calls])
-  const resolvedCount = useMemo(() => calls.filter(c => c.status === 'resolved').length, [calls])
 
   // RESOLVE CALL WORKFLOW (Updates MongoDB, updates state, emits event, shifts tabs)
   const handleResolveCall = async (callId: string) => {
@@ -186,8 +231,8 @@ const CallsPage: FC = () => {
       // 2. Update MongoDB via backend API
       const res = await callApi.updateStatus(callId, 'resolved')
 
-      if (res.data && res.data.success) {
-        const updatedData = res.data.data || {}
+      if (res && res.success) {
+        const updatedData = res.data || {}
         setCalls(prev =>
           prev.map(c => {
             if (c._id === callId || c.call_id === callId) {
@@ -208,7 +253,7 @@ const CallsPage: FC = () => {
 
         showToast(`Call from ${targetCall?.caller_name || targetCall?.phone_number || 'customer'} marked as resolved.`, 'success')
       } else {
-        throw new Error(res.data?.message || 'Failed to update MongoDB')
+        throw new Error(res?.message || 'Failed to update MongoDB')
       }
     } catch (err: any) {
       console.error('Failed to resolve call:', err)
@@ -238,43 +283,11 @@ const CallsPage: FC = () => {
     return Array.from(intents).sort((a, b) => a.localeCompare(b))
   }, [calls])
 
-  const filtered = useMemo(() => {
-    const { start, end } = getDateRange(datePreset, dateFrom, dateTo)
-
-    const result = calls.filter(call => {
-      const escalationReason = (call.red_flag_reason || call.guardrail_triggered || '').toLowerCase()
-      const matchesSearch =
-        search === '' ||
-        (call.caller_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
-        call.phone_number.includes(search) ||
-        (call.detected_intent ?? '').toLowerCase().includes(search.toLowerCase()) ||
-        (call.call_summary ?? '').toLowerCase().includes(search.toLowerCase()) ||
-        escalationReason.includes(search.toLowerCase())
-
-      const matchesFilter =
-        activeFilter === 'all' ||
-        (activeFilter === 'flagged'
-          ? Boolean(call.is_red_flag || call.is_red_flagged)
-          : call.status === activeFilter)
-
-      const matchesIntent =
-        intentFilter === 'all' ||
-        (call.detected_intent ?? '').trim() === intentFilter
-
-      const callTime = getCallTime(call)
-      const matchesDate =
-        (start === null || callTime >= start) &&
-        (end === null || callTime <= end)
-
-      return matchesSearch && matchesFilter && matchesIntent && matchesDate
-    })
-
-    // Strict date-wise: newest first
-    return [...result].sort((a, b) => getCallTime(b) - getCallTime(a))
-  }, [calls, search, activeFilter, intentFilter, datePreset, dateFrom, dateTo])
+  const startIndex = (page - 1) * rowsPerPage
+  const endIndex = Math.min(totalCalls, startIndex + calls.length)
 
   return (
-    <div className="flex h-full gap-6 relative">
+    <div className="flex flex-col h-full gap-4">
       {/* Toast Banner */}
       {toast && (
         <div
@@ -299,51 +312,39 @@ const CallsPage: FC = () => {
         </div>
       )}
 
-      <div className={`flex flex-col gap-4 min-w-0 overflow-hidden transition-all duration-300 ${selectedCall ? 'flex-1' : 'w-full'}`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-text-primary">Call Management</h2>
-            <p className="text-xs text-text-secondary mt-0.5">Filter, inspect transcripts, and handle call escalations</p>
-          </div>
-          <span className="text-[13px] text-text-muted tabular-nums font-mono">
-            {filtered.length} of {calls.length} calls
-          </span>
+      {/* Always full-width header + table */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-text-primary">Call Management</h2>
+          <p className="text-xs text-text-secondary mt-0.5">Filter, inspect transcripts, and handle call escalations</p>
         </div>
-
-        <CallFilters
-          search={search}
-          setSearch={setSearch}
-          activeFilter={activeFilter}
-          setActiveFilter={setActiveFilter}
-          intentFilter={intentFilter}
-          setIntentFilter={setIntentFilter}
-          intentOptions={intentOptions}
-          datePreset={datePreset}
-          setDatePreset={setDatePreset}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          escalatedCount={escalatedCount}
-          resolvedCount={resolvedCount}
-        />
-
-        <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col shadow-2xs">
-          <CallTable
-            isLoading={isLoading}
-            filtered={filtered}
-            selectedCall={selectedCall}
-            setSelectedCall={setSelectedCall}
-            openModal={openModal}
-            STATUS_LABELS={STATUS_LABELS}
-            onResolveCall={handleResolveCall}
-            resolvingId={resolvingId}
-          />
-        </div>
+        <span className="text-[13px] text-text-muted tabular-nums font-mono">
+          {totalCalls} total calls
+        </span>
       </div>
 
-      {selectedCall && (
-        <CallDetailPanel
+      <CallFilters
+        search={search}
+        setSearch={setSearch}
+        activeFilter={activeFilter}
+        setActiveFilter={setActiveFilter}
+        intentFilter={intentFilter}
+        setIntentFilter={setIntentFilter}
+        intentOptions={intentOptions}
+        datePreset={datePreset}
+        setDatePreset={setDatePreset}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        escalatedCount={escalatedCount}
+        resolvedCount={resolvedCount}
+      />
+
+      <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col shadow-2xs">
+        <CallTable
+          isLoading={isLoading}
+          filtered={calls}
           selectedCall={selectedCall}
           setSelectedCall={setSelectedCall}
           openModal={openModal}
@@ -351,6 +352,86 @@ const CallsPage: FC = () => {
           onResolveCall={handleResolveCall}
           resolvingId={resolvingId}
         />
+
+        {/* Material UI Style Pagination Footer */}
+        {!isLoading && totalCalls > 0 && (
+          <div className="px-6 py-3 border-t border-border bg-surface-card flex items-center justify-between text-xs text-text-secondary select-none">
+            {/* Left: Rows per page selector */}
+            <div className="flex items-center space-x-2">
+              <span className="text-[12px] text-text-muted font-medium">Rows per page:</span>
+              <div className="relative">
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value))
+                    setPage(1)
+                  }}
+                  className="appearance-none bg-surface-page hover:bg-surface-card text-text-primary font-medium text-[12px] px-2.5 py-1 pr-6 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer transition-colors"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <ChevronDown className="w-3 h-3 text-text-muted absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Right: Page Range Indicator & Navigation Buttons */}
+            <div className="flex items-center space-x-4">
+              <span className="text-[12px] font-mono text-text-muted tabular-nums">
+                {totalCalls === 0 ? '0–0 of 0' : `${startIndex + 1}–${endIndex} of ${totalCalls}`}
+              </span>
+
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                  disabled={page <= 1}
+                  className="p-1.5 rounded-lg border border-border text-text-primary hover:bg-surface-page disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                
+                <span className="text-[12px] font-semibold text-text-primary px-2 font-mono tabular-nums">
+                  {page} / {totalPages}
+                </span>
+
+                <button
+                  onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={page >= totalPages}
+                  className="p-1.5 rounded-lg border border-border text-text-primary hover:bg-surface-page disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Overlay drawer rendered at body level via portal — always flush to the right viewport edge */}
+      {selectedCall && createPortal(
+        <>
+          {/* Semi-transparent backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/20"
+            onClick={() => setSelectedCall(null)}
+          />
+          {/* Drawer panel — flush right, broader */}
+          <div className="fixed top-0 right-0 h-full z-50 w-[720px] max-w-full shadow-2xl animate-in slide-in-from-right duration-200">
+            <CallDetailPanel
+              selectedCall={selectedCall}
+              setSelectedCall={setSelectedCall}
+              openModal={openModal}
+              STATUS_LABELS={STATUS_LABELS}
+              onResolveCall={handleResolveCall}
+              resolvingId={resolvingId}
+            />
+          </div>
+        </>,
+        document.body
       )}
 
       <Modal
