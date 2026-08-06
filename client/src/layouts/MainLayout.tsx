@@ -1,7 +1,7 @@
-import { FC } from 'react'
-import { Outlet, NavLink, Link } from 'react-router-dom'
+import { FC, useState } from 'react'
+import { Outlet, NavLink, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { Home, Phone, BarChart2, Settings, Activity, LogOut } from 'lucide-react'
+import { Home, Phone, Settings, Activity, LogOut, Menu, X } from 'lucide-react'
 import { NotificationDropdown } from '../components/NotificationDropdown'
 
 const navItems = [
@@ -12,23 +12,36 @@ const navItems = [
 
 const MainLayout: FC = () => {
   const { user, logout } = useAuth()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const location = useLocation()
 
   return (
     <div className="h-screen overflow-hidden bg-surface-page flex flex-col">
       {/* Header */}
       <header className="bg-surface-card border-b border-border sticky top-0 z-40">
-        <div className="px-6 h-16 flex justify-between items-center">
-          <div className="flex items-center">
+        <div className="px-4 sm:px-6 h-16 flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            {/* Mobile Hamburger Menu Toggle Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-2 rounded-lg text-text-secondary hover:bg-surface-page hover:text-text-primary transition-colors cursor-pointer"
+              title="Toggle Menu"
+              aria-label="Toggle Menu"
+            >
+              {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+
             <h1 className="text-xl font-semibold text-text-primary">
               Mantra Tech
             </h1>
           </div>
-          <div className="flex items-center space-x-6">
+
+          <div className="flex items-center space-x-3 sm:space-x-6">
             <div className="flex items-center space-x-4">
               <NotificationDropdown />
             </div>
 
-            <div className="h-6 w-px bg-border" />
+            <div className="h-6 w-px bg-border hidden sm:block" />
 
             <div className="flex items-center space-x-3">
               <Link
@@ -36,7 +49,7 @@ const MainLayout: FC = () => {
                 className="flex items-center space-x-2.5 group hover:opacity-80 transition-opacity"
                 title="View Profile Settings"
               >
-                <span className="text-sm font-medium text-text-primary group-hover:text-accent transition-colors">
+                <span className="text-sm font-medium text-text-primary group-hover:text-accent transition-colors hidden sm:inline">
                   {user?.name || 'Admin User'}
                 </span>
                 <div className="w-8 h-8 bg-surface-page rounded-full flex items-center justify-center text-text-primary text-xs font-semibold border border-border group-hover:border-accent transition-colors shadow-sm">
@@ -45,7 +58,7 @@ const MainLayout: FC = () => {
               </Link>
               <button
                 onClick={logout}
-                className="flex items-center space-x-1.5 ml-2 text-sm font-medium text-text-secondary hover:text-status-escalated transition-colors"
+                className="flex items-center space-x-1.5 ml-1 text-sm font-medium text-text-secondary hover:text-status-escalated transition-colors cursor-pointer"
                 title="Logout"
               >
                 <LogOut size={18} strokeWidth={1.75} />
@@ -55,9 +68,23 @@ const MainLayout: FC = () => {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-60 bg-surface-card border-r border-border shrink-0 h-full overflow-y-auto scrollbar-thin">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Mobile Sidebar Overlay Backdrop */}
+        {isMobileMenuOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 md:hidden backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Sidebar (Responsive drawer on mobile, static on desktop) */}
+        <aside
+          className={`bg-surface-card border-r border-border shrink-0 h-full overflow-y-auto scrollbar-thin z-50 transition-all duration-200 ${
+            isMobileMenuOpen
+              ? 'fixed inset-y-0 left-0 w-64 shadow-2xl pt-16 md:pt-0'
+              : 'hidden md:block w-60'
+          }`}
+        >
           <nav className="p-4">
             <p className="px-3 text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">Main Menu</p>
             <ul className="space-y-1">
@@ -68,6 +95,7 @@ const MainLayout: FC = () => {
                     <NavLink
                       to={item.to}
                       end={item.exact}
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className={({ isActive }) =>
                         `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${isActive
                           ? 'bg-text-primary text-surface-card'
@@ -87,6 +115,7 @@ const MainLayout: FC = () => {
                 <li className="mt-6">
                   <NavLink
                     to="/usage"
+                    onClick={() => setIsMobileMenuOpen(false)}
                     className={({ isActive }) =>
                       `flex items-center px-3 h-10 space-x-2 text-sm font-medium rounded-md transition-colors ${isActive
                         ? 'bg-text-primary text-surface-card'
@@ -104,7 +133,7 @@ const MainLayout: FC = () => {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

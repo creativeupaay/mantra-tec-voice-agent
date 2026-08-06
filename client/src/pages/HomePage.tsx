@@ -11,7 +11,17 @@ import {
   AlertOctagon,
   ChevronDown,
 } from 'lucide-react'
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart as RechartsBarChart,
+  Bar as RechartsBar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { analyticsApi, callApi } from '../api/client'
 import { ICall } from '../types/call'
@@ -387,18 +397,18 @@ const HomePage: FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-text-primary">Dashboard Overview</h2>
           <p className="text-xs text-text-secondary mt-1">Real-time voice agent metrics & performance analytics</p>
         </div>
         <div className="flex items-center space-x-3">
           {/* Month Selector Dropdown */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <select
               value={selectedMonthRange}
               onChange={(e) => setSelectedMonthRange(e.target.value)}
-              className="appearance-none bg-surface-card hover:bg-surface-page text-text-primary text-xs font-semibold px-3 py-1.5 pr-8 rounded-lg border border-border shadow-2xs focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer transition-colors"
+              className="appearance-none pl-3.5 pr-8 py-2 bg-surface-card border border-border rounded-xl text-xs font-semibold text-text-primary focus:outline-none focus:border-border-strong cursor-pointer transition-colors"
             >
               {monthOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -542,8 +552,10 @@ const HomePage: FC = () => {
               {selectedMonthLabel}
             </span>
           </div>
-          <div className="h-64">
-            <CallVolumeChart data={callVolumeData} />
+          <div className="h-64 w-full overflow-x-auto scrollbar-thin">
+            <div className="h-full min-w-[480px]">
+              <CallVolumeChart data={callVolumeData} />
+            </div>
           </div>
         </div>
 
@@ -723,34 +735,36 @@ const DonutChart = ({ data, totalCalls }: { data: { name: string; value: number 
   )
 }
 
-// Simple Bar Chart
+// Recharts Bar Chart for Top Customer Intents
 const BarChart = ({ data }: { data: { intent: string; count: number }[] }) => {
   if (!data.length) return <div className="h-full flex items-center justify-center text-text-muted text-xs">No data</div>
 
-  const maxCount = Math.max(...data.map(d => d.count), 1)
   const topData = data.slice(0, 6)
 
   return (
-    <div className="h-full flex items-end justify-around p-2">
-      {topData.map((d) => {
-        const h = (d.count / maxCount) * 140
-        return (
-          <div key={d.intent} className="flex flex-col items-center gap-1 w-16">
-            <div className="w-full">
-              <div
-                className="rounded-t bg-accent opacity-80"
-                style={{ height: `${h}px`, minHeight: d.count > 0 ? '8px' : '0' }}
-              />
-            </div>
-            <span className="text-[10px] text-text-secondary text-center truncate w-16" style={{ fontFamily: 'system-ui' }}>
-              {d.intent.length > 10 ? d.intent.slice(0, 10) + '…' : d.intent}
-            </span>
-            <span className="text-[10px] font-medium text-text-primary tabular-nums" style={{ fontFamily: 'system-ui' }}>
-              {d.count}
-            </span>
-          </div>
-        )
-      })}
+    <div className="w-full h-full pt-1">
+      <ResponsiveContainer width="100%" height="100%">
+        <RechartsBarChart data={topData} margin={{ top: 10, right: 10, left: -25, bottom: 20 }}>
+          <XAxis
+            dataKey="intent"
+            tick={{ fontSize: 10, fill: 'var(--color-text-secondary)' }}
+            interval={0}
+            tickFormatter={(val) => (val.length > 8 ? val.slice(0, 8) + '…' : val)}
+          />
+          <YAxis tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} allowDecimals={false} />
+          <RechartsTooltip
+            formatter={(val: any) => [val, 'calls']}
+            contentStyle={{
+              backgroundColor: 'var(--color-surface-card)',
+              borderRadius: '8px',
+              border: '1px solid var(--color-border)',
+              fontSize: '12px',
+              color: 'var(--color-text-primary)',
+            }}
+          />
+          <RechartsBar dataKey="count" fill="var(--color-accent)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+        </RechartsBarChart>
+      </ResponsiveContainer>
     </div>
   )
 }

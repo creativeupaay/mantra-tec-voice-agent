@@ -43,16 +43,16 @@ const CallTable: FC<CallTableProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-narrow">
-      <table className="w-full text-left border-collapse table-fixed">
+    <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-thin">
+      <table className="w-full min-w-[740px] text-left border-collapse">
         <thead className="sticky top-0 z-10 bg-surface-card border-b border-border shadow-2xs">
           <tr className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-            <th className="px-6 py-3.5 w-[20%] text-left">Caller</th>
-            <th className="px-6 py-3.5 w-[28%] text-left">Intent &amp; Category</th>
-            <th className="px-6 py-3.5 w-[10%] text-left">Duration</th>
-            <th className="px-6 py-3.5 w-[14%] text-left">Status</th>
-            <th className="px-6 py-3.5 w-[14%] text-left">Date &amp; Time (IST)</th>
-            <th className="px-6 py-3.5 w-[14%] text-right">Actions</th>
+            <th className="px-5 py-3.5 w-[22%] text-left">Caller</th>
+            <th className="px-5 py-3.5 w-[28%] text-left">Intent &amp; Category</th>
+            <th className="px-4 py-3.5 w-[12%] text-left">Duration</th>
+            <th className="px-4 py-3.5 w-[14%] text-left">Status</th>
+            <th className="px-5 py-3.5 w-[14%] text-left">Date &amp; Time (IST)</th>
+            <th className="px-5 py-3.5 w-[10%] text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -71,7 +71,7 @@ const CallTable: FC<CallTableProps> = ({
                 }`}
               >
                 {/* 1. CALLER */}
-                <td className="px-6 py-3.5 w-[20%] align-middle min-w-0">
+                <td className="px-5 py-3.5 w-[22%] align-middle min-w-0">
                   <div className="flex items-center space-x-3 min-w-0">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-secondary shrink-0 border ${
                       isEscalated ? 'bg-red-500/10 border-red-500/30 text-red-500' : 'bg-surface-page border-border'
@@ -100,7 +100,7 @@ const CallTable: FC<CallTableProps> = ({
                 </td>
 
                 {/* 2. INTENT & CATEGORY */}
-                <td className="px-6 py-3.5 w-[28%] align-middle min-w-0">
+                <td className="px-5 py-3.5 w-[28%] align-middle min-w-0">
                   <div className="flex flex-col justify-center min-w-0">
                     <span className="text-[12px] font-bold text-text-primary flex items-center gap-1.5 truncate" title={call.detected_intent || 'General Inquiry'}>
                       <Bot size={13} className="text-accent shrink-0" />
@@ -113,7 +113,7 @@ const CallTable: FC<CallTableProps> = ({
                 </td>
 
                 {/* 3. DURATION */}
-                <td className="px-6 py-3.5 w-[10%] align-middle">
+                <td className="px-4 py-3.5 w-[12%] align-middle">
                   <div className="flex items-center space-x-1.5">
                     <span className="text-[12px] font-semibold text-text-secondary tabular-nums font-mono">
                       {formatDuration(call.duration)}
@@ -125,12 +125,12 @@ const CallTable: FC<CallTableProps> = ({
                 </td>
 
                 {/* 4. STATUS */}
-                <td className="px-6 py-3.5 w-[14%] align-middle">
+                <td className="px-4 py-3.5 w-[14%] align-middle">
                   <StatusDot status={call.status} label={STATUS_LABELS[call.status]} />
                 </td>
 
                 {/* 5. DATE & TIME */}
-                <td className="px-6 py-3.5 w-[14%] align-middle font-mono text-[11px] leading-tight">
+                <td className="px-5 py-3.5 w-[14%] align-middle font-mono text-[11px] leading-tight">
                   <div className="flex flex-col justify-center">
                     <span className="font-semibold text-text-primary">{date}</span>
                     <span className="text-[10px] text-text-muted mt-0.5">{time}</span>
@@ -138,7 +138,7 @@ const CallTable: FC<CallTableProps> = ({
                 </td>
 
                 {/* 6. ACTIONS */}
-                <td className="px-6 py-3.5 w-[14%] align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                <td className="px-5 py-3.5 w-[10%] align-middle text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => setSelectedCall(call)}
