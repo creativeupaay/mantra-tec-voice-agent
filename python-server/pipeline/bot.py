@@ -67,7 +67,7 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 
 from agent import graph as agent_graph
-from agent.prompts import build_system_prompt
+from agent.prompts import build_system_prompt, get_caller_scenario
 from agent.state import CallState
 from config.database import init_db
 from config.redis_client import init_redis
@@ -377,12 +377,29 @@ async def run_bot(
         except Exception as e:
             logger.warning(f"[bot] Could not register call in DB: {e}")
 
-        name_part = f", {state.identity.name}" if state.identity and state.identity.name else ""
-        greeting_hint = (
-            f"Start with a natural, human-like 'Hello{name_part}'. "
-            "Do not say Namaste and do not introduce yourself. "
-            f"Use {state.preferred_language} language."
-        )
+        scenario, elapsed_mins, rel_time, last_topic = get_caller_scenario(state)
+        name_part = f" {state.identity.name}" if state.identity and state.identity.name else ""
+
+        if scenario == "immediate_callback":
+            topic_hint = f" Previous topic discussed was '{last_topic}'." if last_topic else ""
+            greeting_hint = (
+                f"The caller just called {elapsed_mins} min ago and the call likely got disconnected.{topic_hint} "
+                f"Greet them warmly acknowledging the disconnected call: 'Hello{name_part}, lagta hai call disconnect ho gayi thi. Haan ji boliye.' "
+                "Do NOT introduce the company or give a formal pitch because they were just on the line a minute ago. Be natural like a human picking back up."
+            )
+        elif scenario == "returning_caller":
+            topic_hint = f" Previous discussion was '{last_topic}'." if last_topic else ""
+            greeting_hint = (
+                f"The caller is returning (last call: {rel_time}).{topic_hint} "
+                f"Greet warmly: 'Hello{name_part}! Welcome back to Mantra Tech, main Priya. Kaise hain aap? Bataiye aaj main aapki kya help kar sakti hoon?' "
+                f"Use {state.preferred_language} language."
+            )
+        else:
+            greeting_hint = (
+                "This is a first-time caller. Greet warmly with a brief professional opening: "
+                f"'Hello! Thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
+                f"Use {state.preferred_language} language."
+            )
 
         if gemini_mode:
             # Send the greeting as a user turn in the context.

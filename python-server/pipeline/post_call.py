@@ -16,6 +16,7 @@ from modules.credit_usage.model import ServiceType
 from modules.identity.service import identity_service
 from services.crm import crm_service
 from services.desk import desk_service
+from services.phonetic_utils import normalize_spoken_email
 
 
 def _resolve_call_status(
@@ -371,7 +372,7 @@ async def run_post_call_pipeline(
                     "Company": extraction.company or "Individual / Pending",
                     "Phone": state.phone_number,
                     "Mobile": state.phone_number,
-                    "Email": extraction.email or "",
+                    "Email": normalize_spoken_email(extraction.email) or "",
                     "City": extraction.city or "",
                     "Country": extraction.country or "",
                     "Subject": extraction.subject or (f"Bulk Order Enquiry - {extraction.product_requested or 'Mantra Devices'}" if is_bulk else f"Voice Lead - {name}"),

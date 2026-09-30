@@ -4,6 +4,7 @@ from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.services.llm_service import FunctionCallParams
 
 from services.crm import crm_service
+from services.phonetic_utils import normalize_spoken_email, normalize_spelled_letters
 
 # ── Schema definitions ────────────────────────────────────────────────────────
 
@@ -99,9 +100,12 @@ async def handle_get_crm(params: FunctionCallParams) -> None:
 
 async def handle_create_lead(params: FunctionCallParams) -> None:
     state = params.app_resources
-    name: str = params.arguments.get("name", "Unknown Caller")
-    company: str = params.arguments.get("company", "")
-    email: str = params.arguments.get("email", "")
+    raw_name: str = params.arguments.get("name", "Unknown Caller")
+    name: str = normalize_spelled_letters(raw_name)
+    raw_company: str = params.arguments.get("company", "")
+    company: str = normalize_spelled_letters(raw_company)
+    raw_email: str = params.arguments.get("email", "")
+    email: str = normalize_spoken_email(raw_email)
     city: str = params.arguments.get("city", "")
     country: str = params.arguments.get("country", "")
     subject: str = params.arguments.get("subject", "")
