@@ -1,0 +1,117 @@
+================================================================================
+MANTRA TECH VOICE AGENT — VM UPDATE INSTRUCTIONS (PYTHON SERVER)
+================================================================================
+
+WHEN YOU PULL LATEST COMMITS ON THE VM:
+The Python server files have changed (prompts.py, bot.py, crm_tools.py, post_call.py,
+and new file services/phonetic_utils.py). 
+
+Because Python runs as a long-lived process (and Docker images bake source code in),
+JUST DOING "git pull" IS NOT ENOUGH. The running container or process MUST be 
+rebuilt / restarted so the new code takes effect.
+
+--------------------------------------------------------------------------------
+OPTION 1: FASTEST AUTOMATED METHOD (Recommended)
+--------------------------------------------------------------------------------
+We created an automated update script for you:
+
+1. SSH into your VM.
+2. Run these commands:
+
+   cd ~/mantra-tec-voice-agent/main/python-server
+   git pull origin main
+   bash update_server.sh
+
+This script automatically:
+  • Pulls latest Git changes.
+  • Detects whether you are using Docker, Docker Compose, systemd, or PM2.
+  • Rebuilds the Docker image (if using Docker) or syncs dependencies.
+  • Gracefully restarts the service.
+  • Runs a health check on /health.
+
+--------------------------------------------------------------------------------
+OPTION 2: MANUAL DOCKER COMMANDS (If using Docker directly)
+--------------------------------------------------------------------------------
+If your VM runs the Python server inside a Docker container:
+
+1. Step into the python-server directory:
+   cd ~/mantra-tec-voice-agent/main/python-server
+
+2. Pull latest code:
+   git pull origin main
+
+3. Rebuild the Docker image:
+   docker build -t mantra-voice-agent .
+
+4. Stop and remove the old running container:
+   # Find your running container name:
+   docker ps
+   # Stop and remove:
+   docker stop <container_name_or_id>
+   docker rm <container_name_or_id>
+
+5. Start the new container with the updated image:
+   docker run -d \
+     --name mantra-voice-agent \
+     --restart always \
+     -p 8080:8080 \
+     --env-file .env \
+     mantra-voice-agent
+
+--------------------------------------------------------------------------------
+OPTION 3: MANUAL DOCKER COMPOSE COMMANDS (If using docker-compose)
+--------------------------------------------------------------------------------
+If your VM uses docker-compose:
+
+1. Go to the project directory:
+   cd ~/mantra-tec-voice-agent/main
+
+2. Pull latest code:
+   git pull origin main
+
+3. Rebuild and restart the container without downtime:
+   docker compose build python-server
+   docker compose up -d --no-deps python-server
+
+--------------------------------------------------------------------------------
+OPTION 4: MANUAL SYSTEMD COMMANDS (If running as a Linux service)
+--------------------------------------------------------------------------------
+If your server runs via systemd (e.g., /etc/systemd/system/mantra-voice-agent.service):
+
+1. cd ~/mantra-tec-voice-agent/main/python-server
+2. git pull origin main
+3. uv sync --frozen --no-dev
+4. sudo systemctl restart mantra-voice-agent
+   (or sudo systemctl restart python-server)
+5. Check status:
+   sudo systemctl status mantra-voice-agent
+
+--------------------------------------------------------------------------------
+OPTION 5: MANUAL PM2 COMMANDS (If using PM2)
+--------------------------------------------------------------------------------
+1. cd ~/mantra-tec-voice-agent/main/python-server
+2. git pull origin main
+3. uv sync --frozen --no-dev
+4. pm2 restart python-server
+5. pm2 logs python-server --lines 30
+
+--------------------------------------------------------------------------------
+VERIFICATION & HEALTH CHECK
+--------------------------------------------------------------------------------
+Once restarted, verify that the server is up and responding:
+
+1. Test health endpoint:
+   curl http://localhost:8080/health
+   # or curl http://localhost:8000/health
+   # Expected response: {"status":"ok"}
+
+2. View live logs:
+   # If Docker:
+   docker logs -f --tail 50 mantra-voice-agent
+
+   # If systemd:
+   journalctl -u mantra-voice-agent -f -n 50
+
+   # If PM2:
+   pm2 logs python-server
+================================================================================
