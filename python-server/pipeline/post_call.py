@@ -119,7 +119,26 @@ async def run_post_call_pipeline(
     """Run the post-call analytics and update long-term storage asynchronously."""
     has_transcript = bool(state.transcript_lines)
     if not has_transcript and not recording_content:
-        logger.info(f"[post-call] No transcript or recording for call {state.call_id}, skipping.")
+        logger.info(f"[post-call] No transcript or recording for call {state.call_id}. Finalizing as missed call.")
+        try:
+            call_status = CallStatus.MISSED if duration_seconds < 5 else CallStatus.RESOLVED
+            await call_service.finalize_call(
+                call_id=state.call_id,
+                duration=max(0, int(duration_seconds or 0)),
+                transcript=None,
+                summary="Call ended without audio or transcript recorded.",
+                intent="None",
+                call_category=CallCategory.INQUIRY,
+                outcome="no_transcript",
+                status=call_status,
+                caller_name=state.identity.name if (state.identity and state.identity.name) else None,
+                is_red_flagged=False,
+                red_flag_reason=None,
+                guardrail_triggered=None,
+            )
+            logger.info(f"[post-call] Finalized zero-data call {state.call_id} as status={call_status.value}")
+        except Exception as e:
+            logger.error(f"[post-call] Failed to finalize zero-data call {state.call_id}: {e}")
         return
 
     logger.info(f"[post-call] Starting post-call pipeline for {state.call_id}")

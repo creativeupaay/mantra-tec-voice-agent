@@ -360,12 +360,91 @@ async def run_bot(
             enable_rtvi=False,
         )
 
-    async def _request_disconnect(delay: float = 3.0):
+    call_ended_lock = asyncio.Lock()
+    call_ended_processed = False
+
+    async def _handle_call_ended(trigger: str = "unknown"):
+        nonlocal call_ended_processed
+        async with call_ended_lock:
+            if call_ended_processed:
+                return
+            call_ended_processed = True
+
+            logger.info(f"[bot] Call {call_id} ended (trigger={trigger}) — initiating finalization")
+
+            # Snapshot audio BEFORE stop_recording() — that method clears buffers after
+            # scheduling on_audio_data as a background task (not awaited).
+            snapshot_pcm = b""
+            snapshot_rate = audio_buffer.sample_rate or 16000
+            snapshot_channels = audio_buffer.num_channels
+            try:
+                if audio_buffer.has_audio():
+                    audio_buffer._align_track_buffers()
+                    snapshot_pcm = audio_buffer.merge_audio_buffers()
+            except Exception as e:
+                logger.warning(f"[bot] Could not snapshot audio buffers: {e}")
+
+            try:
+                await audio_buffer.stop_recording()
+                try:
+                    await asyncio.wait_for(recording_ready.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    logger.warning("[bot] Timed out waiting for recording_stopped event")
+            except Exception as e:
+                logger.error(f"[bot] Failed to stop audio recording: {e}")
+
+            pcm_audio = recorded_audio.get("audio") or snapshot_pcm or b""
+            sample_rate = int(recorded_audio.get("sample_rate") or snapshot_rate or 16000)
+            num_channels = int(recorded_audio.get("num_channels") or snapshot_channels or 1)
+
+            recording_bytes = None
+            if pcm_audio:
+                recording_bytes = _pcm_to_wav(pcm_audio, sample_rate, num_channels)
+                logger.info(
+                    f"[bot] Recorded {len(pcm_audio)} PCM bytes → {len(recording_bytes)} WAV bytes "
+                    f"@ {sample_rate}Hz x{num_channels}"
+                )
+            else:
+                logger.warning(f"[bot] No audio captured for call {call_id}")
+
+            # Prefer wall-clock duration; fall back to monotonic / audio length.
+            duration_candidates: list[int] = []
+            if state.call_started_wall:
+                duration_candidates.append(max(0, int(time.time() - state.call_started_wall)))
+            if state.call_started_at:
+                duration_candidates.append(max(0, int(time.monotonic() - state.call_started_at)))
+            if pcm_audio and sample_rate > 0:
+                duration_candidates.append(
+                    max(0, len(pcm_audio) // (sample_rate * max(1, num_channels) * 2))
+                )
+            duration_seconds = max(duration_candidates) if duration_candidates else 0
+            logger.info(f"[bot] Call {call_id} duration calculated as {duration_seconds}s")
+
+            # Cancel the pipeline task to teardown stream connection if still active
+            try:
+                if not task.has_finished():
+                    await task.cancel()
+            except Exception as e:
+                logger.warning(f"[bot] Task cancel notice for call {call_id}: {e}")
+
+            # Run post-call pipeline to completion (awaited directly so all DB writes and CRM sync finish)
+            try:
+                await run_post_call_pipeline(
+                    state,
+                    duration_seconds,
+                    recording_bytes,
+                    recording_content_type="audio/wav",
+                )
+                logger.info(f"[bot] Post-call pipeline completed for call {call_id}")
+            except Exception as e:
+                logger.error(f"[bot] Post-call pipeline failed for call {call_id}: {e}")
+
+    async def _request_disconnect(delay: float = 3.5):
         try:
-            logger.info(f"[bot] Disconnect requested for call {call_id} — scheduling cancel in {delay}s")
+            logger.info(f"[bot] Disconnect requested for call {call_id} — waiting {delay}s for TTS goodbye delivery")
             await asyncio.sleep(delay)
-            logger.info(f"[bot] Cancelling task to disconnect call {call_id}")
-            await task.cancel()
+            logger.info(f"[bot] Disconnecting call {call_id} now")
+            await _handle_call_ended(trigger="agent_tool_disconnect")
         except Exception as e:
             logger.error(f"[bot] Error during call disconnect: {e}")
 
@@ -424,66 +503,22 @@ async def run_bot(
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
-        logger.info(f"[bot] Client disconnected — call {call_id}")
+        logger.info(f"[bot] Transport on_client_disconnected — call {call_id}")
+        await _handle_call_ended(trigger="client_disconnected")
 
-        # Snapshot audio BEFORE stop_recording() — that method clears buffers after
-        # scheduling on_audio_data as a background task (not awaited).
-        snapshot_pcm = b""
-        snapshot_rate = audio_buffer.sample_rate or 16000
-        snapshot_channels = audio_buffer.num_channels
-        try:
-            if audio_buffer.has_audio():
-                audio_buffer._align_track_buffers()
-                snapshot_pcm = audio_buffer.merge_audio_buffers()
-        except Exception as e:
-            logger.warning(f"[bot] Could not snapshot audio buffers: {e}")
+    # Extra transport events (for LiveKit or transports with alternative disconnect events)
+    supported_handlers = getattr(transport, "_supported_event_handlers", set())
+    if "on_participant_disconnected" in supported_handlers:
+        @transport.event_handler("on_participant_disconnected")
+        async def on_participant_disconnected(transport, participant):
+            logger.info(f"[bot] Participant disconnected — call {call_id}")
+            await _handle_call_ended(trigger="participant_disconnected")
 
-        try:
-            await audio_buffer.stop_recording()
-            try:
-                await asyncio.wait_for(recording_ready.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
-                logger.warning("[bot] Timed out waiting for recording_stopped event")
-        except Exception as e:
-            logger.error(f"[bot] Failed to stop audio recording: {e}")
-
-        pcm_audio = recorded_audio.get("audio") or snapshot_pcm or b""
-        sample_rate = int(recorded_audio.get("sample_rate") or snapshot_rate or 16000)
-        num_channels = int(recorded_audio.get("num_channels") or snapshot_channels or 1)
-
-        recording_bytes = None
-        if pcm_audio:
-            recording_bytes = _pcm_to_wav(pcm_audio, sample_rate, num_channels)
-            logger.info(
-                f"[bot] Recorded {len(pcm_audio)} PCM bytes → {len(recording_bytes)} WAV bytes "
-                f"@ {sample_rate}Hz x{num_channels}"
-            )
-        else:
-            logger.warning(f"[bot] No audio captured for call {call_id}")
-
-        # Prefer wall-clock duration; fall back to monotonic / audio length.
-        duration_candidates: list[int] = []
-        if state.call_started_wall:
-            duration_candidates.append(max(0, int(time.time() - state.call_started_wall)))
-        if state.call_started_at:
-            duration_candidates.append(max(0, int(time.monotonic() - state.call_started_at)))
-        if pcm_audio and sample_rate > 0:
-            duration_candidates.append(
-                max(0, len(pcm_audio) // (sample_rate * max(1, num_channels) * 2))
-            )
-        duration_seconds = max(duration_candidates) if duration_candidates else 0
-        logger.info(f"[bot] Call duration calculated as {duration_seconds}s")
-
-        asyncio.create_task(
-            run_post_call_pipeline(
-                state,
-                duration_seconds,
-                recording_bytes,
-                recording_content_type="audio/wav",
-            )
-        )
-
-        await task.cancel()
+    if "on_disconnected" in supported_handlers:
+        @transport.event_handler("on_disconnected")
+        async def on_disconnected(transport):
+            logger.info(f"[bot] Transport disconnected — call {call_id}")
+            await _handle_call_ended(trigger="transport_disconnected")
 
     if not gemini_mode:
         @user_aggregator.event_handler("on_user_turn_stopped")
@@ -515,7 +550,7 @@ async def run_bot(
                     LLMMessagesAppendFrame([{"role": "system", "content": "The user is still silent. Say 'I haven't heard anything for a while, so I will disconnect the call now. Have a great day!' and then use your tools to hang up or just say it and we will cancel the task."}]),
                     LLMRunFrame()
                 ])
-                asyncio.create_task(_delayed_cancel(task, delay=5.0))
+                asyncio.create_task(_delayed_cancel(delay=5.0))
 
         @assistant_aggregator.event_handler("on_assistant_turn_stopped")
         async def on_assistant_turn_stopped(aggregator, message: AssistantTurnStoppedMessage):
@@ -524,13 +559,19 @@ async def run_bot(
             state.transcript_lines.append(f"{ts}assistant: {content}")
             logger.info(f"[bot] Transcript — {ts}assistant: {content}")
 
-    async def _delayed_cancel(task: PipelineWorker, delay: float = 5.0):
-        await asyncio.sleep(delay)
-        await task.cancel()
+    async def _delayed_cancel(delay: float = 5.0):
+        try:
+            await asyncio.sleep(delay)
+            await _handle_call_ended(trigger="idle_timeout_disconnect")
+        except Exception as e:
+            logger.error(f"[bot] Error during delayed cancel: {e}")
 
     # ── 5. Run ────────────────────────────────────────────────────────────────
     runner = PipelineRunner(handle_sigint=False)
-    await runner.run(task)
+    try:
+        await runner.run(task)
+    finally:
+        await _handle_call_ended(trigger="pipeline_finished")
 
 
 
