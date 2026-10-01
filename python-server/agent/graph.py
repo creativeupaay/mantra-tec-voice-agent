@@ -13,7 +13,7 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 from loguru import logger
 
-from agent.tools import booking_tools, crm_tools, desk_tools, memory_tools, product_tools
+from agent.tools import booking_tools, call_tools, crm_tools, desk_tools, memory_tools, product_tools
 
 # ── Tool Schema Registry ──────────────────────────────────────────────────────
 # ToolsSchema is what LLMContext expects.
@@ -21,6 +21,7 @@ from agent.tools import booking_tools, crm_tools, desk_tools, memory_tools, prod
 TOOLS_SCHEMA = ToolsSchema(
     standard_tools=[
         product_tools.SCHEMA,
+        call_tools.SCHEMA,
         # Tools temporarily detached as per user request to mimic flow only.
     ]
 )
@@ -29,6 +30,7 @@ TOOLS_SCHEMA = ToolsSchema(
 
 _HANDLERS = {
     "search_products": product_tools.handle,
+    "end_call": call_tools.handle,
     "zoho_crm_create_lead": crm_tools.handle_create_lead,
     "zoho_crm_search_lead": crm_tools.handle_get_crm,
     "zoho_desk_create_ticket": desk_tools.handle_create_ticket,

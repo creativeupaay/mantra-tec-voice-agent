@@ -8,9 +8,10 @@ Point your Exotel flow's Connect Applet / Stream Applet at ``/exotel/answer``.
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from loguru import logger
 
+from config.database import get_db
 from env_config import settings
 from services.exotel.xml import build_stream_xml, build_websocket_url
 from services.plivo.urls import resolve_public_base_url
@@ -72,3 +73,44 @@ async def exotel_answer(request: Request) -> Response:
     # Exotel Stream Applet expects a JSON response with the "url" key
     logger.debug(f"[exotel] Returning dynamic WebSocket URL: {ws_url}")
     return JSONResponse(content={"url": ws_url})
+
+
+@router.api_route("/routing", methods=["GET", "POST"], operation_id="exotel_routing")
+async def exotel_routing(request: Request) -> Response:
+    """Decision endpoint for Exotel Passthru applet.
+    
+    If 'forward_to_human' is enabled in settings, returns 302 Found (routing to Connect Applet).
+    Otherwise returns 200 OK (routing to Voicebot Applet).
+    """
+    try:
+        db = get_db()
+        settings_doc = await db["settings"].find_one()
+        if settings_doc and settings_doc.get("forward_to_human", False):
+            logger.info("[exotel/routing] Forward to human is ENABLED. Returning 302 Found for Connect applet.")
+            return Response(status_code=302)
+    except Exception as e:
+        logger.error(f"[exotel/routing] Error checking forwarding settings: {e}")
+
+    logger.info("[exotel/routing] Forward to human is DISABLED. Returning 200 OK for Voicebot applet.")
+    return Response(status_code=200)
+
+
+@router.api_route("/forward-number", methods=["GET", "POST"], operation_id="exotel_forward_number")
+async def exotel_forward_number(request: Request) -> Response:
+    """Returns the plain text destination phone number for Exotel Connect applet."""
+    phone_number = ""
+    try:
+        db = get_db()
+        settings_doc = await db["settings"].find_one()
+        if settings_doc:
+            phone_number = str(settings_doc.get("forward_phone_number", "") or "").strip()
+    except Exception as e:
+        logger.error(f"[exotel/forward-number] Error fetching forward phone number: {e}")
+
+    # Fallback default if not configured in dashboard
+    if not phone_number:
+        phone_number = "+919876543210"
+
+    logger.info(f"[exotel/forward-number] Returning destination number: {phone_number}")
+    return PlainTextResponse(content=phone_number, status_code=200)
+

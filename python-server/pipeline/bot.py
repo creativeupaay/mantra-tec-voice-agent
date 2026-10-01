@@ -360,6 +360,17 @@ async def run_bot(
             enable_rtvi=False,
         )
 
+    async def _request_disconnect(delay: float = 3.0):
+        try:
+            logger.info(f"[bot] Disconnect requested for call {call_id} — scheduling cancel in {delay}s")
+            await asyncio.sleep(delay)
+            logger.info(f"[bot] Cancelling task to disconnect call {call_id}")
+            await task.cancel()
+        except Exception as e:
+            logger.error(f"[bot] Error during call disconnect: {e}")
+
+    state.request_disconnect = _request_disconnect
+
     # ── 4. Event handlers ──────────────────────────────────────────────────────
 
     @transport.event_handler("on_client_connected")

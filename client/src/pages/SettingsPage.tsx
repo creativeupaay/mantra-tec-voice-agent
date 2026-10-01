@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Trash2
+  Trash2,
+  PhoneForwarded,
+  Phone
 } from 'lucide-react'
 import { settingsApi } from '../api/client'
 
@@ -15,13 +17,17 @@ interface SystemSettings {
   organization_name: string
   notify_on_escalation: boolean
   escalation_emails: string[]
+  forward_to_human?: boolean
+  forward_phone_number?: string
 }
 
 const SettingsPage: FC = () => {
   const [settings, setSettings] = useState<SystemSettings>({
     organization_name: 'Mantra Tech',
     notify_on_escalation: true,
-    escalation_emails: ['admin@mantratec.com', 'escalations@mantratec.com']
+    escalation_emails: ['admin@mantratec.com', 'escalations@mantratec.com'],
+    forward_to_human: false,
+    forward_phone_number: '',
   })
 
   const [newEmailInput, setNewEmailInput] = useState('')
@@ -112,8 +118,76 @@ const SettingsPage: FC = () => {
       <div>
         <h2 className="text-2xl font-bold text-text-primary tracking-tight">System Settings</h2>
         <p className="text-sm text-text-secondary mt-1">
-          Manage system preferences and escalation email alert recipients.
+          Manage system preferences, inbound call routing, and escalation alert recipients.
         </p>
+      </div>
+
+      {/* Call Routing & Forwarding Card */}
+      <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
+        <div className="border-b border-border bg-surface-page/50 px-6">
+          <div className="flex items-center space-x-2 py-4">
+            <PhoneForwarded size={18} className="text-blue-500" />
+            <span className="text-sm font-semibold text-text-primary">Inbound Call Routing & Human Forwarding</span>
+          </div>
+        </div>
+
+        <div className="p-6 md:p-8 space-y-6">
+          {/* Toggle */}
+          <div className="flex items-center justify-between p-4 bg-surface-page rounded-xl border border-border">
+            <div className="space-y-0.5">
+              <div className="flex items-center space-x-2">
+                <PhoneForwarded size={18} className={settings.forward_to_human ? "text-amber-500" : "text-text-secondary"} />
+                <h3 className="text-base font-semibold text-text-primary">
+                  Forward All Inbound Calls to Human Agent
+                </h3>
+                {settings.forward_to_human ? (
+                  <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold rounded-full uppercase tracking-wider">
+                    Human Forwarding Active
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 bg-green-50 border border-green-200 text-green-700 text-[10px] font-semibold rounded-full uppercase tracking-wider">
+                    AI Voicebot Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-text-secondary pl-6">
+                When enabled, incoming calls on Exotel will immediately bypass the AI Voicebot and forward directly to the human phone number below.
+              </p>
+            </div>
+
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.forward_to_human)}
+                onChange={(e) =>
+                  setSettings(prev => ({ ...prev, forward_to_human: e.target.checked }))
+                }
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+            </label>
+          </div>
+
+          {/* Forwarding Phone Number */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-text-primary flex items-center space-x-2">
+              <Phone size={16} className="text-text-secondary" />
+              <span>Forward Destination Phone Number</span>
+            </label>
+            <p className="text-xs text-text-secondary">
+              Enter the phone number in international format with country code (e.g. <span className="font-mono font-medium">+919876543210</span>) that Exotel will dial when forwarding is turned on.
+            </p>
+            <input
+              type="tel"
+              value={settings.forward_phone_number || ''}
+              onChange={(e) =>
+                setSettings(prev => ({ ...prev, forward_phone_number: e.target.value }))
+              }
+              placeholder="+919876543210"
+              className="w-full max-w-md px-3.5 py-2.5 bg-transparent border border-border rounded-xl focus:outline-none focus:border-text-primary text-sm font-mono text-text-primary transition-colors"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Main Settings Card */}

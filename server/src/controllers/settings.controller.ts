@@ -14,6 +14,8 @@ export const getSettings = async (_req: Request, res: Response, next: NextFuncti
         escalation_emails: ['admin@mantratec.com'],
         resend_api_key: '',
         resend_from_email: 'onboarding@resend.dev',
+        forward_to_human: false,
+        forward_phone_number: '',
       })
       settings = created.toObject()
     }
@@ -36,6 +38,8 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
       escalation_emails,
       resend_api_key,
       resend_from_email,
+      forward_to_human,
+      forward_phone_number,
     } = req.body
 
     let settings = await Settings.findOne()
@@ -55,6 +59,8 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
     }
     if (resend_api_key !== undefined) settings.resend_api_key = String(resend_api_key).trim()
     if (resend_from_email !== undefined) settings.resend_from_email = String(resend_from_email).trim()
+    if (forward_to_human !== undefined) settings.forward_to_human = Boolean(forward_to_human)
+    if (forward_phone_number !== undefined) settings.forward_phone_number = String(forward_phone_number).trim()
 
     await settings.save()
 

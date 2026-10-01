@@ -150,6 +150,7 @@ async def plivo_websocket_endpoint(
         await run_bot(transport, call_id, phone_number)
     except Exception as e:
         logger.error(f"[server] WebSocket error: {e}")
+    finally:
         try:
             await websocket.close()
         except Exception:
@@ -197,6 +198,7 @@ async def exotel_websocket_endpoint(
         await run_bot(transport, call_id, phone_number)
     except Exception as e:
         logger.error(f"[server] Exotel WebSocket error: {e}")
+    finally:
         try:
             await websocket.close()
         except Exception:
