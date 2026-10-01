@@ -117,6 +117,10 @@ async def handle_create_lead(params: FunctionCallParams) -> None:
     last_name = name_parts[-1] if name_parts else "Unknown"
     first_name = " ".join(name_parts[:-1]) if len(name_parts) > 1 else ""
 
+    desc = description or f"Lead created via Voice Agent for {name}"
+    if "[voice agent]" not in desc.lower():
+        desc = f"{desc}\n\n[voice agent]"
+
     lead_data: dict = {
         "Last_Name": last_name,
         "First_Name": first_name,
@@ -127,7 +131,7 @@ async def handle_create_lead(params: FunctionCallParams) -> None:
         "City": city,
         "Country": country,
         "Subject": subject or f"Voice Lead - {name}",
-        "Description": description or f"Lead created via Voice Agent for {name}",
+        "Description": desc,
         "Lead_Source": "Voice Agent - Bulk Order" if "bulk" in (subject + description).lower() else "Voice Agent",
     }
 

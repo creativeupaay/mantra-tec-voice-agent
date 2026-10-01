@@ -13,8 +13,11 @@ Feature flags (auto-detected from credentials unless explicitly overridden):
 import os
 from dataclasses import dataclass
 
+from pathlib import Path
 from dotenv import load_dotenv
 
+_env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(_env_path, override=True)
 load_dotenv(override=True)
 
 
@@ -177,8 +180,8 @@ def _load() -> Settings:
         zoho_client_id=zoho_client_id,
         zoho_client_secret=zoho_client_secret,
         zoho_refresh_token=zoho_refresh_token,
-        zoho_accounts_url=os.getenv("ZOHO_ACCOUNTS_URL", "https://accounts.zoho.in"),
-        zoho_crm_base_url=os.getenv("ZOHO_CRM_BASE_URL", "https://www.zohoapis.in/crm/v2"),
+        zoho_accounts_url=os.getenv("ZOHO_ACCOUNTS_URL", "https://accounts.zoho.com"),
+        zoho_crm_base_url=os.getenv("ZOHO_CRM_BASE_URL", "https://www.zohoapis.com/crm/v2"),
         zoho_desk_base_url=os.getenv("ZOHO_DESK_BASE_URL", "https://desk.zoho.in/api/v1"),
         zoho_desk_org_id=os.getenv("ZOHO_DESK_ORG_ID", ""),
         # Knowledge Base

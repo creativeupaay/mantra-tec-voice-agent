@@ -365,6 +365,8 @@ async def run_post_call_pipeline(
                 desc = extraction.requirement_description or extraction.summary
                 if extraction.product_requested and "product" not in desc.lower():
                     desc = f"Product Requested: {extraction.product_requested}\nQuantity: {extraction.quantity or 'N/A'}\n\n{desc}"
+                if "[voice agent]" not in desc.lower():
+                    desc = f"{desc}\n\n[voice agent]"
 
                 lead_payload = {
                     "Last_Name": last_name,
