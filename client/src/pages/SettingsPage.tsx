@@ -3,7 +3,6 @@ import {
   Bell,
   Mail,
   Plus,
-  X,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -33,8 +32,15 @@ const SettingsPage: FC = () => {
   const [newEmailInput, setNewEmailInput] = useState('')
   const [emailError, setEmailError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+
+  // Routing Card states
+  const [isSavingRouting, setIsSavingRouting] = useState(false)
+  const [routingSaveSuccess, setRoutingSaveSuccess] = useState<string | null>(null)
+  const [routingError, setRoutingError] = useState<string | null>(null)
+
+  // Email Card states
+  const [isSavingEmail, setIsSavingEmail] = useState(false)
+  const [emailSaveSuccess, setEmailSaveSuccess] = useState<string | null>(null)
 
   // Load settings on mount
   useEffect(() => {
@@ -54,6 +60,51 @@ const SettingsPage: FC = () => {
       setIsLoading(false)
     }
   }
+
+  // ── Call Routing Handlers ──────────────────────────────────────────────────
+
+  const handleToggleForwarding = (checked: boolean) => {
+    setRoutingError(null)
+    setRoutingSaveSuccess(null)
+
+    if (checked) {
+      const phone = (settings.forward_phone_number || '').trim()
+      if (!phone || phone.length < 8) {
+        setRoutingError('Please enter a destination phone number below before enabling call forwarding.')
+        return
+      }
+    }
+
+    setSettings(prev => ({ ...prev, forward_to_human: checked }))
+  }
+
+  const handleSaveRouting = async () => {
+    setRoutingError(null)
+    setRoutingSaveSuccess(null)
+
+    const phone = (settings.forward_phone_number || '').trim()
+    if (settings.forward_to_human && (!phone || phone.length < 8)) {
+      setRoutingError('Please enter a valid phone number with country code (e.g. +919876543210) to enable forwarding.')
+      return
+    }
+
+    setIsSavingRouting(true)
+    try {
+      const response = await settingsApi.update(settings)
+      if (response.data?.data) {
+        setSettings(response.data.data)
+        setRoutingSaveSuccess('Routing settings saved successfully!')
+        setTimeout(() => setRoutingSaveSuccess(null), 4000)
+      }
+    } catch (err: any) {
+      console.error('Failed to save routing settings:', err)
+      setRoutingError(err.response?.data?.message || 'Failed to save routing settings')
+    } finally {
+      setIsSavingRouting(false)
+    }
+  }
+
+  // ── Escalation Email Handlers ──────────────────────────────────────────────
 
   const handleAddEmail = () => {
     setEmailError(null)
@@ -86,29 +137,29 @@ const SettingsPage: FC = () => {
     }))
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       handleAddEmail()
     }
   }
 
-  const handleSave = async () => {
-    setIsSaving(true)
-    setSaveSuccess(null)
+  const handleSaveEmail = async () => {
+    setIsSavingEmail(true)
+    setEmailSaveSuccess(null)
 
     try {
       const response = await settingsApi.update(settings)
       if (response.data?.data) {
         setSettings(response.data.data)
-        setSaveSuccess('Settings saved successfully!')
-        setTimeout(() => setSaveSuccess(null), 4000)
+        setEmailSaveSuccess('Email settings saved successfully!')
+        setTimeout(() => setEmailSaveSuccess(null), 4000)
       }
     } catch (err: any) {
-      console.error('Failed to save settings:', err)
+      console.error('Failed to save email settings:', err)
       alert(err.response?.data?.message || 'Failed to save settings')
     } finally {
-      setIsSaving(false)
+      setIsSavingEmail(false)
     }
   }
 
@@ -122,93 +173,126 @@ const SettingsPage: FC = () => {
         </p>
       </div>
 
-      {/* Call Routing & Forwarding Card */}
-      <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
-        <div className="border-b border-border bg-surface-page/50 px-6">
-          <div className="flex items-center space-x-2 py-4">
-            <PhoneForwarded size={18} className="text-blue-500" />
-            <span className="text-sm font-semibold text-text-primary">Inbound Call Routing & Human Forwarding</span>
-          </div>
+      {isLoading ? (
+        <div className="bg-surface-card rounded-2xl border border-border shadow-sm p-16 flex flex-col items-center justify-center space-y-3 text-text-secondary">
+          <Loader2 className="animate-spin text-text-primary" size={28} />
+          <span className="text-sm font-medium">Loading system settings...</span>
         </div>
-
-        <div className="p-6 md:p-8 space-y-6">
-          {/* Toggle */}
-          <div className="flex items-center justify-between p-4 bg-surface-page rounded-xl border border-border">
-            <div className="space-y-0.5">
-              <div className="flex items-center space-x-2">
-                <PhoneForwarded size={18} className={settings.forward_to_human ? "text-amber-500" : "text-text-secondary"} />
-                <h3 className="text-base font-semibold text-text-primary">
-                  Forward All Inbound Calls to Human Agent
-                </h3>
-                {settings.forward_to_human ? (
-                  <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold rounded-full uppercase tracking-wider">
-                    Human Forwarding Active
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 bg-green-50 border border-green-200 text-green-700 text-[10px] font-semibold rounded-full uppercase tracking-wider">
-                    AI Voicebot Active
-                  </span>
-                )}
+      ) : (
+        <>
+          {/* Card 1: Call Routing & Forwarding */}
+          <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
+            <div className="border-b border-border bg-surface-page/50 px-6">
+              <div className="flex items-center space-x-2 py-4">
+                <PhoneForwarded size={18} className="text-blue-500" />
+                <span className="text-sm font-semibold text-text-primary">Inbound Call Routing & Human Forwarding</span>
               </div>
-              <p className="text-xs text-text-secondary pl-6">
-                When enabled, incoming calls on Exotel will immediately bypass the AI Voicebot and forward directly to the human phone number below.
-              </p>
             </div>
 
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(settings.forward_to_human)}
-                onChange={(e) =>
-                  setSettings(prev => ({ ...prev, forward_to_human: e.target.checked }))
-                }
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-            </label>
-          </div>
+            <div className="p-6 md:p-8 space-y-6">
+              {/* Toggle with badge */}
+              <div className="flex items-center justify-between p-4 bg-surface-page rounded-xl border border-border">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2.5">
+                    <PhoneForwarded size={18} className={settings.forward_to_human ? "text-amber-500" : "text-text-secondary"} />
+                    <h3 className="text-base font-semibold text-text-primary">
+                      Forward All Inbound Calls to Human Agent
+                    </h3>
+                    {settings.forward_to_human ? (
+                      <span className="px-2.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-semibold rounded-full uppercase tracking-wider">
+                        Human Forwarding Active
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 bg-green-50 border border-green-200 text-green-700 text-[11px] font-semibold rounded-full uppercase tracking-wider">
+                        AI Voicebot Active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-secondary pl-7">
+                    When enabled, incoming calls on Exotel bypass the AI Voicebot and forward directly to the destination phone number below.
+                  </p>
+                </div>
 
-          {/* Forwarding Phone Number */}
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-text-primary flex items-center space-x-2">
-              <Phone size={16} className="text-text-secondary" />
-              <span>Forward Destination Phone Number</span>
-            </label>
-            <p className="text-xs text-text-secondary">
-              Enter the phone number in international format with country code (e.g. <span className="font-mono font-medium">+919876543210</span>) that Exotel will dial when forwarding is turned on.
-            </p>
-            <input
-              type="tel"
-              value={settings.forward_phone_number || ''}
-              onChange={(e) =>
-                setSettings(prev => ({ ...prev, forward_phone_number: e.target.value }))
-              }
-              placeholder="+919876543210"
-              className="w-full max-w-md px-3.5 py-2.5 bg-transparent border border-border rounded-xl focus:outline-none focus:border-text-primary text-sm font-mono text-text-primary transition-colors"
-            />
-          </div>
-        </div>
-      </div>
+                <label className="relative inline-flex items-center cursor-pointer ml-4">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.forward_to_human)}
+                    onChange={(e) => handleToggleForwarding(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                </label>
+              </div>
 
-      {/* Main Settings Card */}
-      <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
-        {/* Section Header */}
-        <div className="border-b border-border bg-surface-page/50 px-6">
-          <div className="flex items-center space-x-2 py-4">
-            <Bell size={18} className="text-red-500" />
-            <span className="text-sm font-semibold text-text-primary">Escalated Call Notifications</span>
-          </div>
-        </div>
+              {/* Forwarding Phone Number Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-text-primary flex items-center space-x-2">
+                  <Phone size={16} className="text-text-secondary" />
+                  <span>Forward Destination Phone Number</span>
+                </label>
+                <p className="text-xs text-text-secondary">
+                  Enter the phone number with country code (e.g. <span className="font-mono font-medium">+919876543210</span>) that Exotel will dial.
+                </p>
+                <div className="flex space-x-2">
+                  <input
+                    type="tel"
+                    value={settings.forward_phone_number || ''}
+                    onChange={(e) => {
+                      setRoutingError(null)
+                      setSettings(prev => ({ ...prev, forward_phone_number: e.target.value }))
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleSaveRouting()
+                      }
+                    }}
+                    placeholder="+919876543210"
+                    className="w-full max-w-md px-3.5 py-2.5 bg-transparent border border-border rounded-xl focus:outline-none focus:border-text-primary text-sm font-mono text-text-primary transition-colors"
+                  />
+                </div>
+              </div>
 
-        {/* Content */}
-        <div className="p-6 md:p-8 space-y-8">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12 space-x-3 text-text-secondary">
-              <Loader2 className="animate-spin" size={24} />
-              <span className="text-sm font-medium">Loading system settings...</span>
+              {/* Routing Card Footer with dedicated Save button */}
+              <div className="pt-4 border-t border-border flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  {routingSaveSuccess && (
+                    <span className="text-xs font-semibold text-green-600 flex items-center space-x-1 animate-fade-in">
+                      <CheckCircle2 size={16} />
+                      <span>{routingSaveSuccess}</span>
+                    </span>
+                  )}
+                  {routingError && (
+                    <span className="text-xs font-semibold text-red-500 flex items-center space-x-1 animate-fade-in">
+                      <AlertCircle size={16} />
+                      <span>{routingError}</span>
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveRouting}
+                  disabled={isSavingRouting}
+                  className="px-5 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50"
+                >
+                  {isSavingRouting && <Loader2 className="animate-spin" size={14} />}
+                  <span>{isSavingRouting ? 'Saving...' : 'Save Routing Settings'}</span>
+                </button>
+              </div>
             </div>
-          ) : (
-            <>
+          </div>
+
+          {/* Card 2: Escalated Call Notifications */}
+          <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
+            <div className="border-b border-border bg-surface-page/50 px-6">
+              <div className="flex items-center space-x-2 py-4">
+                <Bell size={18} className="text-red-500" />
+                <span className="text-sm font-semibold text-text-primary">Escalated Call Notifications</span>
+              </div>
+            </div>
+
+            <div className="p-6 md:p-8 space-y-8">
               {/* Notification Enable Toggle */}
               <div className="flex items-center justify-between p-4 bg-surface-page rounded-xl border border-border">
                 <div className="space-y-0.5">
@@ -259,7 +343,7 @@ const SettingsPage: FC = () => {
                           setNewEmailInput(e.target.value)
                           setEmailError(null)
                         }}
-                        onKeyDown={handleKeyDown}
+                        onKeyDown={handleEmailKeyDown}
                         placeholder="Enter email address (e.g. manager@mantratec.com)"
                         className="w-full pl-3.5 pr-10 py-2.5 bg-transparent border border-border rounded-xl focus:outline-none focus:border-text-primary text-sm text-text-primary transition-colors"
                       />
@@ -317,31 +401,31 @@ const SettingsPage: FC = () => {
                 </div>
               </div>
 
-              {/* Global Save Action Footer */}
+              {/* Email Save Action Footer */}
               <div className="pt-6 border-t border-border flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  {saveSuccess && (
+                  {emailSaveSuccess && (
                     <span className="text-xs font-semibold text-green-600 flex items-center space-x-1 animate-fade-in">
                       <CheckCircle2 size={16} />
-                      <span>{saveSuccess}</span>
+                      <span>{emailSaveSuccess}</span>
                     </span>
                   )}
                 </div>
 
                 <button
                   type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
+                  onClick={handleSaveEmail}
+                  disabled={isSavingEmail}
                   className="px-6 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50"
                 >
-                  {isSaving && <Loader2 className="animate-spin" size={14} />}
-                  <span>{isSaving ? 'Saving...' : 'Save Settings'}</span>
+                  {isSavingEmail && <Loader2 className="animate-spin" size={14} />}
+                  <span>{isSavingEmail ? 'Saving...' : 'Save Settings'}</span>
                 </button>
               </div>
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
