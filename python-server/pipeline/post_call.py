@@ -1,5 +1,6 @@
 """Post-call pipeline for LLM extraction and long-term memory updates."""
 
+import re
 from typing import List, Optional
 
 from google import genai
@@ -74,6 +75,37 @@ def _resolve_call_outcome(
     if has_transcript:
         return "completed"
     return "no_transcript"
+
+
+SHARED_FORWARDING_NUMBERS = {
+    "07969268119", "07948501661", "07969268000",
+    "+917969268119", "+917948501661", "+917969268000",
+    "7969268119", "7948501661", "7969268000",
+    "69268119", "48501661", "69268000",
+    "079-69268-000", "079-69268-119", "079-4850-1661",
+}
+
+
+def _extract_fallback_phone_from_transcript(transcript: str) -> Optional[str]:
+    """Extract customer phone number from transcript lines when LLM misses or truncates it."""
+    if not transcript:
+        return None
+    # 1. Look for explicit 10-digit sequence (Indian mobile format starting with 6, 7, 8, or 9)
+    matches_10 = re.findall(r"\b[6-9]\d{9}\b", transcript)
+    valid_10 = [m for m in matches_10 if m not in SHARED_FORWARDING_NUMBERS]
+    if valid_10:
+        return valid_10[-1]
+    
+    # 2. Look for any 8-12 digit sequence that is not the office trunk
+    matches_any = re.findall(r"\b\d{8,12}\b", transcript)
+    valid_any = [
+        m for m in matches_any 
+        if m not in SHARED_FORWARDING_NUMBERS and not m.startswith("079")
+    ]
+    if valid_any:
+        return valid_any[-1]
+
+    return None
 
 
 class PostCallExtraction(BaseModel):
@@ -170,7 +202,7 @@ class PostCallExtraction(BaseModel):
     )
     contact_phone_number: Optional[str] = Field(
         None,
-        description="The customer's 10-digit mobile or contact phone number if mentioned by the caller or collected during the conversation (e.g. '9876543210'). Only digits.",
+        description="The customer's contact mobile phone number mentioned or confirmed during the conversation (e.g. '9876543210'). If corrected or repeated, extract the final verified digits. Only digits.",
     )
 
 
@@ -219,7 +251,7 @@ async def run_post_call_pipeline(
             client = genai.Client(api_key=settings.gemini_api_key)
 
             gemini_raw_response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
+                model="gemini-3.8-flash",
                 contents=[
                     types.Part.from_text(text=f"Transcript:\n\n{transcript_text}")
                 ],
@@ -241,7 +273,9 @@ async def run_post_call_pipeline(
                         "3. OTHER CALLBACKS (Delivery issues, Device subscription / renewal):\n"
                         "   - If a callback was arranged for an order/delivery issue or device subscription/renewal, "
                         "     set callback_required = true (support_unresponsive_callback remains false).\n\n"
-                        "Extract the customer's 10-digit mobile contact number mentioned or provided by the caller into contact_phone_number. DO NOT use forwarding trunk numbers (such as 07969268119, 07948501661).\n"
+                        "Extract the customer's contact phone number mentioned or confirmed during the conversation into contact_phone_number. "
+                        "If the customer corrected or repeated digits (or if a 10-digit number was confirmed by the agent), extract the accurate digits. "
+                        "DO NOT use forwarding trunk numbers (such as 07969268119, 07948501661, 079-69268-000).\n"
                         "Flag if the agent lacked knowledge or detected sensitive/disallowed content.\n\n"
                         "CRITICAL RULE FOR AI CALL SUMMARY:\n"
                         "If the conversation is identified as a Bulk Order, Wholesale Enquiry, Enterprise Purchase, "
@@ -430,25 +464,41 @@ async def run_post_call_pipeline(
     )
 
     # ── Resolve effective customer phone number ──────────────────────────────
-    SHARED_FORWARDING_NUMBERS = {"07969268119", "07948501661", "+917969268119", "+917948501661"}
+    SHARED_TRUNK_SUFFIXES = {
+        "07969268119", "07948501661", "07969268000",
+        "7969268119", "7948501661", "7969268000",
+        "69268119", "48501661", "69268000"
+    }
     final_phone = state.phone_number
 
     extracted_contact = getattr(extraction, "contact_phone_number", None)
     clean_extracted = "".join(filter(str.isdigit, str(extracted_contact))) if extracted_contact else ""
     clean_state = "".join(filter(str.isdigit, str(state.phone_number))) if state.phone_number else ""
 
+    # If LLM didn't extract a phone number >= 8 digits, attempt fallback extraction from transcript
+    if len(clean_extracted) < 8 and transcript_text:
+        fallback_num = _extract_fallback_phone_from_transcript(transcript_text)
+        if fallback_num:
+            clean_extracted = "".join(filter(str.isdigit, fallback_num))
+            logger.info(
+                f"[post-call] Extracted fallback phone {clean_extracted} directly from transcript for call {state.call_id}"
+            )
+
     is_exotel_or_trunk = (
         getattr(state, "telephony_provider", "") == "exotel"
         or clean_state[-10:] in {"07969268119", "07948501661"}
+        or clean_state[-8:] in {"69268119", "48501661"}
     )
 
-    if len(clean_extracted) >= 10 and clean_extracted[-10:] not in {"07969268119", "07948501661"}:
+    if len(clean_extracted) >= 10 and not any(clean_extracted.endswith(s) for s in SHARED_TRUNK_SUFFIXES):
         final_phone = clean_extracted[-10:]
+    elif len(clean_extracted) >= 8 and not any(clean_extracted.endswith(s) for s in SHARED_TRUNK_SUFFIXES):
+        # Caller provided 8 or 9 digits (or STT had slight transcription noise) — preserve what the caller gave!
+        final_phone = clean_extracted
     elif is_exotel_or_trunk:
-        # Caller connected via Exotel or forwarded trunk and did not state their own number.
-        # DO NOT consider or save the Exotel trunk number as the customer's phone number!
+        # Caller connected via Exotel or forwarded trunk and truly did not state any number.
         final_phone = "unknown"
-    elif len(clean_state) >= 10 and clean_state[-10:] not in {"07969268119", "07948501661"}:
+    elif len(clean_state) >= 10 and not any(clean_state.endswith(s) for s in SHARED_TRUNK_SUFFIXES):
         final_phone = clean_state[-10:]
     else:
         final_phone = "unknown"
