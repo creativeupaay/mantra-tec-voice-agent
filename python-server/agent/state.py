@@ -30,7 +30,7 @@ class CallState:
     recent_calls: List[Call] = field(default_factory=list)
 
     # ── Detected / updated during the call ───────────────────────────────────
-    preferred_language: str = "hinglish"   # "en" | "hi" | "hinglish"
+    preferred_language: str = "en"   # "en" | "hi" | "hinglish"
     call_started_at: Optional[float] = None  # monotonic clock when call timing started
     call_started_wall: Optional[float] = None  # wall-clock time.time() for duration
 

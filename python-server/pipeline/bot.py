@@ -33,11 +33,9 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     Frame,
     LLMContextFrame,
-    LLMFullResponseEndFrame,
     LLMMessagesAppendFrame,
     LLMRunFrame,
     TranscriptionFrame,
-    TTSTextFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -154,10 +152,10 @@ def _build_tts():
                 voice=settings.elevenlabs_voice_id,
                 model=settings.elevenlabs_model,
                 language="hi",
-                stability=0.4,
+                stability=0.75,
                 similarity_boost=0.8,
-                style=0.25,
-                use_speaker_boost=True,
+                style=0.0,
+                use_speaker_boost=False,
             ),
         )
 
@@ -172,7 +170,7 @@ def _build_tts():
 # ── Gemini Live Watchers ──────────────────────────────────────────────────────
 
 class UserTranscriptCollector(FrameProcessor):
-    """Passive frame processor that logs user transcriptions going UPSTREAM."""
+    """Passive frame processor that logs user transcriptions going UPSTREAM (Gemini Live)."""
     def __init__(self, state):
         super().__init__()
         self.state = state
@@ -185,29 +183,6 @@ class UserTranscriptCollector(FrameProcessor):
             if content:
                 logger.info(f"[bot] Transcript — user: {content}")
                 self.state.transcript_lines.append(f"user: {content}")
-
-        await self.push_frame(frame, direction)
-
-
-class AssistantTranscriptCollector(FrameProcessor):
-    """Passive frame processor that logs assistant transcriptions going DOWNSTREAM."""
-    def __init__(self, state):
-        super().__init__()
-        self.state = state
-        self._assistant_buffer = []
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-
-        if isinstance(frame, TTSTextFrame) and direction == FrameDirection.DOWNSTREAM:
-            self._assistant_buffer.append(frame.text)
-
-        elif isinstance(frame, LLMFullResponseEndFrame) and direction == FrameDirection.DOWNSTREAM:
-            content = "".join(self._assistant_buffer).strip()
-            if content:
-                logger.info(f"[bot] Transcript — assistant: {content}")
-                self.state.transcript_lines.append(f"assistant: {content}")
-            self._assistant_buffer = []
 
         await self.push_frame(frame, direction)
 
@@ -276,7 +251,6 @@ async def run_bot(
         llm.register_function(None, agent_graph.dispatch)
 
         user_transcript_collector = UserTranscriptCollector(state)
-        assistant_transcript_collector = AssistantTranscriptCollector(state)
         credit_tracker = create_credit_tracker(state)
         # Must sit AFTER transport.output() so both user + bot audio are captured.
         audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
@@ -287,7 +261,6 @@ async def run_bot(
             user_aggregator,
             user_transcript_collector,
             llm,
-            assistant_transcript_collector,
             transport.output(),
             audio_buffer,
             assistant_aggregator,
@@ -328,8 +301,6 @@ async def run_bot(
             ),
         )
 
-        user_transcript_collector = UserTranscriptCollector(state)
-        assistant_transcript_collector = AssistantTranscriptCollector(state)
         credit_tracker = create_credit_tracker(state)
         # Must sit AFTER transport.output() so both user + bot audio are captured.
         audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
@@ -337,12 +308,10 @@ async def run_bot(
         pipeline = Pipeline([
             transport.input(),
             stt,
-            user_transcript_collector,
             credit_tracker,
             user_aggregator,
             llm,
             tts,
-            assistant_transcript_collector,
             transport.output(),
             audio_buffer,
             assistant_aggregator,
@@ -427,6 +396,9 @@ async def run_bot(
             except Exception as e:
                 logger.warning(f"[bot] Task cancel notice for call {call_id}: {e}")
 
+            # Brief yield to let any in-flight aggregator turn events settle into state
+            await asyncio.sleep(0.15)
+
             # Run post-call pipeline to completion (awaited directly so all DB writes and CRM sync finish)
             try:
                 await run_post_call_pipeline(
@@ -470,26 +442,47 @@ async def run_bot(
         scenario, elapsed_mins, rel_time, last_topic = get_caller_scenario(state)
         name_part = f" {state.identity.name}" if state.identity and state.identity.name else ""
 
+        is_hindi = state.preferred_language in ("hi", "hinglish")
+
         if scenario == "immediate_callback":
             topic_hint = f" Previous topic discussed was '{last_topic}'." if last_topic else ""
-            greeting_hint = (
-                f"The caller just called {elapsed_mins} min ago and the call likely got disconnected.{topic_hint} "
-                f"Greet them warmly acknowledging the disconnected call: 'Hello{name_part}, lagta hai call disconnect ho gayi thi. Haan ji boliye.' "
-                "Do NOT introduce the company or give a formal pitch because they were just on the line a minute ago. Be natural like a human picking back up."
-            )
+            if is_hindi:
+                greeting_hint = (
+                    f"The caller just called {elapsed_mins} min ago and the call likely got disconnected.{topic_hint} "
+                    f"Greet them calmly and politely acknowledging the disconnected call: 'Hello{name_part}, lagta hai call disconnect ho gayi thi. Haan ji boliye.' "
+                    "Do NOT introduce the company or give a formal pitch because they were just on the line a minute ago. Be calm and passive like a human picking back up."
+                )
+            else:
+                greeting_hint = (
+                    f"The caller just called {elapsed_mins} min ago and the call likely got disconnected.{topic_hint} "
+                    f"Greet them calmly and politely acknowledging the disconnected call in English: 'Hello{name_part}, looks like our call got disconnected. Yes, please go ahead.' "
+                    "Do NOT introduce the company or give a formal pitch because they were just on the line a minute ago. Be calm and passive like a human picking back up."
+                )
         elif scenario == "returning_caller":
             topic_hint = f" Previous discussion was '{last_topic}'." if last_topic else ""
-            greeting_hint = (
-                f"The caller is returning (last call: {rel_time}).{topic_hint} "
-                f"Greet warmly: 'Hello{name_part}! Welcome back to Mantra Tech, main Priya. Kaise hain aap? Bataiye aaj main aapki kya help kar sakti hoon?' "
-                f"Use {state.preferred_language} language."
-            )
+            if is_hindi:
+                greeting_hint = (
+                    f"The caller is returning (last call: {rel_time}).{topic_hint} "
+                    f"Greet calmly and politely in a gentle, passive tone: 'Hello{name_part}, welcome back to Mantra Tech, main Priya. Kaise hain aap? Bataiye aaj main aapki kya help kar sakti hoon?'"
+                )
+            else:
+                greeting_hint = (
+                    f"The caller is returning (last call: {rel_time}).{topic_hint} "
+                    f"Greet calmly and politely in a gentle, passive tone: 'Hello{name_part}, welcome back to Mantra Tech, I am Priya. How are you? How can I assist you today?'"
+                )
         else:
-            greeting_hint = (
-                "This is a first-time caller. Greet warmly with a brief professional opening: "
-                f"'Hello! Thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
-                f"Use {state.preferred_language} language."
-            )
+            if is_hindi:
+                greeting_hint = (
+                    "Greet politely and calmly in a relaxed, passive tone: "
+                    f"'Hello{name_part}, thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
+                    "Remember: If caller speaks English, mirror them and speak English immediately."
+                )
+            else:
+                greeting_hint = (
+                    "This is a first-time caller. Greet politely and calmly in a relaxed, passive tone in English: "
+                    "'Hello, thank you for calling Mantra Tech, I am Priya. How can I help you today?' "
+                    "CRITICAL LANGUAGE MIRRORING RULE: If caller replies in English, keep speaking in English. If caller replies in Hindi or Hinglish, switch immediately and mirror them in Hinglish."
+                )
 
         if gemini_mode:
             # Send the greeting as a user turn in the context.
@@ -523,11 +516,10 @@ async def run_bot(
     if not gemini_mode:
         @user_aggregator.event_handler("on_user_turn_stopped")
         async def on_user_turn_stopped(aggregator, strategy, message: UserTurnStoppedMessage):
-            content = message.content or ""
-            ts = f"[{message.timestamp}] " if message.timestamp else ""
-
-            state.transcript_lines.append(f"{ts}user: {content}")
-            logger.info(f"[bot] Transcript — {ts}user: {content}")
+            content = (message.content or "").strip()
+            if content:
+                state.transcript_lines.append(f"user: {content}")
+                logger.info(f"[bot] Transcript — user: {content}")
 
         @user_aggregator.event_handler("on_user_turn_idle")
         async def on_user_turn_idle(aggregator):
@@ -552,12 +544,13 @@ async def run_bot(
                 ])
                 asyncio.create_task(_delayed_cancel(delay=5.0))
 
-        @assistant_aggregator.event_handler("on_assistant_turn_stopped")
-        async def on_assistant_turn_stopped(aggregator, message: AssistantTurnStoppedMessage):
-            content = message.content or ""
-            ts = f"[{message.timestamp}] " if message.timestamp else ""
-            state.transcript_lines.append(f"{ts}assistant: {content}")
-            logger.info(f"[bot] Transcript — {ts}assistant: {content}")
+    @assistant_aggregator.event_handler("on_assistant_turn_stopped")
+    async def on_assistant_turn_stopped(aggregator, message: AssistantTurnStoppedMessage):
+        content = (message.content or "").strip()
+        if content:
+            state.transcript_lines.append(f"assistant: {content}")
+            tag = " (interrupted)" if message.interrupted else ""
+            logger.info(f"[bot] Transcript — assistant: {content}{tag}")
 
     async def _delayed_cancel(delay: float = 5.0):
         try:

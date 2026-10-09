@@ -108,6 +108,9 @@ class PostCallExtraction(BaseModel):
     guardrail_triggered: Optional[str] = Field(
         None, description="The guardrail trigger that was detected in the conversation, if any."
     )
+    detected_language: Optional[str] = Field(
+        None, description="Primary language spoken by the customer: 'en' for English, 'hi' for Hindi, or 'hinglish' for Hinglish."
+    )
 
 
 async def run_post_call_pipeline(
@@ -322,6 +325,8 @@ async def run_post_call_pipeline(
     # ── 3. Update Caller Identity ─────────────────────────────────────────────
     if has_transcript:
         try:
+            if extraction.detected_language and extraction.detected_language.lower() in ("en", "hi", "hinglish"):
+                state.preferred_language = extraction.detected_language.lower()
             agent_notes = "\n".join(extraction.long_term_notes) if extraction.long_term_notes else None
             await identity_service.update_after_call(
                 phone_number=state.phone_number,
