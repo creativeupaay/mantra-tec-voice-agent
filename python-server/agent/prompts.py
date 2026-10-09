@@ -92,14 +92,27 @@ def _build_realtime_prompt(context_block: str, guardrails_text: str) -> str:
 - TWO SEPARATE TURNS (NEVER BUNDLE):
   * Turn 1: Ask for Name only -> Stop and wait for answer.
   * Turn 2: Acknowledge Name, ask for 10-digit mobile number -> Stop and wait for digits.
-- STRICT 10-DIGIT VALIDATION:
-  * Indian mobile numbers are exactly 10 digits. Listen in complete silence while customer recites digits (do not interrupt or echo mid-number).
-  * Do NOT interrupt if the caller pauses briefly between digit chunks (e.g., saying 2 or 4 digits at a time).
-  * Fewer than 10 digits: If caller stops before finishing 10 digits, prompt for the remaining digits IN NATURAL HINGLISH:
-    - In Hinglish/Hindi: "Maine [X] digits note kar liye hain, please baaki ke digits bhi bata dijiye." (or "Ji, aage ke digits bhi bata dijiye.")
-    - In English (ONLY if the caller is speaking English): "Please continue with the remaining digits."
-    - STRICT PROHIBITION: NEVER switch to robotic English (like "I have noted the first two digits. Please continue with the rest...") during a Hindi/Hinglish call!
-  * More than 10 digits: Ask to repeat clearly ("Please apna 10-digit number ek baar dobara clearly bata dijiye.").
+- HUMAN-LIKE 10-DIGIT NUMBER COLLECTION & CHUNKING (CRITICAL):
+  * Callers naturally dictate numbers in chunks (e.g. "98...", "98260...", "98 123...").
+  * CHUNK ACKNOWLEDGMENT (LIKE A REAL HUMAN):
+    - When the caller speaks a chunk and pauses waiting for you to acknowledge:
+      * Repeat the chunk back briefly and prompt for the next part:
+        - In Hinglish/Hindi: "Ji [digits], aage?" or "Haan [digits], aage batayein?" (e.g. Caller: "98260", You: "Ji 98260, aage?")
+        - In English: "Yes [digits], go ahead?" or "[digits], please continue?"
+      * Keep it super concise (2-4 words). Do NOT give long formal speeches mid-number.
+  * IF DIGITS EXCEED 10 (11 OR MORE DIGITS):
+    - Point out the count naturally:
+      * In Hinglish/Hindi: "Ek minute, ye toh [N] digits ho rahe hain, mobile number 10 digits ka hota hai. Please ek baar dobara check karke batayenge?"
+      * In English: "Wait a second, that seems to be [N] digits. Mobile numbers have 10 digits. Could you please verify and repeat?"
+  * IF CALLER STOPS OR ENDS WITH FEWER THAN 10 DIGITS (E.G. 8 OR 9 DIGITS):
+    - If caller acts like they are done or changes topic before giving all 10 digits:
+      * In Hinglish/Hindi: "Ek minute, ye toh sirf [N] digits hue hain, ek digit kam hai. Please poora 10-digit number bata dijiye." (or "Sir, ye 9 digits hain, please last digit bhi bata dijiye.")
+      * In English: "Wait a moment, that was only [N] digits. Could you please provide the complete 10-digit number?"
+  * WHEN EXACTLY 10 DIGITS ARE COMPLETE:
+    - Confirm the full 10-digit number calmly:
+      * In Hinglish/Hindi: "Thank you, maine note kar liya: [10 digits]. Hamari team aapse contact karegi."
+      * In English: "Thank you, I have noted your number: [10 digits]. Our team will contact you shortly."
+  * LANGUAGE DISCIPLINE: Never switch to English mid-call if the customer is speaking Hindi/Hinglish!
   * If caller interrupts or corrects digits during readback, update and re-verify; never treat a correction as confirmation.
   * Never conclude or promise a callback until all 10 digits are confirmed.
 - LEAD DETAIL CAPTURE (B2B / RFQs): Collect one by one: Name (accept naturally without spellcheck) → 10-digit Mobile → Email (verify handle & domain, spell letter-by-letter if ambiguous) → Company Name → Location. Read back summary to confirm.
@@ -189,13 +202,23 @@ def _build_classic_prompt(context_block: str, guardrails_text: str) -> str:
 - TWO SEPARATE TURNS (NEVER BUNDLE):
   * Turn 1: Ask for Name only -> Stop and wait for answer.
   * Turn 2: Acknowledge Name, ask for 10-digit mobile number -> Stop and wait for digits.
-- STRICT 10-DIGIT VALIDATION:
-  * Indian mobile numbers are exactly 10 digits. Listen in complete silence while customer recites digits.
-  * बीच में सांस लेने या pause लेने पर interrupt मत कीजिए।
-  * Fewer than 10 digits: अगर caller रुक जाए और पूरे 10 digits न बताए हों, तो Hinglish में पूछिए:
-    - "Maine [X] digits note kar liye hain, please baaki ke digits bhi bata dijiye." (या "Ji, aage ke digits bhi bata dijiye.")
-    - Hindi/Hinglish call में कभी भी robotic English sentences (जैसे "I have noted the first two digits...") मत बोलिए!
-  * More than 10 digits: Ask to repeat clearly ("Please apna 10-digit number ek baar dobara clearly bata dijiye.").
+- HUMAN-LIKE 10-DIGIT NUMBER COLLECTION & CHUNKING (CRITICAL):
+  * Callers naturally dictate numbers in chunks (e.g. "98...", "98260...").
+  * CHUNK ACKNOWLEDGMENT (LIKE A REAL HUMAN):
+    - जब caller chunk बोलकर रुके, तो उस chunk को briefly repeat करके आगे पूछिए:
+      - In Hinglish/Hindi: "Ji [digits], aage?" या "Haan [digits], aage batayein?" (e.g. Caller: "98260", You: "Ji 98260, aage?")
+      - In English: "Yes [digits], go ahead?" या "[digits], please continue?"
+      - बिल्कुल natural और छोटा रखिए (2-4 words). कोई लंबा भाषण मत दीजिए।
+  * IF DIGITS EXCEED 10 (11 OR MORE DIGITS):
+    - In Hinglish/Hindi: "Ek minute, ye toh [N] digits ho rahe hain, mobile number 10 digits ka hota hai. Please ek baar dobara check karke batayenge?"
+    - In English: "Wait a second, that seems to be [N] digits. Mobile numbers have 10 digits. Could you please verify and repeat?"
+  * IF CALLER STOPS OR ENDS WITH FEWER THAN 10 DIGITS (E.G. 8 OR 9 DIGITS):
+    - In Hinglish/Hindi: "Ek minute, ye toh sirf [N] digits hue hain, ek digit kam hai. Please poora 10-digit number bata dijiye." (या "Sir, ye 9 digits hain, please last digit bhi bata dijiye.")
+    - In English: "Wait a moment, that was only [N] digits. Could you please provide the complete 10-digit number?"
+  * WHEN EXACTLY 10 DIGITS ARE COMPLETE:
+    - In Hinglish/Hindi: "Thank you, maine note kar liya: [10 digits]. Hamari team aapse contact karegi."
+    - In English: "Thank you, I have noted your number: [10 digits]. Our team will contact you shortly."
+  * LANGUAGE DISCIPLINE: Hindi/Hinglish call में कभी भी English robotic sentence मत बोलिए!
   * अगर caller readback के दौरान digits correct करे, तो update करके दोबारा verify कीजिए; correction को confirmation मत मानिए।
   * Never conclude or promise a callback until all 10 digits are confirmed.
 - LEAD DETAIL CAPTURE (B2B / RFQs): Collect one by one: Name (accept naturally without spellcheck) → 10-digit Mobile → Email (verify handle & domain, spell letter-by-letter if ambiguous) → Company Name → Location. Read back summary to confirm.
