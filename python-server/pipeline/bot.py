@@ -32,6 +32,7 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     Frame,
+    InterruptionFrame,
     LLMContextFrame,
     LLMMessagesAppendFrame,
     LLMRunFrame,
@@ -167,24 +168,179 @@ def _build_tts():
     )
 
 
-# ── Gemini Live Watchers ──────────────────────────────────────────────────────
+# ── Silence & Inactivity Monitoring ──────────────────────────────────────────
 
 class UserTranscriptCollector(FrameProcessor):
-    """Passive frame processor that logs user transcriptions going UPSTREAM (Gemini Live)."""
-    def __init__(self, state):
+    """Passive frame processor that logs user transcriptions and notifies activity."""
+    def __init__(self, state, on_speech=None):
         super().__init__()
         self.state = state
+        self.on_speech = on_speech
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
-        if isinstance(frame, TranscriptionFrame) and direction == FrameDirection.UPSTREAM:
-            content = frame.text.strip()
+        if isinstance(frame, TranscriptionFrame):
+            content = (frame.text or "").strip()
             if content:
-                logger.info(f"[bot] Transcript — user: {content}")
-                self.state.transcript_lines.append(f"user: {content}")
+                if direction == FrameDirection.UPSTREAM:
+                    logger.info(f"[bot] Transcript — user: {content}")
+                    self.state.transcript_lines.append(f"user: {content}")
+                if self.on_speech:
+                    self.on_speech(content)
+        elif isinstance(frame, InterruptionFrame):
+            if self.on_speech:
+                self.on_speech("interruption")
 
         await self.push_frame(frame, direction)
+
+
+class SilenceTimeoutMonitor:
+    """Monitors silence/inactivity during a call across Gemini Live and classic pipelines.
+
+    Workflow:
+      1. When bot stops speaking (greeting or answer), inactivity countdown starts.
+      2. If caller remains silent for `initial_timeout` (default 10s):
+         Prompt bot to confirm if user is still on the line.
+      3. If caller remains silent for another `confirm_timeout` (default 6s):
+         Prompt bot to say goodbye and automatically cut the call.
+      4. Any user speech resets the silence timer and returns phase to 0.
+    """
+
+    def __init__(
+        self,
+        *,
+        call_id: str,
+        state: CallState,
+        initial_timeout: float,
+        confirm_timeout: float,
+        send_prompt_fn,
+        disconnect_fn,
+    ):
+        self.call_id = call_id
+        self.state = state
+        self.initial_timeout = max(3.0, initial_timeout)
+        self.confirm_timeout = max(2.0, confirm_timeout)
+        self.send_prompt_fn = send_prompt_fn
+        self.disconnect_fn = disconnect_fn
+
+        self.bot_is_speaking: bool = True  # True initially while greeting is being delivered
+        self.last_activity_time: float = time.monotonic()
+        self.silence_phase: int = 0  # 0: normal wait, 1: confirmation asked, 2: disconnecting
+        self.is_active: bool = False
+        self._watchdog_task: asyncio.Task | None = None
+        self._lock = asyncio.Lock()
+
+    def start(self):
+        self.is_active = True
+        self.bot_is_speaking = True
+        self.last_activity_time = time.monotonic()
+        self._watchdog_task = asyncio.create_task(self._watchdog_loop())
+        logger.info(
+            f"[bot] SilenceTimeoutMonitor started for call {self.call_id} "
+            f"(initial={self.initial_timeout}s, confirm={self.confirm_timeout}s)"
+        )
+
+    async def stop(self):
+        self.is_active = False
+        if self._watchdog_task and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
+            try:
+                await self._watchdog_task
+            except asyncio.CancelledError:
+                pass
+            self._watchdog_task = None
+
+    def on_bot_started_speaking(self):
+        """Called when assistant begins speaking."""
+        self.bot_is_speaking = True
+
+    def on_bot_stopped_speaking(self):
+        """Called when assistant finishes speaking."""
+        self.bot_is_speaking = False
+        self.last_activity_time = time.monotonic()
+
+    def on_user_speech(self, text: str = ""):
+        """Called whenever caller speaks or interrupts."""
+        self.last_activity_time = time.monotonic()
+        if self.silence_phase == 1:
+            logger.info(f"[bot] User resumed speaking during confirmation check ('{text[:30]}'). Resetting silence timer.")
+        self.silence_phase = 0
+
+    async def _watchdog_loop(self):
+        while self.is_active:
+            try:
+                await asyncio.sleep(0.5)
+                if not self.is_active:
+                    break
+
+                # Do not count silence while bot is speaking or generating audio
+                if self.bot_is_speaking:
+                    continue
+
+                elapsed = time.monotonic() - self.last_activity_time
+
+                if self.silence_phase == 0:
+                    if elapsed >= self.initial_timeout:
+                        async with self._lock:
+                            if self.silence_phase == 0 and not self.bot_is_speaking and self.is_active:
+                                self.silence_phase = 1
+                                self.bot_is_speaking = True
+                                logger.info(
+                                    f"[bot] Call {self.call_id}: Inactivity detected ({elapsed:.1f}s >= {self.initial_timeout}s). "
+                                    f"Asking confirmation check."
+                                )
+                                await self._trigger_confirmation()
+                elif self.silence_phase == 1:
+                    if elapsed >= self.confirm_timeout:
+                        async with self._lock:
+                            if self.silence_phase == 1 and not self.bot_is_speaking and self.is_active:
+                                self.silence_phase = 2
+                                self.bot_is_speaking = True
+                                logger.info(
+                                    f"[bot] Call {self.call_id}: Still silent after confirmation ({elapsed:.1f}s >= {self.confirm_timeout}s). "
+                                    f"Disconnecting call now."
+                                )
+                                await self._trigger_disconnect_wrapup()
+                                break
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[bot] Error in SilenceTimeoutMonitor watchdog: {e}")
+                await asyncio.sleep(1.0)
+
+    async def _trigger_confirmation(self):
+        is_hindi = self.state.preferred_language in ("hi", "hinglish")
+        if is_hindi:
+            prompt = (
+                "Caller kafi der se chup hain (inactivity check). Polite aur natural Hinglish mein check kijiye: "
+                "'Hello? Kya aap line par hain?' ya 'Hello, kya aap mujhe sun pa rahe hain?' "
+                "Sirf ek chhota sentence boliye."
+            )
+        else:
+            prompt = (
+                "The caller has been silent for a while. In a polite, natural tone, briefly check if they are still on the line: "
+                "'Hello, are you still there?' or 'Hello, can you hear me?' "
+                "Keep it strictly to one short sentence."
+            )
+        await self.send_prompt_fn(prompt)
+
+    async def _trigger_disconnect_wrapup(self):
+        is_hindi = self.state.preferred_language in ("hi", "hinglish")
+        if is_hindi:
+            prompt = (
+                "Caller abhi bhi silent hain check ke baad bhi. Polite Hinglish mein boliye: "
+                "'Aapki taraf se koi response na milne ke karan, main call disconnect kar rahi hoon. Mantra Tech mein call karne ke liye dhanyawad. Have a nice day!' "
+                "Koi sawaal mat puchiye."
+            )
+        else:
+            prompt = (
+                "The caller is still silent after the check. Say politely: "
+                "'Since I haven't received a response, I will disconnect the call now. Thank you for calling Mantra Tech, have a great day!' "
+                "Do not ask any questions."
+            )
+        await self.send_prompt_fn(prompt)
+        await self.disconnect_fn(delay=4.5)
 
 
 # ── Bot Core ──────────────────────────────────────────────────────────────────
@@ -250,7 +406,10 @@ async def run_bot(
         )
         llm.register_function(None, agent_graph.dispatch)
 
-        user_transcript_collector = UserTranscriptCollector(state)
+        user_transcript_collector = UserTranscriptCollector(
+            state,
+            on_speech=lambda text: silence_monitor.on_user_speech(text) if 'silence_monitor' in locals() else None,
+        )
         credit_tracker = create_credit_tracker(state)
         # Must sit AFTER transport.output() so both user + bot audio are captured.
         audio_buffer, recorded_audio, recording_ready = _create_audio_buffer()
@@ -297,7 +456,7 @@ async def run_bot(
             context,
             user_params=LLMUserAggregatorParams(
                 vad_analyzer=SileroVADAnalyzer(),
-                user_idle_timeout=15.0,
+                user_idle_timeout=0,  # Managed by SilenceTimeoutMonitor
             ),
         )
 
@@ -329,6 +488,38 @@ async def run_bot(
             enable_rtvi=False,
         )
 
+    async def _send_system_prompt(prompt_text: str):
+        try:
+            if gemini_mode:
+                if hasattr(llm, "_create_single_response"):
+                    await llm._create_single_response([{"role": "user", "content": prompt_text}])
+                else:
+                    await llm.queue_frame(LLMMessagesAppendFrame([{"role": "user", "content": prompt_text}]))
+            else:
+                await task.queue_frames([
+                    LLMMessagesAppendFrame([{"role": "system", "content": prompt_text}]),
+                    LLMRunFrame()
+                ])
+        except Exception as e:
+            logger.error(f"[bot] Failed to send prompt to LLM for call {call_id}: {e}")
+
+    async def _silence_disconnect(delay: float = 4.5):
+        try:
+            logger.info(f"[bot] Silence timeout disconnect initiated for call {call_id} in {delay}s")
+            await asyncio.sleep(delay)
+            await _handle_call_ended(trigger="silence_timeout_disconnect")
+        except Exception as e:
+            logger.error(f"[bot] Error during silence disconnect: {e}")
+
+    silence_monitor = SilenceTimeoutMonitor(
+        call_id=call_id,
+        state=state,
+        initial_timeout=settings.silence_timeout_initial,
+        confirm_timeout=settings.silence_timeout_confirm,
+        send_prompt_fn=_send_system_prompt,
+        disconnect_fn=_silence_disconnect,
+    )
+
     call_ended_lock = asyncio.Lock()
     call_ended_processed = False
 
@@ -340,6 +531,11 @@ async def run_bot(
             call_ended_processed = True
 
             logger.info(f"[bot] Call {call_id} ended (trigger={trigger}) — initiating finalization")
+
+            try:
+                await silence_monitor.stop()
+            except Exception as e:
+                logger.warning(f"[bot] Error stopping silence monitor: {e}")
 
             # Snapshot audio BEFORE stop_recording() — that method clears buffers after
             # scheduling on_audio_data as a background task (not awaited).
@@ -464,6 +660,9 @@ async def run_bot(
             messages.append({"role": "system", "content": greeting_hint})
             await task.queue_frames([LLMRunFrame()])
 
+        # Start silence and inactivity monitoring
+        silence_monitor.start()
+
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info(f"[bot] Transport on_client_disconnected — call {call_id}")
@@ -483,51 +682,27 @@ async def run_bot(
             logger.info(f"[bot] Transport disconnected — call {call_id}")
             await _handle_call_ended(trigger="transport_disconnected")
 
-    if not gemini_mode:
-        @user_aggregator.event_handler("on_user_turn_stopped")
-        async def on_user_turn_stopped(aggregator, strategy, message: UserTurnStoppedMessage):
-            content = (message.content or "").strip()
-            if content:
-                state.transcript_lines.append(f"user: {content}")
-                logger.info(f"[bot] Transcript — user: {content}")
-
-        @user_aggregator.event_handler("on_user_turn_idle")
-        async def on_user_turn_idle(aggregator):
-            logger.info(f"[bot] User turn idle (no response) for call {call_id}")
-
-            if not hasattr(state, "no_response_count"):
-                state.no_response_count = 0
-
-            state.no_response_count += 1
-
-            if state.no_response_count == 1:
-                logger.info("[bot] No response retry 1")
-                await task.queue_frames([
-                    LLMMessagesAppendFrame([{"role": "system", "content": "The user has been silent for a while. Ask them 'Hello, are you still there?' or something similar briefly."}]),
-                    LLMRunFrame()
-                ])
-            else:
-                logger.info("[bot] No response retry 2 - Disconnecting")
-                await task.queue_frames([
-                    LLMMessagesAppendFrame([{"role": "system", "content": "The user is still silent. Say 'I haven't heard anything for a while, so I will disconnect the call now. Have a great day!' and then use your tools to hang up or just say it and we will cancel the task."}]),
-                    LLMRunFrame()
-                ])
-                asyncio.create_task(_delayed_cancel(delay=5.0))
+    @assistant_aggregator.event_handler("on_assistant_turn_started")
+    async def on_assistant_turn_started(aggregator):
+        silence_monitor.on_bot_started_speaking()
 
     @assistant_aggregator.event_handler("on_assistant_turn_stopped")
     async def on_assistant_turn_stopped(aggregator, message: AssistantTurnStoppedMessage):
+        silence_monitor.on_bot_stopped_speaking()
         content = (message.content or "").strip()
         if content:
             state.transcript_lines.append(f"assistant: {content}")
             tag = " (interrupted)" if message.interrupted else ""
             logger.info(f"[bot] Transcript — assistant: {content}{tag}")
 
-    async def _delayed_cancel(delay: float = 5.0):
-        try:
-            await asyncio.sleep(delay)
-            await _handle_call_ended(trigger="idle_timeout_disconnect")
-        except Exception as e:
-            logger.error(f"[bot] Error during delayed cancel: {e}")
+    if not gemini_mode:
+        @user_aggregator.event_handler("on_user_turn_stopped")
+        async def on_user_turn_stopped(aggregator, strategy, message: UserTurnStoppedMessage):
+            content = (message.content or "").strip()
+            if content:
+                silence_monitor.on_user_speech(content)
+                state.transcript_lines.append(f"user: {content}")
+                logger.info(f"[bot] Transcript — user: {content}")
 
     # ── 5. Run ────────────────────────────────────────────────────────────────
     runner = PipelineRunner(handle_sigint=False)

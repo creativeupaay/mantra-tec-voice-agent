@@ -4,6 +4,7 @@ import json
 from typing import List, Optional
 from loguru import logger
 from config.database import get_db
+from env_config import settings
 
 async def send_escalation_email(
     *,
@@ -33,12 +34,19 @@ async def send_escalation_email(
         db_api_key = settings_doc.get("resend_api_key") if settings_doc else None
         db_from_email = settings_doc.get("resend_from_email") if settings_doc else None
 
-        api_key = (os.getenv("RESEND_API_KEY") or db_api_key or "").strip()
-        from_email = (os.getenv("FROM_EMAIL") or db_from_email or "noreply@creativeupaay.in").strip()
+        api_key = (settings.resend_api_key or db_api_key or "").strip()
+        from_email = (settings.from_email or db_from_email or "noreply@creativeupaay.in").strip()
 
         if not api_key:
             logger.warning("[EmailNotifier] RESEND_API_KEY is not set in environment or database.")
             return
+
+        dashboard_base = (
+            getattr(settings, "dashboard_url", None)
+            or (settings_doc.get("dashboard_url") if settings_doc else None)
+            or "http://localhost:5173"
+        ).rstrip("/")
+        call_link = f"{dashboard_base}/calls?callId={call_id}"
 
         caller_id = caller_name or phone_number or "Unknown Caller"
         subject = f"🚨 Escalated Call Alert: {caller_id} ({call_category or 'General'})"
@@ -78,7 +86,7 @@ async def send_escalation_email(
             {f'<div style="background-color: #f1f5f9; padding: 14px 16px; border-radius: 6px; margin-bottom: 20px;"><h4 style="margin: 0 0 8px 0; color: #334155; font-size: 13px;">Recent Transcript:</h4><pre style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #1e293b;">{transcript[:500] if transcript else ""}</pre></div>' if transcript else ''}
 
             <div style="text-align: center; margin-top: 25px;">
-              <a href="http://localhost:5173/calls?callId={call_id}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+              <a href="{call_link}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
                 View Escalated Call in Dashboard
               </a>
             </div>

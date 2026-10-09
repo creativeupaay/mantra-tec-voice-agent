@@ -38,6 +38,15 @@ export async function sendEscalationEmailNotification(callData: CallEscalationDa
       return { success: false, message: 'RESEND_API_KEY is not configured' }
     }
 
+    const dashboardBase = (
+      (settings as any)?.dashboard_url ||
+      env.DASHBOARD_URL ||
+      env.CLIENT_URL ||
+      'http://localhost:5173'
+    ).replace(/\/$/, '')
+    const targetCallId = callData._id || callData.call_id || ''
+    const callDetailUrl = `${dashboardBase}/calls?callId=${targetCallId}`
+
     const callerIdentifier = callData.caller_name || callData.phone_number || 'Unknown Caller'
     const subject = `🚨 Escalated Call Alert: ${callerIdentifier} (${callData.call_category || 'General'})`
 
@@ -85,7 +94,7 @@ export async function sendEscalationEmailNotification(callData: CallEscalationDa
           ` : ''}
 
           <div style="text-align: center; margin-top: 25px;">
-            <a href="http://localhost:5173/calls?callId=${callData._id || callData.call_id}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+            <a href="${callDetailUrl}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
               View Escalated Call in Dashboard
             </a>
           </div>

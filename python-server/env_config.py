@@ -114,6 +114,15 @@ class Settings:
     s3_endpoint_url: str          # For S3-compatible services (MinIO, etc.)
     gcp_project_id: str
 
+    # ── Dashboard & Notifications ────────────────────────────────────────────
+    dashboard_url: str        # Frontend / Dashboard URL for deep-links in emails
+    resend_api_key: str
+    from_email: str
+
+    # ── Inactivity / Silence Detection ───────────────────────────────────────
+    silence_timeout_initial: float  # Inactivity seconds before checking if caller is still there (e.g. 10s)
+    silence_timeout_confirm: float  # Wait seconds after check before disconnecting (e.g. 6s)
+
     # ── App ──────────────────────────────────────────────────────────────────
     log_level: str
 
@@ -206,6 +215,13 @@ def _load() -> Settings:
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
         s3_endpoint_url=os.getenv("S3_ENDPOINT_URL", ""),
         gcp_project_id=os.getenv("GCP_PROJECT_ID", ""),
+        # Dashboard & Notifications
+        dashboard_url=(os.getenv("DASHBOARD_URL") or os.getenv("CLIENT_URL") or "http://localhost:5173").rstrip("/"),
+        resend_api_key=os.getenv("RESEND_API_KEY", ""),
+        from_email=os.getenv("FROM_EMAIL", "noreply@creativeupaay.in"),
+        # Inactivity / Silence Detection
+        silence_timeout_initial=float(os.getenv("SILENCE_TIMEOUT_INITIAL_SECONDS", "10.0")),
+        silence_timeout_confirm=float(os.getenv("SILENCE_TIMEOUT_CONFIRM_SECONDS", "6.0")),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )
