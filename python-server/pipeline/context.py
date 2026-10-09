@@ -61,20 +61,21 @@ async def build_call_context(call_id: str, phone_number: str) -> CallState:
     else:
         state.crm_contact = contact_r
 
-    if isinstance(calls_r, Exception):
-        logger.warning(f"[context] Recent calls fetch failed: {calls_r}")
-    else:
-        state.recent_calls = calls_r or []
+    # Treat every call as fresh to avoid context mixups across shared trunks
+    state.recent_calls = []
+    state.open_tickets = []
 
-    # ── Sequential: Desk (needs Desk contact_id) ──────────────────────────────
-    if state.crm_contact or state.crm_lead:
-        try:
-            desk_contact = await desk_service.find_contact(phone_number)
-            if desk_contact:
-                tickets = await desk_service.get_open_tickets(desk_contact["id"])
-                state.open_tickets = tickets or []
-        except Exception as e:
-            logger.warning(f"[context] Desk fetch failed: {e}")
+    # If the phone number is the client's shared trunk, do not inherit another caller's identity name
+    SHARED_FORWARDING_NUMBERS = {"07969268119", "07948501661", "+917969268119", "+917948501661"}
+    if phone_number in SHARED_FORWARDING_NUMBERS:
+        if state.identity:
+            state.identity.name = None
+            state.identity.agent_notes = None
+            state.identity.customer_profile_summary = None
+            state.identity.previous_discussions = []
+            state.identity.special_notes = None
+        state.crm_lead = None
+        state.crm_contact = None
 
     # ── Preferred language from identity ──────────────────────────────────────
     if state.identity and state.identity.preferred_language:

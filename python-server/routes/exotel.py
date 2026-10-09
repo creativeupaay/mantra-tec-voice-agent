@@ -43,11 +43,23 @@ async def exotel_answer(request: Request) -> Response:
             pass
 
     params = _exotel_params(request, form_data)
+    logger.info(f"[exotel] Full incoming answer webhook params: {params}")
     
-    # Exotel typically sends 'From' and 'To'
-    from_number = params.get("From", "unknown")
-    to_number = params.get("To", "unknown")
-    call_sid = params.get("CallSid", "unknown")
+    # Exotel applets typically send 'CallFrom' and 'CallTo', or 'From' and 'To'
+    from_number = (
+        params.get("CallFrom")
+        or params.get("From")
+        or params.get("ForwardedFrom")
+        or params.get("caller")
+        or "unknown"
+    )
+    to_number = (
+        params.get("CallTo")
+        or params.get("To")
+        or params.get("DialWhomNumber")
+        or "unknown"
+    )
+    call_sid = params.get("CallSid") or params.get("call_sid") or "unknown"
     
     logger.info(
         f"[exotel] Incoming call — CallSid={call_sid} From={from_number} To={to_number}"

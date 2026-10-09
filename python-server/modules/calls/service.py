@@ -74,6 +74,7 @@ class CallService:
         outcome: Optional[str] = None,
         status: Optional[CallStatus] = None,
         caller_name: Optional[str] = None,
+        phone_number: Optional[str] = None,
         recording_url: Optional[str] = None,
         recording_path: Optional[str] = None,
         is_red_flagged: Optional[bool] = None,
@@ -88,6 +89,7 @@ class CallService:
             call_id,
             CallUpdate(
                 caller_name=caller_name,
+                phone_number=phone_number,
                 duration=duration,
                 status=status,
                 transcript=transcript,

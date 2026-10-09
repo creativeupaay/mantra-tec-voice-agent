@@ -25,8 +25,11 @@ def _resolve_call_status(
     duration_seconds: int,
     is_red_flagged: bool,
     requires_ticket: bool,
+    callback_required: bool = False,
 ) -> CallStatus:
     """Derive a CallsPage status from post-call signals."""
+    if callback_required:
+        return CallStatus.CALLBACK_REQUIRED
     if is_red_flagged or requires_ticket:
         return CallStatus.ESCALATED
     if not has_transcript or duration_seconds < 5:
@@ -39,7 +42,10 @@ def _resolve_call_outcome(
     requires_ticket: bool,
     requires_lead: bool,
     has_transcript: bool,
+    callback_required: bool = False,
 ) -> Optional[str]:
+    if callback_required:
+        return "callback_needed"
     if requires_ticket:
         return "ticket_needed"
     if requires_lead:
@@ -111,6 +117,19 @@ class PostCallExtraction(BaseModel):
     detected_language: Optional[str] = Field(
         None, description="Primary language spoken by the customer: 'en' for English, 'hi' for Hindi, or 'hinglish' for Hinglish."
     )
+    callback_required: bool = Field(
+        default=False,
+        description=(
+            "True if a callback is required or was promised to the customer. "
+            "Set to True if the customer had an order or delivery issue and a callback was arranged, "
+            "or if the customer was unable to reach support / support was unresponsive and a direct callback was arranged, "
+            "or if any callback was promised by the agent."
+        ),
+    )
+    contact_phone_number: Optional[str] = Field(
+        None,
+        description="The customer's 10-digit mobile or contact phone number if mentioned by the caller or collected during the conversation (e.g. '9876543210'). Only digits.",
+    )
 
 
 async def run_post_call_pipeline(
@@ -167,6 +186,7 @@ async def run_post_call_pipeline(
                         "You are a post-call analyst for Mantra Tech. Analyze the following transcript "
                         "and extract a detailed summary, the primary intent, and categorize the call. "
                         "Determine if a support ticket or sales lead still needs to be created. "
+                        "Determine if a callback is required or was promised to the customer (e.g. order delivery issue where agent arranged a callback, or caller unable to reach support where agent arranged a callback from support). If so, set callback_required to true. "
                         "Flag if the agent lacked knowledge or detected sensitive/disallowed content.\n\n"
                         "CRITICAL RULE FOR AI CALL SUMMARY:\n"
                         "If the conversation is identified as a Bulk Order, Wholesale Enquiry, Enterprise Purchase, "
@@ -233,6 +253,7 @@ async def run_post_call_pipeline(
                 long_term_notes=[],
                 requires_ticket=False,
                 requires_lead=False,
+                callback_required=False,
                 is_red_flagged=False,
             )
     else:
@@ -243,6 +264,7 @@ async def run_post_call_pipeline(
             long_term_notes=[],
             requires_ticket=False,
             requires_lead=False,
+            callback_required=False,
             is_red_flagged=False,
         )
 
@@ -273,17 +295,51 @@ async def run_post_call_pipeline(
     if not caller_name and state.identity and state.identity.name:
         caller_name = state.identity.name
 
+    callback_needed = bool(extraction.callback_required)
+    if not callback_needed and has_transcript:
+        lower_summary = (extraction.summary or "").lower()
+        full_transcript_lower = transcript_text.lower()
+        cb_terms = [
+            "call back arrange",
+            "callback arrange",
+            "arrange a call back",
+            "arrange a callback",
+            "call back karwati",
+            "callback karwati",
+            "call back karwa",
+            "directly support se call back",
+            "support team se call back",
+        ]
+        if any(term in full_transcript_lower or term in lower_summary for term in cb_terms):
+            callback_needed = True
+            extraction.callback_required = True
+
     call_status = _resolve_call_status(
         has_transcript=has_transcript,
         duration_seconds=duration_seconds,
         is_red_flagged=bool(extraction.is_red_flagged),
         requires_ticket=bool(extraction.requires_ticket),
+        callback_required=callback_needed,
     )
     call_outcome = _resolve_call_outcome(
         requires_ticket=bool(extraction.requires_ticket),
         requires_lead=bool(extraction.requires_lead),
         has_transcript=has_transcript,
+        callback_required=callback_needed,
     )
+
+    # ── Resolve effective customer phone number ──────────────────────────────
+    SHARED_FORWARDING_NUMBERS = {"07969268119", "07948501661", "+917969268119", "+917948501661"}
+    final_phone = state.phone_number
+
+    extracted_contact = getattr(extraction, "contact_phone_number", None)
+    clean_extracted = "".join(filter(str.isdigit, str(extracted_contact))) if extracted_contact else ""
+    clean_state = "".join(filter(str.isdigit, str(state.phone_number))) if state.phone_number else ""
+
+    if len(clean_extracted) >= 10 and clean_extracted[-10:] not in {"07969268119", "07948501661"}:
+        final_phone = clean_extracted[-10:]
+    elif len(clean_state) >= 10 and clean_state[-10:] not in {"07969268119", "07948501661"}:
+        final_phone = clean_state[-10:]
 
     try:
         await call_service.finalize_call(
@@ -296,13 +352,14 @@ async def run_post_call_pipeline(
             outcome=call_outcome,
             status=call_status,
             caller_name=caller_name,
+            phone_number=final_phone,
             is_red_flagged=bool(extraction.is_red_flagged),
             red_flag_reason=extraction.red_flag_reason,
             guardrail_triggered=extraction.guardrail_triggered,
         )
         logger.info(
             f"[post-call] Finalized call {state.call_id} "
-            f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome})"
+            f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome}, phone={final_phone})"
         )
 
         if call_status == CallStatus.ESCALATED:
@@ -311,7 +368,7 @@ async def run_post_call_pipeline(
                 await send_escalation_email(
                     call_id=state.call_id,
                     caller_name=caller_name,
-                    phone_number=state.phone_number,
+                    phone_number=final_phone,
                     call_category=extraction.call_category.value if hasattr(extraction.call_category, 'value') else str(extraction.call_category),
                     call_summary=extraction.summary,
                     transcript=transcript_text or None,
@@ -323,30 +380,31 @@ async def run_post_call_pipeline(
         logger.error(f"[post-call] Failed to finalize call {state.call_id}: {e}")
 
     # ── 3. Update Caller Identity ─────────────────────────────────────────────
-    if has_transcript:
+    # Only update individual identity if we have a real customer number (not the shared trunk)
+    if has_transcript and final_phone not in SHARED_FORWARDING_NUMBERS:
         try:
             if extraction.detected_language and extraction.detected_language.lower() in ("en", "hi", "hinglish"):
                 state.preferred_language = extraction.detected_language.lower()
             agent_notes = "\n".join(extraction.long_term_notes) if extraction.long_term_notes else None
             await identity_service.update_after_call(
-                phone_number=state.phone_number,
+                phone_number=final_phone,
                 name=caller_name,
                 agent_notes=agent_notes,
                 profile_summary=extraction.summary,
                 language=state.preferred_language,
             )
-            logger.info(f"[post-call] Updated identity last_call_at, name={caller_name}, and notes for {state.phone_number}")
+            logger.info(f"[post-call] Updated identity last_call_at, name={caller_name}, and notes for {final_phone}")
         except Exception as e:
-            logger.error(f"[post-call] Failed to update identity for {state.phone_number}: {e}")
+            logger.error(f"[post-call] Failed to update identity for {final_phone}: {e}")
 
         # ── 4. Update Customer Memory ─────────────────────────────────────────────
         # A. Add conversation summary to previous discussions history
         try:
             await identity_service.add_call_discussion(
-                phone_number=state.phone_number,
+                phone_number=final_phone,
                 call_summary=extraction.summary,
             )
-            logger.info(f"[post-call] Added call discussion summary to memory for {state.phone_number}")
+            logger.info(f"[post-call] Added call discussion summary to memory for {final_phone}")
         except Exception as e:
             logger.error(f"[post-call] Failed to append call discussion to memory: {e}")
 
@@ -354,7 +412,7 @@ async def run_post_call_pipeline(
         if extraction.long_term_notes:
             try:
                 # Fetch existing identity to append rather than overwrite
-                existing_ident = await identity_service.get_by_phone(state.phone_number)
+                existing_ident = await identity_service.get_by_phone(final_phone)
                 
                 notes_text = " • " + "\n • ".join(extraction.long_term_notes)
                 notes_header = f"\n[Call {state.call_id} Notes]\n{notes_text}"
@@ -366,13 +424,13 @@ async def run_post_call_pipeline(
                     
                 from modules.identity.model import IdentityUpdate
                 await identity_service.update_profile(
-                    phone_number=state.phone_number,
+                    phone_number=final_phone,
                     data=IdentityUpdate(
                         special_notes=updated_special_notes,
                         preferred_language=state.preferred_language
                     )
                 )
-                logger.info(f"[post-call] Appended long-term notes to special_notes for {state.phone_number}")
+                logger.info(f"[post-call] Appended long-term notes to special_notes for {final_phone}")
             except Exception as e:
                 logger.error(f"[post-call] Failed to update special_notes in memory: {e}")
 
@@ -380,7 +438,7 @@ async def run_post_call_pipeline(
         # If LLM detected a lead is required or call is a Bulk Order and the caller has no identity/CRM match
         if (extraction.requires_lead or is_bulk) and not state.crm_lead and not state.crm_contact:
             try:
-                logger.info(f"[post-call] Auto-creating Zoho CRM lead for {state.phone_number}")
+                logger.info(f"[post-call] Auto-creating Zoho CRM lead for {final_phone}")
                 name = caller_name or extraction.caller_name or (state.identity.name if state.identity and state.identity.name else "Unknown Caller")
                 name_parts = name.strip().split()
                 last_name = name_parts[-1] if name_parts else "Unknown"
@@ -396,8 +454,8 @@ async def run_post_call_pipeline(
                     "Last_Name": last_name,
                     "First_Name": first_name,
                     "Company": extraction.company or "Individual / Pending",
-                    "Phone": state.phone_number,
-                    "Mobile": state.phone_number,
+                    "Phone": final_phone,
+                    "Mobile": final_phone,
                     "Email": normalize_spoken_email(extraction.email) or "",
                     "City": extraction.city or "",
                     "Country": extraction.country or "",

@@ -26,6 +26,7 @@ class CallStatus(str, Enum):
     RESOLVED = "resolved"
     ESCALATED = "escalated"
     MISSED = "missed"
+    CALLBACK_REQUIRED = "callback_required"
 
 
 class Call(BaseModel):
@@ -63,6 +64,7 @@ class CallCreate(BaseModel):
 
 class CallUpdate(BaseModel):
     caller_name: Optional[str] = None
+    phone_number: Optional[str] = None
     duration: Optional[int] = None
     status: Optional[CallStatus] = None
     is_red_flag: Optional[bool] = None

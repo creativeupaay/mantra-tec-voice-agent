@@ -59,6 +59,10 @@ CREATE_LEAD_SCHEMA = FunctionSchema(
             "type": "string",
             "description": "Additional notes or reason for calling.",
         },
+        "phone_number": {
+            "type": "string",
+            "description": "The customer's 10-digit mobile contact number collected from the caller.",
+        },
     },
     required=["name"],
 )
@@ -111,7 +115,19 @@ async def handle_create_lead(params: FunctionCallParams) -> None:
     subject: str = params.arguments.get("subject", "")
     description: str = params.arguments.get("description", "") or params.arguments.get("notes", "")
 
-    phone = state.phone_number if state else "unknown"
+    raw_phone = params.arguments.get("phone_number")
+    clean_phone = "".join(filter(str.isdigit, str(raw_phone))) if raw_phone else ""
+    if len(clean_phone) >= 10:
+        phone = clean_phone[-10:]
+        if state:
+            state.phone_number = phone
+            try:
+                from modules.identity.service import identity_service
+                await identity_service.get_or_create(phone)
+            except Exception:
+                pass
+    else:
+        phone = state.phone_number if state else "unknown"
 
     name_parts = name.strip().split()
     last_name = name_parts[-1] if name_parts else "Unknown"

@@ -11,7 +11,8 @@ CREATE_TICKET_SCHEMA = FunctionSchema(
     name="create_support_ticket",
     description=(
         "Create a new support ticket in Zoho Desk for a technical issue or support request. "
-        "Use this when the caller reports a problem, bug, or service issue that needs follow-up from the team."
+        "Use this when the caller reports a problem, bug, or service issue that needs follow-up from the team. "
+        "Ask the caller for their 10-digit mobile number to associate with the ticket."
     ),
     properties={
         "subject": {
@@ -26,6 +27,10 @@ CREATE_TICKET_SCHEMA = FunctionSchema(
             "type": "string",
             "enum": ["Low", "Medium", "High", "Urgent"],
             "description": "Priority level. Default is Medium.",
+        },
+        "phone_number": {
+            "type": "string",
+            "description": "The customer's 10-digit mobile contact number collected from the caller.",
         },
     },
     required=["subject", "description"],
@@ -50,7 +55,19 @@ async def handle_create_ticket(params: FunctionCallParams) -> None:
     description: str = params.arguments.get("description", "")
     priority: str = params.arguments.get("priority", "Medium")
 
-    phone = state.phone_number if state else "unknown"
+    raw_phone = params.arguments.get("phone_number")
+    clean_phone = "".join(filter(str.isdigit, str(raw_phone))) if raw_phone else ""
+    if len(clean_phone) >= 10:
+        phone = clean_phone[-10:]
+        if state:
+            state.phone_number = phone
+            try:
+                from modules.identity.service import identity_service
+                await identity_service.get_or_create(phone)
+            except Exception:
+                pass
+    else:
+        phone = state.phone_number if state else "unknown"
 
     ticket_data: dict = {
         "subject": subject,

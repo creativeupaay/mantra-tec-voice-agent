@@ -439,50 +439,20 @@ async def run_bot(
         except Exception as e:
             logger.warning(f"[bot] Could not register call in DB: {e}")
 
-        scenario, elapsed_mins, rel_time, last_topic = get_caller_scenario(state)
-        name_part = f" {state.identity.name}" if state.identity and state.identity.name else ""
-
+        # Every call is treated as a fresh/new call to avoid context mixups across shared trunks
         is_hindi = state.preferred_language in ("hi", "hinglish")
-
-        if scenario == "immediate_callback":
-            topic_hint = f" Previous topic discussed was '{last_topic}'." if last_topic else ""
-            if is_hindi:
-                greeting_hint = (
-                    f"The caller just called {elapsed_mins} min ago and the call likely got disconnected.{topic_hint} "
-                    f"Greet them calmly and politely acknowledging the disconnected call: 'Hello{name_part}, lagta hai call disconnect ho gayi thi. Haan ji boliye.' "
-                    "Do NOT introduce the company or give a formal pitch because they were just on the line a minute ago. Be calm and passive like a human picking back up."
-                )
-            else:
-                greeting_hint = (
-                    f"The caller just called {elapsed_mins} min ago and the call likely got disconnected.{topic_hint} "
-                    f"Greet them calmly and politely acknowledging the disconnected call in English: 'Hello{name_part}, looks like our call got disconnected. Yes, please go ahead.' "
-                    "Do NOT introduce the company or give a formal pitch because they were just on the line a minute ago. Be calm and passive like a human picking back up."
-                )
-        elif scenario == "returning_caller":
-            topic_hint = f" Previous discussion was '{last_topic}'." if last_topic else ""
-            if is_hindi:
-                greeting_hint = (
-                    f"The caller is returning (last call: {rel_time}).{topic_hint} "
-                    f"Greet calmly and politely in a gentle, passive tone: 'Hello{name_part}, welcome back to Mantra Tech, main Priya. Kaise hain aap? Bataiye aaj main aapki kya help kar sakti hoon?'"
-                )
-            else:
-                greeting_hint = (
-                    f"The caller is returning (last call: {rel_time}).{topic_hint} "
-                    f"Greet calmly and politely in a gentle, passive tone: 'Hello{name_part}, welcome back to Mantra Tech, I am Priya. How are you? How can I assist you today?'"
-                )
+        if is_hindi:
+            greeting_hint = (
+                "Greet politely and calmly in a relaxed, passive tone: "
+                "'Hello, thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
+                "Remember: If caller speaks English, mirror them and speak English immediately."
+            )
         else:
-            if is_hindi:
-                greeting_hint = (
-                    "Greet politely and calmly in a relaxed, passive tone: "
-                    f"'Hello{name_part}, thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
-                    "Remember: If caller speaks English, mirror them and speak English immediately."
-                )
-            else:
-                greeting_hint = (
-                    "This is a first-time caller. Greet politely and calmly in a relaxed, passive tone in English: "
-                    "'Hello, thank you for calling Mantra Tech, I am Priya. How can I help you today?' "
-                    "CRITICAL LANGUAGE MIRRORING RULE: If caller replies in English, keep speaking in English. If caller replies in Hindi or Hinglish, switch immediately and mirror them in Hinglish."
-                )
+            greeting_hint = (
+                "This is a new caller. Greet politely and calmly in a relaxed, passive tone in English: "
+                "'Hello, thank you for calling Mantra Tech, I am Priya. How can I help you today?' "
+                "CRITICAL LANGUAGE MIRRORING RULE: If caller replies in English, keep speaking in English. If caller replies in Hindi or Hinglish, switch immediately and mirror them in Hinglish."
+            )
 
         if gemini_mode:
             # Send the greeting as a user turn in the context.

@@ -51,7 +51,7 @@ def _customer_phone(*, direction: str, from_number: str, to_number: str) -> str:
     """Identity key: inbound caller = From; outbound customer = To."""
     if direction == "outbound":
         return to_number or from_number or "unknown"
-    return from_number or to_number or "unknown"
+    return from_number or "unknown"
 
 
 async def _answer_xml(request: Request) -> Response:
