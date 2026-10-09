@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { AudioWaveform, PhoneCall, Flag, CheckCircle, Bot } from 'lucide-react'
+import { AudioWaveform, PhoneCall, PhoneForwarded, Flag, CheckCircle, Bot } from 'lucide-react'
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
 import { formatDuration, formatTime } from '../../utils/format'
@@ -61,6 +61,7 @@ const CallTable: FC<CallTableProps> = ({
             const targetId = call._id || call.call_id
             const isSelected = selectedCall?._id === call._id || selectedCall?.call_id === call.call_id
             const isEscalated = call.status === 'escalated'
+            const isCallback = call.status === 'callback_required'
 
             return (
               <tr
@@ -74,11 +75,17 @@ const CallTable: FC<CallTableProps> = ({
                 <td className="px-5 py-3.5 w-[22%] align-middle min-w-0">
                   <div className="flex items-center space-x-3 min-w-0">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-secondary shrink-0 border ${
-                      isEscalated ? 'bg-red-500/10 border-red-500/30 text-red-500' : 'bg-surface-page border-border'
+                      isEscalated
+                        ? 'bg-red-500/10 border-red-500/30 text-red-500'
+                        : isCallback
+                          ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600'
+                          : 'bg-surface-page border-border'
                     }`}>
                       {call.status === 'live'
                         ? <PhoneCall size={14} strokeWidth={2} />
-                        : <AudioWaveform size={14} strokeWidth={2} />
+                        : isCallback
+                          ? <PhoneForwarded size={14} strokeWidth={2} />
+                          : <AudioWaveform size={14} strokeWidth={2} />
                       }
                     </div>
                     <div className="min-w-0 flex-1">
@@ -147,11 +154,12 @@ const CallTable: FC<CallTableProps> = ({
                       View Details
                     </button>
 
-                    {isEscalated && onResolveCall && (
+                    {(isEscalated || isCallback) && onResolveCall && (
                       <button
                         onClick={() => onResolveCall(targetId)}
                         disabled={resolvingId === targetId}
                         className="px-3 py-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title={isCallback ? "Mark callback as resolved" : "Resolve call"}
                       >
                         <CheckCircle size={11} />
                         <span>{resolvingId === targetId ? 'Resolving...' : 'Resolve'}</span>

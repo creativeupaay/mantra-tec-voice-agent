@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { Link } from 'react-router-dom'
-import { Flag, Printer, X, Calendar, Clock, AlertTriangle, Maximize2, CheckCircle, UserCheck, Bot, Phone, Sparkles, Package, FileText } from 'lucide-react'
+import { Flag, Printer, X, Calendar, Clock, AlertTriangle, Maximize2, CheckCircle, UserCheck, Bot, Phone, Sparkles, Package, FileText, PhoneForwarded } from 'lucide-react'
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
 import { formatDuration, formatTime } from '../../utils/format'
@@ -130,6 +130,7 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
 }) => {
   const targetId = selectedCall._id || selectedCall.call_id
   const isEscalated = selectedCall.status === 'escalated'
+  const isCallbackRequired = selectedCall.status === 'callback_required'
   const escalationReason =
     selectedCall.red_flag_reason ||
     selectedCall.guardrail_triggered ||
@@ -213,6 +214,24 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
           >
             <CheckCircle size={14} />
             <span>{resolvingId === targetId ? 'Resolving...' : 'Resolve Call'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* 2b. Callback Required Resolution Banner */}
+      {isCallbackRequired && onResolveCall && (
+        <div className="px-6 py-3.5 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <PhoneForwarded className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span className="text-xs font-bold text-indigo-600 truncate">Callback Required — Pending Customer Follow-up</span>
+          </div>
+          <button
+            onClick={() => onResolveCall(targetId)}
+            disabled={resolvingId === targetId}
+            className="px-3.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            <CheckCircle size={14} />
+            <span>{resolvingId === targetId ? 'Resolving...' : 'Mark as Resolved'}</span>
           </button>
         </div>
       )}

@@ -8,7 +8,13 @@ interface StatusDotProps {
 
 const StatusDot: FC<StatusDotProps> = ({ status, label }) => {
   const safeStatus = (status || 'resolved').toLowerCase() as CallStatus
-  const displayLabel = label || (typeof safeStatus === 'string' ? safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1) : 'Resolved')
+  const displayLabel =
+    label ||
+    (safeStatus === 'callback_required'
+      ? 'Callback Required'
+      : typeof safeStatus === 'string'
+      ? safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1)
+      : 'Resolved')
 
   const getPillStyles = (): { bg: string; dot: string } => {
     switch (safeStatus) {
@@ -16,6 +22,11 @@ const StatusDot: FC<StatusDotProps> = ({ status, label }) => {
         return {
           bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
           dot: 'bg-emerald-500',
+        }
+      case 'callback_required':
+        return {
+          bg: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+          dot: 'bg-indigo-500',
         }
       case 'escalated':
         return {

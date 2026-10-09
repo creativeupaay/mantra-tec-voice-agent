@@ -1,6 +1,6 @@
 import mongoose, { Schema, model } from "mongoose";
 
-export type CallStatus = "live" | "resolved" | "escalated" | "missed";
+export type CallStatus = "live" | "resolved" | "escalated" | "missed" | "callback_required";
 
 export type CallCategory =
   | "support"
@@ -22,7 +22,7 @@ const callSchema = new Schema(
     duration: { type: Number }, // seconds; null/absent = in progress
     status: {
       type: String,
-      enum: ["live", "resolved", "escalated", "missed"],
+      enum: ["live", "resolved", "escalated", "missed", "callback_required"],
       default: "live",
     },
     is_red_flag: { type: Boolean, default: false },

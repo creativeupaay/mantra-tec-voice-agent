@@ -4,10 +4,14 @@ import {
   IUser,
   ILoginCredentials,
   IRegisterData,
+  IForgotPasswordSendOtpResponse,
+  IForgotPasswordVerifyOtpResponse,
+  IForgotPasswordResetResponse,
 } from "../types/api";
 import {
   ICallListResponse,
   ICallResponse,
+  CallStatus,
 } from "../types/call";
 
 export interface ICreditUsage {
@@ -191,6 +195,34 @@ export const authApi = {
   isAuthenticated: (): boolean => {
     return Boolean(localStorage.getItem("auth_token"));
   },
+
+  sendForgotPasswordOtp: async (email: string): Promise<IForgotPasswordSendOtpResponse> => {
+    const response = await apiClient.post<IForgotPasswordSendOtpResponse>(
+      "/auth/forgot-password/send-otp",
+      { email }
+    );
+    return response.data;
+  },
+
+  verifyForgotPasswordOtp: async (email: string, otp: string): Promise<IForgotPasswordVerifyOtpResponse> => {
+    const response = await apiClient.post<IForgotPasswordVerifyOtpResponse>(
+      "/auth/forgot-password/verify-otp",
+      { email, otp }
+    );
+    return response.data;
+  },
+
+  resetPasswordWithOtp: async (
+    email: string,
+    otp: string,
+    newPassword: string
+  ): Promise<IForgotPasswordResetResponse> => {
+    const response = await apiClient.post<IForgotPasswordResetResponse>(
+      "/auth/forgot-password/reset-password",
+      { email, otp, newPassword }
+    );
+    return response.data;
+  },
 };
 
 // Credit API Functions (Admin / Usage)
@@ -286,7 +318,7 @@ export const callApi = {
 
   updateStatus: async (
     id: string,
-    status: "live" | "resolved" | "escalated" | "missed",
+    status: CallStatus,
   ): Promise<ICallResponse> => {
     const response = await apiClient.patch<ICallResponse>(
       `/calls/${id}/status`,

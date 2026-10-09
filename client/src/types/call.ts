@@ -1,4 +1,4 @@
-export type CallStatus = 'live' | 'resolved' | 'escalated' | 'missed'
+export type CallStatus = 'live' | 'resolved' | 'escalated' | 'missed' | 'callback_required'
 
 export type CallCategory = 'support' | 'sales' | 'booking' | 'inquiry' | 'feedback' | 'complaint' | 'technical' | 'billing'
 
@@ -37,6 +37,7 @@ export interface ICallListResponse {
   counts?: {
     escalated: number
     resolved: number
+    callback_required?: number
   }
 }
 

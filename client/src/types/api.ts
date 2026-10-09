@@ -29,3 +29,18 @@ export interface IAuthResponse {
     role?: string
   }
 }
+
+export interface IForgotPasswordSendOtpResponse {
+  success: boolean
+  message: string
+}
+
+export interface IForgotPasswordVerifyOtpResponse {
+  success: boolean
+  message: string
+}
+
+export interface IForgotPasswordResetResponse {
+  success: boolean
+  message: string
+}

@@ -209,6 +209,7 @@ const HomePage: FC = () => {
 
   // ── DERIVED METRICS ──────────────────────────────────────────────────
   const escalatedCount = useMemo(() => filteredCalls.filter(c => c.status === 'escalated').length, [filteredCalls])
+  const callbackRequiredCount = useMemo(() => filteredCalls.filter(c => c.status === 'callback_required').length, [filteredCalls])
   const resolvedCount = useMemo(() => filteredCalls.filter(c => c.status === 'resolved').length, [filteredCalls])
   const missedCount = useMemo(() => filteredCalls.filter(c => c.status === 'missed').length, [filteredCalls])
   const liveCount = useMemo(() => filteredCalls.filter(c => c.status === 'live' || !c.status).length, [filteredCalls])
@@ -245,10 +246,11 @@ const HomePage: FC = () => {
   // Status breakdown for donut chart derived strictly from filtered state
   const statusBreakdownData = useMemo(() => [
     { name: 'resolved', value: resolvedCount },
+    { name: 'callback_required', value: callbackRequiredCount },
     { name: 'escalated', value: escalatedCount },
     { name: 'missed', value: missedCount },
     { name: 'live', value: liveCount },
-  ], [resolvedCount, escalatedCount, missedCount, liveCount])
+  ], [resolvedCount, callbackRequiredCount, escalatedCount, missedCount, liveCount])
 
   // Dynamic Call Volume per day of month
   const callVolumeData = useMemo(() => {
@@ -664,6 +666,7 @@ const CallVolumeChart = ({ data }: { data: { date: string; dayNumber?: string; c
 // Recharts Donut Chart for Call Status Breakdown
 const STATUS_COLORS: Record<string, string> = {
   resolved: '#5B8C5A',
+  callback_required: '#6366F1',
   escalated: '#C1554A',
   missed: '#C98A3B',
   live: '#2451DA',
@@ -724,7 +727,7 @@ const DonutChart = ({ data, totalCalls }: { data: { name: string; value: number 
           return (
             <div key={d.name} className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <span className="text-[11px] text-text-secondary capitalize">{d.name}</span>
+              <span className="text-[11px] text-text-secondary capitalize">{d.name.replace(/_/g, ' ')}</span>
               <span className="text-[11px] font-semibold text-text-primary tabular-nums">{d.value}</span>
               <span className="text-[10px] text-text-muted tabular-nums">({pct}%)</span>
             </div>

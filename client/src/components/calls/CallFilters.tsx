@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { Search, Flag, ChevronDown, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Search, Flag, ChevronDown, Calendar, AlertTriangle, CheckCircle, PhoneForwarded } from 'lucide-react'
 import { CallStatus } from '../../types/call'
 
 export type DateFilterPreset =
@@ -26,6 +26,7 @@ interface CallFiltersProps {
   setDateTo: (val: string) => void
   escalatedCount?: number
   resolvedCount?: number
+  callbackRequiredCount?: number
 }
 
 const DATE_PRESETS: { label: string; value: DateFilterPreset }[] = [
@@ -56,9 +57,11 @@ const CallFilters: FC<CallFiltersProps> = ({
   setDateTo,
   escalatedCount = 0,
   resolvedCount = 0,
+  callbackRequiredCount = 0,
 }) => {
   const FILTER_OPTIONS: { label: string; value: CallStatus | 'all' | 'flagged'; badge?: number; icon?: any }[] = [
     { label: 'All Calls', value: 'all' },
+    { label: 'Callback Required', value: 'callback_required', badge: callbackRequiredCount, icon: PhoneForwarded },
     { label: 'Escalated', value: 'escalated', badge: escalatedCount, icon: AlertTriangle },
     { label: 'Resolved', value: 'resolved', badge: resolvedCount, icon: CheckCircle },
     { label: 'Live', value: 'live' },
@@ -160,6 +163,7 @@ const CallFilters: FC<CallFiltersProps> = ({
           const Icon = opt.icon
           const isActive = activeFilter === opt.value
           const isEscalated = opt.value === 'escalated'
+          const isCallback = opt.value === 'callback_required'
           
           return (
             <button
@@ -169,10 +173,14 @@ const CallFilters: FC<CallFiltersProps> = ({
                 isActive
                   ? isEscalated
                     ? 'bg-red-500 text-white border-red-500 shadow-xs'
-                    : 'bg-text-primary text-surface-card border-text-primary'
+                    : isCallback
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-text-primary text-surface-card border-text-primary'
                   : isEscalated && (opt.badge ?? 0) > 0
                     ? 'bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20'
-                    : 'bg-surface-card text-text-secondary border-border hover:border-border-strong hover:text-text-primary'
+                    : isCallback && (opt.badge ?? 0) > 0
+                      ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/30 hover:bg-indigo-500/20'
+                      : 'bg-surface-card text-text-secondary border-border hover:border-border-strong hover:text-text-primary'
               }`}
             >
               {Icon && <Icon size={13} strokeWidth={2} />}
@@ -184,7 +192,9 @@ const CallFilters: FC<CallFiltersProps> = ({
                       ? 'bg-white/20 text-white'
                       : isEscalated && opt.badge > 0
                         ? 'bg-red-500 text-white'
-                        : 'bg-surface-page text-text-secondary border border-border'
+                        : isCallback && opt.badge > 0
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-surface-page text-text-secondary border border-border'
                   }`}
                 >
                   {opt.badge}

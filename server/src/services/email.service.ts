@@ -1,4 +1,5 @@
 import { Settings } from '../models/Settings.js'
+import { env } from '../config/env.config.js'
 
 export interface CallEscalationData {
   _id?: string
@@ -29,8 +30,8 @@ export async function sendEscalationEmailNotification(callData: CallEscalationDa
       return { success: false, message: 'No valid recipient emails configured' }
     }
 
-    const apiKey = (process.env.RESEND_API_KEY || settings.resend_api_key || '').trim()
-    const fromEmail = (process.env.FROM_EMAIL || settings.resend_from_email || 'noreply@creativeupaay.in').trim()
+    const apiKey = (env.RESEND_API_KEY || settings.resend_api_key || '').trim()
+    const fromEmail = (env.FROM_EMAIL || settings.resend_from_email || 'noreply@creativeupaay.in').trim()
 
     if (!apiKey) {
       console.warn('[EmailService] RESEND_API_KEY is not configured in process.env or settings.')
@@ -149,4 +150,109 @@ export async function sendTestEscalationEmail(targetEmails?: string[]): Promise<
   }
 
   return await sendEscalationEmailNotification(sampleCall)
+}
+
+/**
+ * Send a 6-digit OTP email for password reset via Resend API (with console fallback for local dev).
+ */
+export async function sendPasswordResetOtpEmail(
+  toEmail: string,
+  otp: string,
+  userName?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const settings = await Settings.findOne()
+    const apiKey = (env.RESEND_API_KEY || settings?.resend_api_key || '').trim()
+    const fromEmail = (env.FROM_EMAIL || settings?.resend_from_email || 'noreply@creativeupaay.in').trim()
+
+    console.log(`[EmailService] 🔐 Password Reset OTP for ${toEmail}: ${otp}`)
+
+    if (!apiKey) {
+      console.warn('[EmailService] RESEND_API_KEY is not configured. Logged OTP in console for testing.')
+      return {
+        success: true,
+        message: 'Verification code generated (check server console in dev mode).',
+      }
+    }
+
+    const recipientName = userName ? ` ${userName}` : ''
+    const subject = `Mantra Tech — Password Reset Code: ${otp}`
+
+    const htmlBody = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 20px; background-color: #fafaf9; border-radius: 16px;">
+        <div style="background-color: #ffffff; padding: 36px 28px; border-radius: 12px; border: 1px solid #e4e4e7; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+          
+          <!-- Logo & Brand Header -->
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background-color: #18181b; border-radius: 10px; text-align: center; margin-bottom: 12px;">
+              <span style="color: #ffffff; font-size: 20px; font-weight: bold; vertical-align: middle;">M</span>
+            </div>
+            <h1 style="margin: 0; font-size: 20px; font-weight: 600; color: #18181b; letter-spacing: -0.02em;">Mantra Tech</h1>
+            <p style="margin: 4px 0 0; font-size: 13px; color: #71717a;">Voice Agent Administration</p>
+          </div>
+
+          <!-- Message Body -->
+          <h2 style="font-size: 16px; font-weight: 600; color: #18181b; margin-top: 0; margin-bottom: 8px; text-align: center;">
+            Password Reset Verification
+          </h2>
+          <p style="font-size: 14px; line-height: 1.5; color: #3f3f46; margin-bottom: 24px; text-align: center;">
+            Hi${recipientName}, we received a request to reset your Mantra Tech admin account password. Use the verification code below:
+          </p>
+
+          <!-- OTP Box -->
+          <div style="background-color: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 10px; padding: 20px 16px; text-align: center; margin-bottom: 24px;">
+            <div style="font-family: 'JetBrains Mono', 'IBM Plex Mono', Menlo, Consolas, monospace; font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #18181b; margin-left: 8px;">
+              ${otp}
+            </div>
+            <p style="margin: 8px 0 0; font-size: 12px; color: #71717a;">
+              Valid for 10 minutes
+            </p>
+          </div>
+
+          <!-- Security Notice -->
+          <div style="border-top: 1px solid #f4f4f5; padding-top: 18px; margin-top: 24px;">
+            <p style="font-size: 12px; line-height: 1.5; color: #71717a; margin: 0; text-align: center;">
+              If you did not request this password reset, please ignore this email or contact support. Your password remains unchanged.
+            </p>
+          </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #a1a1aa;">
+          &copy; ${new Date().getFullYear()} Mantra Tech Inc. All rights reserved.
+        </div>
+      </div>
+    `
+
+    const resendPayload = {
+      from: `Mantra Tech <${fromEmail}>`,
+      to: [toEmail],
+      subject,
+      html: htmlBody,
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'MantraTechVoiceAgent/1.0',
+      },
+      body: JSON.stringify(resendPayload),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      console.error(`[EmailService] Resend API Error (${response.status}): ${errText}`)
+      return { success: false, message: `Resend error: ${errText}` }
+    }
+
+    const resData = await response.json()
+    console.log(`[EmailService] Sent password reset OTP to ${toEmail}. Resend ID:`, (resData as any).id)
+    return { success: true, message: 'Verification code sent to your email.' }
+  } catch (error: any) {
+    console.error('[EmailService] Failed to send password reset OTP email:', error.message || error)
+    return { success: false, message: error.message || 'Email delivery failed' }
+  }
 }

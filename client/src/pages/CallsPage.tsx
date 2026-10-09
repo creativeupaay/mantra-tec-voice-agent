@@ -14,6 +14,7 @@ const STATUS_LABELS: Record<CallStatus, string> = {
   resolved: 'Resolved',
   escalated: 'Escalated',
   missed: 'Missed',
+  callback_required: 'Callback Required',
 }
 
 /** Prefer call timestamp; fall back to Mongo ObjectId time so sorting never collapses. */
@@ -116,6 +117,7 @@ const CallsPage: FC = () => {
   const [totalPages, setTotalPages] = useState(1)
   const [escalatedCount, setEscalatedCount] = useState(0)
   const [resolvedCount, setResolvedCount] = useState(0)
+  const [callbackRequiredCount, setCallbackRequiredCount] = useState(0)
 
   const [isLoading, setIsLoading] = useState(true)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
@@ -169,6 +171,9 @@ const CallsPage: FC = () => {
       if (response.counts) {
         setEscalatedCount(response.counts.escalated)
         setResolvedCount(response.counts.resolved)
+        if (response.counts.callback_required !== undefined) {
+          setCallbackRequiredCount(response.counts.callback_required)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch paginated calls', err)
@@ -196,7 +201,7 @@ const CallsPage: FC = () => {
 
   // Sync urlTab if set
   useEffect(() => {
-    if (urlTab && ['all', 'escalated', 'resolved', 'live', 'missed', 'flagged'].includes(urlTab)) {
+    if (urlTab && ['all', 'escalated', 'resolved', 'live', 'missed', 'flagged', 'callback_required'].includes(urlTab)) {
       setActiveFilter(urlTab as any)
     }
   }, [urlTab])
@@ -339,6 +344,7 @@ const CallsPage: FC = () => {
         setDateTo={setDateTo}
         escalatedCount={escalatedCount}
         resolvedCount={resolvedCount}
+        callbackRequiredCount={callbackRequiredCount}
       />
 
       <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col min-h-[600px] lg:min-h-[700px] shadow-2xs">

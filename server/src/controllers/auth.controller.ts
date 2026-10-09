@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
 import { User, IUser } from '../models/User.js'
-import { env } from '../config/env.config'
+import { Otp } from '../models/Otp.js'
+import { env } from '../config/env.config.js'
+import { sendPasswordResetOtpEmail } from '../services/email.service.js'
 
 // Helper to get tokens from user
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,6 +174,179 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     res.json({
       success: true,
       token: newToken,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const sendForgotPasswordOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const rawEmail = String(req.body.email || '').trim().toLowerCase()
+
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${rawEmail}$`, 'i') } })
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'No account registered with this email address.',
+      })
+      return
+    }
+
+    // Rate-limit check: check if an OTP was created in the last 60 seconds
+    const recentOtp = await Otp.findOne({
+      email: rawEmail,
+      purpose: 'forgot_password',
+      createdAt: { $gt: new Date(Date.now() - 60 * 1000) },
+    })
+
+    if (recentOtp) {
+      const waitSeconds = Math.max(1, Math.ceil((recentOtp.createdAt.getTime() + 60 * 1000 - Date.now()) / 1000))
+      res.status(429).json({
+        success: false,
+        message: `Please wait ${waitSeconds} seconds before requesting a new verification code.`,
+      })
+      return
+    }
+
+    // Generate 6-digit random code
+    const plainOtp = Math.floor(100000 + Math.random() * 900000).toString()
+    const salt = await bcrypt.genSalt(10)
+    const otpHash = await bcrypt.hash(plainOtp, salt)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+
+    // Delete any active OTP for this email and purpose
+    await Otp.deleteMany({ email: rawEmail, purpose: 'forgot_password' })
+
+    // Create new OTP record
+    await Otp.create({
+      email: rawEmail,
+      otpHash,
+      purpose: 'forgot_password',
+      expiresAt,
+    })
+
+    // Send email
+    const emailResult = await sendPasswordResetOtpEmail(user.email, plainOtp, user.name)
+
+    res.status(200).json({
+      success: true,
+      message: emailResult.success
+        ? 'Verification code sent to your email.'
+        : `Verification code generated. ${emailResult.message}`,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const verifyForgotPasswordOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const rawEmail = String(req.body.email || '').trim().toLowerCase()
+    const otp = String(req.body.otp || '').trim()
+
+    const otpRecord = await Otp.findOne({
+      email: rawEmail,
+      purpose: 'forgot_password',
+      expiresAt: { $gt: new Date() },
+    })
+
+    if (!otpRecord) {
+      res.status(400).json({
+        success: false,
+        message: 'Verification code has expired or does not exist. Please request a new code.',
+      })
+      return
+    }
+
+    if (otpRecord.attempts >= 5) {
+      await Otp.deleteOne({ _id: otpRecord._id })
+      res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. Please request a new verification code.',
+      })
+      return
+    }
+
+    const isValid = await otpRecord.compareOtp(otp)
+    if (!isValid) {
+      otpRecord.attempts += 1
+      await otpRecord.save()
+      res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please check and try again.',
+      })
+      return
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification code verified successfully.',
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const resetPasswordWithOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const rawEmail = String(req.body.email || '').trim().toLowerCase()
+    const otp = String(req.body.otp || '').trim()
+    const newPassword = String(req.body.newPassword || '').trim()
+
+    const otpRecord = await Otp.findOne({
+      email: rawEmail,
+      purpose: 'forgot_password',
+      expiresAt: { $gt: new Date() },
+    })
+
+    if (!otpRecord) {
+      res.status(400).json({
+        success: false,
+        message: 'Verification code has expired or is invalid. Please request a new code.',
+      })
+      return
+    }
+
+    if (otpRecord.attempts >= 5) {
+      await Otp.deleteOne({ _id: otpRecord._id })
+      res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. Please request a new verification code.',
+      })
+      return
+    }
+
+    const isValid = await otpRecord.compareOtp(otp)
+    if (!isValid) {
+      otpRecord.attempts += 1
+      await otpRecord.save()
+      res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please check and try again.',
+      })
+      return
+    }
+
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${rawEmail}$`, 'i') } })
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'No account found for this email address.',
+      })
+      return
+    }
+
+    // Update password (Mongoose pre-save hook will hash it)
+    user.password = newPassword
+    await user.save()
+
+    // Delete OTP records so it cannot be reused
+    await Otp.deleteMany({ email: rawEmail, purpose: 'forgot_password' })
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully. You can now sign in with your new password.',
     })
   } catch (error) {
     next(error)

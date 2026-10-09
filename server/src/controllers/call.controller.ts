@@ -178,9 +178,10 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
     const filter = queryConditions.length > 0 ? { $and: queryConditions } : {}
 
     // Tab counts for status header
-    const [escalatedCount, resolvedCount] = await Promise.all([
+    const [escalatedCount, resolvedCount, callbackCount] = await Promise.all([
       Call.countDocuments({ status: 'escalated' }),
       Call.countDocuments({ status: 'resolved' }),
+      Call.countDocuments({ status: 'callback_required' }),
     ])
 
     // Query Mongo documents
@@ -222,6 +223,7 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
       counts: {
         escalated: escalatedCount,
         resolved: resolvedCount,
+        callback_required: callbackCount,
       },
     })
   } catch (error) {
@@ -437,7 +439,7 @@ export const updateCallStatus = async (req: Request, res: Response, _next: NextF
       return
     }
 
-    const validStatuses = ['live', 'resolved', 'escalated', 'missed']
+    const validStatuses = ['live', 'resolved', 'escalated', 'missed', 'callback_required']
     if (!status || !validStatuses.includes(status)) {
       res.status(400).json({ success: false, message: `Invalid status: "${status}". Must be one of: ${validStatuses.join(', ')}` })
       return
