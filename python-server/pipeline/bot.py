@@ -188,9 +188,9 @@ class UserTranscriptCollector(FrameProcessor):
                     self.state.transcript_lines.append(f"user: {content}")
                 if self.on_speech:
                     self.on_speech(content)
-        elif isinstance(frame, InterruptionFrame):
+        elif isinstance(frame, (InterruptionFrame, UserStartedSpeakingFrame)):
             if self.on_speech:
-                self.on_speech("interruption")
+                self.on_speech("speech_activity")
 
         await self.push_frame(frame, direction)
 
@@ -200,14 +200,21 @@ class SilenceTimeoutMonitor:
 
     Workflow:
       1. When bot stops speaking (greeting or answer), inactivity countdown begins.
-      2. If caller remains silent for `initial_timeout` (default 20s):
+      2. If caller remains silent for `initial_timeout` (default 30-35s):
          Phase 1: Ask gentle confirmation 1 ('Hello? Kya aap line par hain?').
-      3. If caller remains silent for another `confirm_timeout` (default 15s):
-         Phase 2: Ask gentle confirmation 2 ('Aapki aawaz nahi aa rahi hai, kya aap sun pa rahe hain?').
+      3. If caller remains silent for another `confirm_timeout` (default 18-20s):
+         Phase 2: Ask gentle confirmation 2 ('Aapki aawaz nahi aa rahi hai, kya aap line par hain?').
       4. If caller remains silent for another 10s after Phase 2:
          Phase 3: Politely state wrapup goodbye and cleanly disconnect the call.
       5. Any user speech or interruption resets the silence phase to 0 and clears the timer.
+      6. If user states they need a moment (e.g. '1 sec', 'wait', 'pen dhund raha hu'), watchdog is paused.
     """
+
+    HOLD_KEYWORDS = (
+        "1 sec", "1 min", "one sec", "one min", "wait", "hold", "rukiye", "ruko",
+        "likh raha", "likh raha hu", "pen", "note kar raha", "ek minute", "ek second",
+        "thoda time", "wait kariye", "hold karo", "just a sec", "just a minute", "likhne do"
+    )
 
     def __init__(
         self,
@@ -221,13 +228,14 @@ class SilenceTimeoutMonitor:
     ):
         self.call_id = call_id
         self.state = state
-        self.initial_timeout = max(10.0, initial_timeout)
-        self.confirm_timeout = max(8.0, confirm_timeout)
+        self.initial_timeout = max(30.0, initial_timeout)
+        self.confirm_timeout = max(18.0, confirm_timeout)
         self.send_prompt_fn = send_prompt_fn
         self.disconnect_fn = disconnect_fn
 
         self.bot_is_speaking: bool = True  # True initially while greeting is being delivered
         self.last_activity_time: float = time.monotonic()
+        self.hold_until: float = 0.0
         self.silence_phase: int = 0  # 0: normal, 1: check 1 asked, 2: check 2 asked, 3: disconnecting
         self.is_active: bool = False
         self._watchdog_task: asyncio.Task | None = None
@@ -238,6 +246,7 @@ class SilenceTimeoutMonitor:
         self.is_active = True
         self.bot_is_speaking = True
         self.last_activity_time = time.monotonic()
+        self.hold_until = 0.0
         self.silence_phase = 0
         self._watchdog_task = asyncio.create_task(self._watchdog_loop())
         logger.info(
@@ -266,7 +275,20 @@ class SilenceTimeoutMonitor:
 
     def on_user_speech(self, text: str = ""):
         """Called whenever caller speaks or interrupts."""
-        self.last_activity_time = time.monotonic()
+        now = time.monotonic()
+        self.last_activity_time = now
+
+        # If user asks to wait or note down digits/pen, extend grace period by 45s
+        lower_text = text.lower()
+        if any(kw in lower_text for kw in self.HOLD_KEYWORDS):
+            self.hold_until = now + 45.0
+            logger.info(
+                f"[bot] Call {self.call_id}: Hold/writing detected ('{text[:30]}'). "
+                f"Pausing silence watchdog for 45s."
+            )
+        else:
+            self.hold_until = 0.0
+
         if self.silence_phase > 0:
             logger.info(
                 f"[bot] Call {self.call_id}: User resumed speaking during silence check phase {self.silence_phase} "
@@ -281,16 +303,17 @@ class SilenceTimeoutMonitor:
                 if not self.is_active:
                     break
 
-                # Do not count silence while bot is actively speaking or delivering audio
-                if self.bot_is_speaking or self._is_prompting:
+                now = time.monotonic()
+                # Do not count silence while bot is speaking, prompting, or caller asked for a moment
+                if self.bot_is_speaking or self._is_prompting or now < self.hold_until:
                     continue
 
-                elapsed = time.monotonic() - self.last_activity_time
+                elapsed = now - self.last_activity_time
 
                 if self.silence_phase == 0:
                     if elapsed >= self.initial_timeout:
                         async with self._lock:
-                            if self.silence_phase == 0 and not self.bot_is_speaking and not self._is_prompting and self.is_active:
+                            if self.silence_phase == 0 and not self.bot_is_speaking and not self._is_prompting and self.is_active and now >= self.hold_until:
                                 self.silence_phase = 1
                                 self.last_activity_time = time.monotonic()
                                 logger.info(
@@ -302,7 +325,7 @@ class SilenceTimeoutMonitor:
                 elif self.silence_phase == 1:
                     if elapsed >= self.confirm_timeout:
                         async with self._lock:
-                            if self.silence_phase == 1 and not self.bot_is_speaking and not self._is_prompting and self.is_active:
+                            if self.silence_phase == 1 and not self.bot_is_speaking and not self._is_prompting and self.is_active and now >= self.hold_until:
                                 self.silence_phase = 2
                                 self.last_activity_time = time.monotonic()
                                 logger.info(
@@ -337,24 +360,24 @@ class SilenceTimeoutMonitor:
             if stage == 1:
                 if is_hindi:
                     prompt = (
-                        "Caller thodi der se chup hain. Bahut polite aur natural Hinglish mein ek chhota sentence boliye: "
+                        "Caller thodi der se chup hain. Bahut polite aur gentle Hinglish mein ek chhota sentence boliye: "
                         "'Hello? Kya aap line par hain?'"
                     )
                 else:
                     prompt = (
-                        "The caller has been silent for a moment. In a polite, natural tone, briefly check if they are still on the line: "
-                        "'Hello, are you still there?'"
+                        "The caller has been silent for a moment. In a polite, gentle tone, briefly check if they are on the line: "
+                        "'Hello, are you on the line?'"
                     )
             else:
                 if is_hindi:
                     prompt = (
                         "Caller se abhi tak koi response nahi mila. Bahut polite tone mein puchiye: "
-                        "'Hello, aapki aawaz nahi aa rahi hai, kya aap mujhe sun pa rahe hain?'"
+                        "'Hello, aapki aawaz nahi aa rahi hai, kya aap line par hain?'"
                     )
                 else:
                     prompt = (
                         "Still no response from caller. Ask politely: "
-                        "'Hello, I cannot hear you clearly, are you able to hear me?'"
+                        "'Hello, I cannot hear you clearly, are you on the line?'"
                     )
             await self.send_prompt_fn(prompt)
         finally:
