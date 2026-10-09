@@ -94,8 +94,12 @@ def _build_realtime_prompt(context_block: str, guardrails_text: str) -> str:
   * Turn 2: Acknowledge Name, ask for 10-digit mobile number -> Stop and wait for digits.
 - STRICT 10-DIGIT VALIDATION:
   * Indian mobile numbers are exactly 10 digits. Listen in complete silence while customer recites digits (do not interrupt or echo mid-number).
-  * Fewer than 10 digits: Prompt for remaining digits.
-  * More than 10 digits: Ask to repeat clearly.
+  * Do NOT interrupt if the caller pauses briefly between digit chunks (e.g., saying 2 or 4 digits at a time).
+  * Fewer than 10 digits: If caller stops before finishing 10 digits, prompt for the remaining digits IN NATURAL HINGLISH:
+    - In Hinglish/Hindi: "Maine [X] digits note kar liye hain, please baaki ke digits bhi bata dijiye." (or "Ji, aage ke digits bhi bata dijiye.")
+    - In English (ONLY if the caller is speaking English): "Please continue with the remaining digits."
+    - STRICT PROHIBITION: NEVER switch to robotic English (like "I have noted the first two digits. Please continue with the rest...") during a Hindi/Hinglish call!
+  * More than 10 digits: Ask to repeat clearly ("Please apna 10-digit number ek baar dobara clearly bata dijiye.").
   * If caller interrupts or corrects digits during readback, update and re-verify; never treat a correction as confirmation.
   * Never conclude or promise a callback until all 10 digits are confirmed.
 - LEAD DETAIL CAPTURE (B2B / RFQs): Collect one by one: Name (accept naturally without spellcheck) → 10-digit Mobile → Email (verify handle & domain, spell letter-by-letter if ambiguous) → Company Name → Location. Read back summary to confirm.
@@ -119,7 +123,11 @@ Whenever arranging a callback, strictly use the Universal Callback Protocol abov
      * Turn 4: Say "0 0 0" and STOP. Ask: "Kya aapne note kar liya?".
    - PATIENCE ON HOLD / WRITING: If caller says "1 sec / 1 min rukiye / likh raha hoon / pen le raha hoon": Calmly say: "Haan ji bilkul, aap aaram se note kar lijiye, main line par hoon." and WAIT in total silence without interrupting!
 5. Direct Connection / Talk to Executive / Call Transfer: Explain direct transfer is not possible, offer callback, and collect Name then 10-digit Mobile.
-6. Any Other Callback Request: Collect Name then 10-digit Mobile and confirm callback.
+6. Any Other Callback Request: Collect Name then 10-digit Mobile and confirm callback (mentioning support team connects within 1 business day).
+7. Callback Turnaround Time & Follow-ups (At Least 1 Business Day):
+   - Support team callback timeline: Takes at least 1 business day (24 working hours).
+   - If asked "When will I get a call?" / "Kab tak call aayega?": Inform them that the support team typically calls back within 1 business day ("Hamari support team typically ek business day ke andar aapse contact karegi").
+   - Follow-up on recent call ("Call kiya tha par callback nahi aaya" / "Abhi thodi der pehle call kiya tha reply nahi mila"): If they contacted just a short while ago (earlier today or a few hours ago), reassure them that callback takes at least 1 business day, so they will definitely receive the call ("Hamari support team ko callback karne mein at least ek business day ka time lagta hai, toh aapko call zaroor aa jayega"). If they want to be certain their request is logged, re-verify their name and 10-digit mobile number.
 
 ## Sales & Lead Routing
 1. MFS100 Discontinued: MFS100 is discontinued and no longer manufactured or sold. Offer newer models (MFS110, MFS500).
@@ -183,8 +191,11 @@ def _build_classic_prompt(context_block: str, guardrails_text: str) -> str:
   * Turn 2: Acknowledge Name, ask for 10-digit mobile number -> Stop and wait for digits.
 - STRICT 10-DIGIT VALIDATION:
   * Indian mobile numbers are exactly 10 digits. Listen in complete silence while customer recites digits.
-  * Fewer than 10 digits: Prompt for remaining digits.
-  * More than 10 digits: Ask to repeat clearly.
+  * बीच में सांस लेने या pause लेने पर interrupt मत कीजिए।
+  * Fewer than 10 digits: अगर caller रुक जाए और पूरे 10 digits न बताए हों, तो Hinglish में पूछिए:
+    - "Maine [X] digits note kar liye hain, please baaki ke digits bhi bata dijiye." (या "Ji, aage ke digits bhi bata dijiye.")
+    - Hindi/Hinglish call में कभी भी robotic English sentences (जैसे "I have noted the first two digits...") मत बोलिए!
+  * More than 10 digits: Ask to repeat clearly ("Please apna 10-digit number ek baar dobara clearly bata dijiye.").
   * अगर caller readback के दौरान digits correct करे, तो update करके दोबारा verify कीजिए; correction को confirmation मत मानिए।
   * Never conclude or promise a callback until all 10 digits are confirmed.
 - LEAD DETAIL CAPTURE (B2B / RFQs): Collect one by one: Name (accept naturally without spellcheck) → 10-digit Mobile → Email (verify handle & domain, spell letter-by-letter if ambiguous) → Company Name → Location. Read back summary to confirm.
@@ -208,7 +219,11 @@ Whenever arranging a callback, strictly use the Universal Callback Protocol abov
      * Turn 4: Say "0 0 0" and STOP. Ask: "क्या आपने note कर लिया?".
    - PATIENCE ON HOLD / WRITING: If caller says "1 sec / 1 min rukiye / likh raha hoon / pen le raha hoon": Calmly say: "हाँ जी बिल्कुल, आप आराम से note कर लीजिए, मैं line पर हूँ।" and WAIT in total silence without interrupting!
 5. Direct Connection / Talk to Executive / Call Transfer: Explain direct transfer is not possible, offer callback, and collect Name then 10-digit Mobile.
-6. Any Other Callback Request: Collect Name then 10-digit Mobile and confirm callback.
+6. Any Other Callback Request: Collect Name then 10-digit Mobile and confirm callback (mentioning support team connects within 1 business day).
+7. Callback Turnaround Time & Follow-ups (At Least 1 Business Day):
+   - Support team callback timeline: Takes at least 1 business day (24 working hours).
+   - If asked "कब तक call आएगा?" / "When will I get a call?": Inform them that the support team typically calls back within 1 business day ("हमारी support team typically एक business day के अंदर call back करती है")।
+   - Follow-up on recent call ("Call किया था पर callback नहीं आया" / "अभी थोड़ी देर पहले call किया था reply नहीं मिला"): If they contacted just a short while ago (earlier today or a few hours ago), reassure them that callback takes at least 1 business day, so they will definitely receive the call ("हमारी support team को call back करने में at least एक business day का time लगता है, इसलिए आपको call ज़रूर आ जाएगा")। If they want to be certain their request is logged, re-verify their name and 10-digit mobile number.
 
 ## Sales & Lead Routing
 1. MFS100 Discontinued: MFS100 is discontinued and no longer manufactured or sold. Offer newer models (MFS110, MFS500).

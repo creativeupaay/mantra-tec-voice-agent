@@ -462,7 +462,7 @@ async def run_bot(
             silence_monitor.on_user_speech(text)
 
     if gemini_mode:
-        from google.genai.types import ThinkingConfig, EndSensitivity, StartSensitivity
+        from google.genai.types import ThinkingConfig, StartSensitivity
         from pipecat.services.google.gemini_live.llm import GeminiVADParams
 
         llm = GeminiLiveLLMService(
@@ -479,8 +479,7 @@ async def run_bot(
                 thinking=ThinkingConfig(thinking_budget=0),
                 vad=GeminiVADParams(
                     start_sensitivity=StartSensitivity.START_SENSITIVITY_LOW,
-                    end_sensitivity=EndSensitivity.END_SENSITIVITY_LOW,
-                    silence_duration_ms=800,
+                    silence_duration_ms=500,
                 ),
             ),
         )

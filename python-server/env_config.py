@@ -175,8 +175,8 @@ def _load() -> Settings:
         voice_mode=os.getenv("VOICE_MODE", "classic").lower(),
         # Gemini Live / Realtime
         gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.8-live"),
-        gemini_voice_name=os.getenv("GEMINI_VOICE_NAME", "Aoede"),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-flash-live-preview"),
+        gemini_voice_name=os.getenv("GEMINI_VOICE_NAME", "Erinome"),
         gemini_language=os.getenv("GEMINI_LANGUAGE", "hi-IN"),
         # TTS
         tts_provider=os.getenv("TTS_PROVIDER", "deepgram").lower(),
