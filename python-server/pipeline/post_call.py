@@ -122,7 +122,7 @@ class PostCallExtraction(BaseModel):
         description=(
             "True if a callback is required or was promised to the customer. "
             "Set to True if the customer had an order or delivery issue and a callback was arranged, "
-            "or if the customer was unable to reach support / support was unresponsive and a direct callback was arranged, "
+            "or if the customer needed device subscription / RD service / recharge / renewal / technical assistance and a callback was arranged, "
             "or if any callback was promised by the agent."
         ),
     )
