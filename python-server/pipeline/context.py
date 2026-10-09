@@ -22,16 +22,34 @@ from services.crm import crm_service
 from services.desk import desk_service
 
 
-async def build_call_context(call_id: str, phone_number: str) -> CallState:
+async def build_call_context(
+    call_id: str,
+    phone_number: str,
+    telephony_provider: str = "unknown",
+) -> CallState:
     """Fetch all context in parallel and return a populated CallState.
 
-    If phone_number is 'unknown' (e.g. SmallWebRTC / browser test), all
-    external fetches are skipped and an empty state is returned.
+    If phone_number is 'unknown' or coming from Exotel (forwarded trunk line),
+    external customer identity fetches are skipped and a clean state is returned.
     """
-    state = CallState(call_id=call_id, phone_number=phone_number)
+    state = CallState(
+        call_id=call_id,
+        phone_number=phone_number,
+        telephony_provider=telephony_provider,
+    )
 
-    if phone_number in ("unknown", ""):
-        logger.warning(f"[context] No phone number for call {call_id} — skipping context fetch")
+    SHARED_FORWARDING_NUMBERS = {"07969268119", "07948501661", "+917969268119", "+917948501661"}
+    is_exotel_or_trunk = (
+        telephony_provider == "exotel"
+        or phone_number in SHARED_FORWARDING_NUMBERS
+        or phone_number in ("unknown", "")
+    )
+
+    if is_exotel_or_trunk:
+        logger.info(
+            f"[context] Exotel/trunk/unknown call ({phone_number}, provider={telephony_provider}) "
+            f"— skipping caller identity fetch to prevent trunk identity pollution"
+        )
         return state
 
     logger.info(f"[context] Fetching context for {phone_number} (call {call_id})")

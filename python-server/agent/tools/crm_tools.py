@@ -64,7 +64,7 @@ CREATE_LEAD_SCHEMA = FunctionSchema(
             "description": "The customer's 10-digit mobile contact number collected from the caller.",
         },
     },
-    required=["name"],
+    required=["name", "phone_number"],
 )
 
 
@@ -117,7 +117,8 @@ async def handle_create_lead(params: FunctionCallParams) -> None:
 
     raw_phone = params.arguments.get("phone_number")
     clean_phone = "".join(filter(str.isdigit, str(raw_phone))) if raw_phone else ""
-    if len(clean_phone) >= 10:
+    SHARED_FORWARDING_NUMBERS = {"07969268119", "07948501661"}
+    if len(clean_phone) >= 10 and clean_phone[-10:] not in SHARED_FORWARDING_NUMBERS:
         phone = clean_phone[-10:]
         if state:
             state.phone_number = phone
@@ -126,8 +127,12 @@ async def handle_create_lead(params: FunctionCallParams) -> None:
                 await identity_service.get_or_create(phone)
             except Exception:
                 pass
+    elif state and getattr(state, "telephony_provider", "") == "exotel":
+        phone = ""
+    elif state and "".join(filter(str.isdigit, str(state.phone_number)))[-10:] not in SHARED_FORWARDING_NUMBERS:
+        phone = state.phone_number
     else:
-        phone = state.phone_number if state else "unknown"
+        phone = ""
 
     name_parts = name.strip().split()
     last_name = name_parts[-1] if name_parts else "Unknown"

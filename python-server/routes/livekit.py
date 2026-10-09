@@ -140,7 +140,7 @@ async def _join_room(room_name: str, phone_number: str, call_id: str) -> None:
     )
 
     try:
-        await run_bot(transport, call_id, phone_number)
+        await run_bot(transport, call_id, phone_number, telephony_provider="livekit")
     except Exception as e:
         logger.error(f"[livekit] Bot crashed for call_id={call_id}: {e}")
 

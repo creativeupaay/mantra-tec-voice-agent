@@ -19,6 +19,7 @@ class CallState:
     # ── Core identifiers ──────────────────────────────────────────────────────
     call_id: str
     phone_number: str
+    telephony_provider: str = "unknown"  # "exotel" | "plivo" | "livekit" | "webrtc"
     # MongoDB `_id` of the Call document (used by CreditUsage.call_id ObjectId refs)
     db_call_id: Optional[str] = None
 
@@ -30,7 +31,7 @@ class CallState:
     recent_calls: List[Call] = field(default_factory=list)
 
     # ── Detected / updated during the call ───────────────────────────────────
-    preferred_language: str = "en"   # "en" | "hi" | "hinglish"
+    preferred_language: str = "hinglish"   # "hinglish" | "hi" | "en"
     call_started_at: Optional[float] = None  # monotonic clock when call timing started
     call_started_wall: Optional[float] = None  # wall-clock time.time() for duration
 

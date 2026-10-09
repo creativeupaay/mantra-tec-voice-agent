@@ -80,7 +80,7 @@ async def webrtc_offer(request: Request):
             params=TransportParams(audio_in_enabled=True, audio_out_enabled=True),
         )
         try:
-            await run_bot(transport, call_id, phone_number)
+            await run_bot(transport, call_id, phone_number, telephony_provider="webrtc")
         except Exception as e:
             logger.error(f"[webrtc] Bot crashed: {e}")
 
@@ -147,7 +147,7 @@ async def plivo_websocket_endpoint(
             ),
         )
 
-        await run_bot(transport, call_id, phone_number)
+        await run_bot(transport, call_id, phone_number, telephony_provider="plivo")
     except Exception as e:
         logger.error(f"[server] WebSocket error: {e}")
     finally:
@@ -195,7 +195,7 @@ async def exotel_websocket_endpoint(
             ),
         )
 
-        await run_bot(transport, call_id, phone_number)
+        await run_bot(transport, call_id, phone_number, telephony_provider="exotel")
     except Exception as e:
         logger.error(f"[server] Exotel WebSocket error: {e}")
     finally:

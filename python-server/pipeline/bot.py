@@ -349,6 +349,7 @@ async def run_bot(
     transport: BaseTransport,
     call_id: str,
     phone_number: str,
+    telephony_provider: str = "unknown",
 ) -> None:
     """Assemble and run the Pipecat pipeline for a single call.
 
@@ -356,8 +357,9 @@ async def run_bot(
         transport: The configured Pipecat transport (WebSocket or WebRTC).
         call_id:   Unique call identifier (Plivo UUID or generated UUID).
         phone_number: Caller's E.164 phone number, or "unknown" for WebRTC tests.
+        telephony_provider: Telephony provider identifier ("exotel", "plivo", "livekit", etc.).
     """
-    logger.info(f"[bot] Starting pipeline for call {call_id} from {phone_number}")
+    logger.info(f"[bot] Starting pipeline for call {call_id} from {phone_number} (provider={telephony_provider})")
     logger.info(f"[bot] Voice mode: {settings.voice_mode}")
 
     if settings.voice_mode not in {"classic", "gemini_realtime"}:
@@ -366,7 +368,7 @@ async def run_bot(
     gemini_mode = settings.voice_mode == "gemini_realtime"
 
     # ── 1. Fetch all context in parallel ──────────────────────────────────────
-    state: CallState = await build_call_context(call_id, phone_number)
+    state: CallState = await build_call_context(call_id, phone_number, telephony_provider=telephony_provider)
     # Start timing as early as possible so duration is never left at 0.
     state.call_started_at = time.monotonic()
     state.call_started_wall = time.time()
@@ -635,19 +637,18 @@ async def run_bot(
         except Exception as e:
             logger.warning(f"[bot] Could not register call in DB: {e}")
 
-        # Every call is treated as a fresh/new call to avoid context mixups across shared trunks
-        is_hindi = state.preferred_language in ("hi", "hinglish")
-        if is_hindi:
+        # Every call starts with a warm, natural Hindi/Hinglish greeting by default
+        if gemini_mode:
             greeting_hint = (
-                "Greet politely and calmly in a relaxed, passive tone: "
+                "Greet the caller calmly and warmly in a relaxed tone in Hinglish: "
                 "'Hello, thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
-                "Remember: If caller speaks English, mirror them and speak English immediately."
+                "CRITICAL: If the caller speaks English, switch smoothly to English. If the caller speaks Hindi or Hinglish, continue in natural Hinglish."
             )
         else:
             greeting_hint = (
-                "This is a new caller. Greet politely and calmly in a relaxed, passive tone in English: "
-                "'Hello, thank you for calling Mantra Tech, I am Priya. How can I help you today?' "
-                "CRITICAL LANGUAGE MIRRORING RULE: If caller replies in English, keep speaking in English. If caller replies in Hindi or Hinglish, switch immediately and mirror them in Hinglish."
+                "Greet the caller calmly and warmly in a relaxed tone in Hindi: "
+                "'Hello, Mantra Tech में call करने के लिए thank you, मैं Priya बात कर रही हूँ। बताइए मैं आपकी क्या help कर सकती हूँ?' "
+                "CRITICAL: If the caller speaks English, switch smoothly to English. If the caller speaks Hindi or Hinglish, continue in natural Hindi."
             )
 
         if gemini_mode:

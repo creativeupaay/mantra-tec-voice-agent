@@ -33,7 +33,7 @@ CREATE_TICKET_SCHEMA = FunctionSchema(
             "description": "The customer's 10-digit mobile contact number collected from the caller.",
         },
     },
-    required=["subject", "description"],
+    required=["subject", "description", "phone_number"],
 )
 
 CHECK_TICKETS_SCHEMA = FunctionSchema(
@@ -57,7 +57,8 @@ async def handle_create_ticket(params: FunctionCallParams) -> None:
 
     raw_phone = params.arguments.get("phone_number")
     clean_phone = "".join(filter(str.isdigit, str(raw_phone))) if raw_phone else ""
-    if len(clean_phone) >= 10:
+    SHARED_FORWARDING_NUMBERS = {"07969268119", "07948501661"}
+    if len(clean_phone) >= 10 and clean_phone[-10:] not in SHARED_FORWARDING_NUMBERS:
         phone = clean_phone[-10:]
         if state:
             state.phone_number = phone
@@ -66,8 +67,12 @@ async def handle_create_ticket(params: FunctionCallParams) -> None:
                 await identity_service.get_or_create(phone)
             except Exception:
                 pass
+    elif state and getattr(state, "telephony_provider", "") == "exotel":
+        phone = ""
+    elif state and "".join(filter(str.isdigit, str(state.phone_number)))[-10:] not in SHARED_FORWARDING_NUMBERS:
+        phone = state.phone_number
     else:
-        phone = state.phone_number if state else "unknown"
+        phone = ""
 
     ticket_data: dict = {
         "subject": subject,

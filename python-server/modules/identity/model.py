@@ -26,7 +26,7 @@ class Identity(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
     phone_number: str
     name: Optional[str] = None
-    preferred_language: str = "en"
+    preferred_language: str = "hinglish"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_call_at: Optional[datetime] = None
     agent_notes: Optional[str] = None
@@ -40,7 +40,7 @@ class Identity(BaseModel):
 class IdentityCreate(BaseModel):
     phone_number: str
     name: Optional[str] = None
-    preferred_language: str = "en"
+    preferred_language: str = "hinglish"
 
 
 class IdentityUpdate(BaseModel):
