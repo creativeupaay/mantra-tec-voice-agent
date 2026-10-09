@@ -220,8 +220,8 @@ def _load() -> Settings:
         resend_api_key=os.getenv("RESEND_API_KEY", ""),
         from_email=os.getenv("FROM_EMAIL", "noreply@creativeupaay.in"),
         # Inactivity / Silence Detection
-        silence_timeout_initial=float(os.getenv("SILENCE_TIMEOUT_INITIAL_SECONDS", "10.0")),
-        silence_timeout_confirm=float(os.getenv("SILENCE_TIMEOUT_CONFIRM_SECONDS", "6.0")),
+        silence_timeout_initial=float(os.getenv("SILENCE_TIMEOUT_INITIAL_SECONDS", "20.0")),
+        silence_timeout_confirm=float(os.getenv("SILENCE_TIMEOUT_CONFIRM_SECONDS", "15.0")),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )

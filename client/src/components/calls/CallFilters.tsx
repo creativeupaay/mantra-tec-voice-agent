@@ -1,5 +1,5 @@
 import { FC } from 'react'
-import { Search, Flag, ChevronDown, Calendar, AlertTriangle, CheckCircle, PhoneForwarded } from 'lucide-react'
+import { Search, Flag, ChevronDown, Calendar, AlertTriangle, CheckCircle, PhoneForwarded, CheckCheck } from 'lucide-react'
 import { CallStatus } from '../../types/call'
 
 export type DateFilterPreset =
@@ -18,6 +18,8 @@ interface CallFiltersProps {
   intentFilter: string
   setIntentFilter: (val: string) => void
   intentOptions: string[]
+  reviewFilter: 'all' | 'unreviewed' | 'reviewed'
+  setReviewFilter: (val: 'all' | 'unreviewed' | 'reviewed') => void
   datePreset: DateFilterPreset
   setDatePreset: (val: DateFilterPreset) => void
   dateFrom: string
@@ -27,6 +29,8 @@ interface CallFiltersProps {
   escalatedCount?: number
   resolvedCount?: number
   callbackRequiredCount?: number
+  reviewedCount?: number
+  unreviewedCount?: number
 }
 
 const DATE_PRESETS: { label: string; value: DateFilterPreset }[] = [
@@ -49,6 +53,8 @@ const CallFilters: FC<CallFiltersProps> = ({
   intentFilter,
   setIntentFilter,
   intentOptions,
+  reviewFilter,
+  setReviewFilter,
   datePreset,
   setDatePreset,
   dateFrom,
@@ -58,6 +64,8 @@ const CallFilters: FC<CallFiltersProps> = ({
   escalatedCount = 0,
   resolvedCount = 0,
   callbackRequiredCount = 0,
+  reviewedCount = 0,
+  unreviewedCount = 0,
 }) => {
   const FILTER_OPTIONS: { label: string; value: CallStatus | 'all' | 'flagged'; badge?: number; icon?: any }[] = [
     { label: 'All Calls', value: 'all' },
@@ -100,6 +108,29 @@ const CallFilters: FC<CallFiltersProps> = ({
                 {intent}
               </option>
             ))}
+          </select>
+          <ChevronDown
+            size={14}
+            strokeWidth={2}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
+          />
+        </div>
+
+        {/* Review Status Filter */}
+        <div className="relative shrink-0 sm:w-44">
+          <select
+            value={reviewFilter}
+            onChange={e => setReviewFilter(e.target.value as 'all' | 'unreviewed' | 'reviewed')}
+            className={selectClass}
+            aria-label="Filter by review status"
+          >
+            <option value="all">All review status</option>
+            <option value="unreviewed">
+              Unreviewed only {unreviewedCount > 0 ? `(${unreviewedCount})` : ''}
+            </option>
+            <option value="reviewed">
+              Reviewed only {reviewedCount > 0 ? `(${reviewedCount})` : ''}
+            </option>
           </select>
           <ChevronDown
             size={14}

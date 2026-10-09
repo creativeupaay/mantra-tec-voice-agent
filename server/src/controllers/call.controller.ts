@@ -22,6 +22,9 @@ function normalizeCall(call: Record<string, any>) {
     status: call.status || 'live',
     is_red_flag: isFlagged,
     is_red_flagged: isFlagged,
+    is_reviewed: Boolean(call.is_reviewed),
+    reviewed_at: call.reviewed_at ? new Date(call.reviewed_at).toISOString() : undefined,
+    reviewed_by: call.reviewed_by || undefined,
     call_category: call.call_category || 'inquiry',
     duration: typeof call.duration === 'number' ? call.duration : undefined,
     // Client streams via authenticated backend proxy
@@ -109,6 +112,7 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : ''
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'all'
     const intent = typeof req.query.intent === 'string' ? req.query.intent.trim() : 'all'
+    const reviewed = typeof req.query.reviewed === 'string' ? req.query.reviewed.trim().toLowerCase() : 'all'
     const datePreset = typeof req.query.datePreset === 'string' ? req.query.datePreset.trim() : 'all'
     const dateFrom = typeof req.query.dateFrom === 'string' ? req.query.dateFrom.trim() : ''
     const dateTo = typeof req.query.dateTo === 'string' ? req.query.dateTo.trim() : ''
@@ -136,13 +140,13 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
             hasNextPage: false,
             hasPreviousPage: false,
           },
-          counts: { escalated: 0, resolved: 0 },
+          counts: { escalated: 0, resolved: 0, callback_required: 0, reviewed: 0, unreviewed: 0 },
         })
         return
       }
     }
 
-    // 2. Build MongoDB query filter for search, status, and intent
+    // 2. Build MongoDB query filter for search, status, intent, and review status
     const queryConditions: any[] = []
 
     if (search) {
@@ -175,13 +179,25 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
       queryConditions.push({ detected_intent: intent })
     }
 
+    if (reviewed && reviewed !== 'all') {
+      if (reviewed === 'reviewed' || reviewed === 'true') {
+        queryConditions.push({ is_reviewed: true })
+      } else if (reviewed === 'unreviewed' || reviewed === 'false') {
+        queryConditions.push({
+          $or: [{ is_reviewed: false }, { is_reviewed: { $exists: false } }],
+        })
+      }
+    }
+
     const filter = queryConditions.length > 0 ? { $and: queryConditions } : {}
 
-    // Tab counts for status header
-    const [escalatedCount, resolvedCount, callbackCount] = await Promise.all([
+    // Tab counts for status header & review status
+    const [escalatedCount, resolvedCount, callbackCount, reviewedCount, unreviewedCount] = await Promise.all([
       Call.countDocuments({ status: 'escalated' }),
       Call.countDocuments({ status: 'resolved' }),
       Call.countDocuments({ status: 'callback_required' }),
+      Call.countDocuments({ is_reviewed: true }),
+      Call.countDocuments({ $or: [{ is_reviewed: false }, { is_reviewed: { $exists: false } }] }),
     ])
 
     // Query Mongo documents
@@ -224,6 +240,8 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
         escalated: escalatedCount,
         resolved: resolvedCount,
         callback_required: callbackCount,
+        reviewed: reviewedCount,
+        unreviewed: unreviewedCount,
       },
     })
   } catch (error) {
@@ -428,11 +446,11 @@ export const getCallRecording = async (req: Request, res: Response, next: NextFu
   }
 }
 
-// Update call status
+// Update call status (and optionally review status)
 export const updateCallStatus = async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
   try {
     const id = (req.params.id as string || '').trim()
-    const { status } = req.body
+    const { status, is_reviewed } = req.body
 
     if (!id) {
       res.status(400).json({ success: false, message: 'Call ID is required' })
@@ -440,8 +458,13 @@ export const updateCallStatus = async (req: Request, res: Response, _next: NextF
     }
 
     const validStatuses = ['live', 'resolved', 'escalated', 'missed', 'callback_required']
-    if (!status || !validStatuses.includes(status)) {
+    if (status && !validStatuses.includes(status)) {
       res.status(400).json({ success: false, message: `Invalid status: "${status}". Must be one of: ${validStatuses.join(', ')}` })
+      return
+    }
+
+    if (!status && typeof is_reviewed !== 'boolean') {
+      res.status(400).json({ success: false, message: 'Either status or is_reviewed must be provided' })
       return
     }
 
@@ -454,9 +477,20 @@ export const updateCallStatus = async (req: Request, res: Response, _next: NextF
       return
     }
 
+    const updateSet: Record<string, any> = {}
+    if (status) {
+      updateSet.status = status
+    }
+    if (typeof is_reviewed === 'boolean') {
+      const reviewerIdentity = (req as any).user?.name || (req as any).user?.email || 'Admin'
+      updateSet.is_reviewed = is_reviewed
+      updateSet.reviewed_at = is_reviewed ? new Date() : null
+      updateSet.reviewed_by = is_reviewed ? reviewerIdentity : null
+    }
+
     const updatedCall = await Call.findOneAndUpdate(
       filter,
-      { $set: { status } },
+      { $set: updateSet },
       { returnDocument: 'after' }
     ).lean()
 
@@ -474,14 +508,105 @@ export const updateCallStatus = async (req: Request, res: Response, _next: NextF
 
     res.json({
       success: true,
-      message: `Call status updated to ${status}`,
+      message: status ? `Call status updated to ${status}` : `Call marked as ${is_reviewed ? 'reviewed' : 'unreviewed'}`,
       data: normalizeCall(updatedCall as Record<string, any>),
     })
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Internal Database Error during call resolution',
+      message: error.message || 'Internal Database Error during call status update',
       error: error.name || 'UnknownError',
     })
+  }
+}
+
+// Update single call review status (mark as read/reviewed or unread)
+export const updateCallReviewed = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const id = (req.params.id as string || '').trim()
+    const { is_reviewed } = req.body
+
+    if (!id) {
+      res.status(400).json({ success: false, message: 'Call ID is required' })
+      return
+    }
+
+    if (typeof is_reviewed !== 'boolean') {
+      res.status(400).json({ success: false, message: 'is_reviewed must be a boolean (true or false)' })
+      return
+    }
+
+    const isObjectId = /^[a-f\d]{24}$/i.test(id)
+    const filter = isObjectId ? { _id: id } : { call_id: id }
+
+    const reviewerIdentity = (req as any).user?.name || (req as any).user?.email || 'Admin'
+
+    const updateSet: Record<string, any> = {
+      is_reviewed,
+      reviewed_at: is_reviewed ? new Date() : null,
+      reviewed_by: is_reviewed ? reviewerIdentity : null,
+    }
+
+    const updatedCall = await Call.findOneAndUpdate(
+      filter,
+      { $set: updateSet },
+      { returnDocument: 'after' }
+    ).lean()
+
+    if (!updatedCall) {
+      res.status(404).json({ success: false, message: `Call not found for ID: ${id}` })
+      return
+    }
+
+    res.json({
+      success: true,
+      message: `Call marked as ${is_reviewed ? 'reviewed' : 'unreviewed'}`,
+      data: normalizeCall(updatedCall as Record<string, any>),
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Batch update call review status
+export const batchUpdateCallReviewed = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { call_ids, is_reviewed } = req.body
+
+    if (!Array.isArray(call_ids) || call_ids.length === 0) {
+      res.status(400).json({ success: false, message: 'call_ids must be a non-empty array of call IDs' })
+      return
+    }
+
+    if (typeof is_reviewed !== 'boolean') {
+      res.status(400).json({ success: false, message: 'is_reviewed must be a boolean (true or false)' })
+      return
+    }
+
+    const reviewerIdentity = (req as any).user?.name || (req as any).user?.email || 'Admin'
+
+    const updateSet: Record<string, any> = {
+      is_reviewed,
+      reviewed_at: is_reviewed ? new Date() : null,
+      reviewed_by: is_reviewed ? reviewerIdentity : null,
+    }
+
+    const objectIds = call_ids.filter((id: string) => /^[a-f\d]{24}$/i.test(id))
+    const filter = {
+      $or: [
+        { _id: { $in: objectIds } },
+        { call_id: { $in: call_ids } },
+      ],
+    }
+
+    const result = await Call.updateMany(filter, { $set: updateSet })
+
+    res.json({
+      success: true,
+      message: `Successfully marked ${result.modifiedCount} call(s) as ${is_reviewed ? 'reviewed' : 'unreviewed'}`,
+      modifiedCount: result.modifiedCount,
+    })
+  } catch (error) {
+    next(error)
   }
 }

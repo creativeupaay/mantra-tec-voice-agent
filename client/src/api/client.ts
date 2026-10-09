@@ -327,6 +327,29 @@ export const callApi = {
     return response.data;
   },
 
+  updateReviewed: async (
+    id: string,
+    is_reviewed: boolean,
+  ): Promise<ICallResponse> => {
+    const response = await apiClient.patch<ICallResponse>(
+      `/calls/${id}/reviewed`,
+      { is_reviewed },
+    );
+    return response.data;
+  },
+
+  batchUpdateReviewed: async (
+    call_ids: string[],
+    is_reviewed: boolean,
+  ): Promise<{ success: boolean; message: string; modifiedCount?: number }> => {
+    const response = await apiClient.patch<{
+      success: boolean;
+      message: string;
+      modifiedCount?: number;
+    }>('/calls/batch-reviewed', { call_ids, is_reviewed });
+    return response.data;
+  },
+
   getRecordingBlob: (id: string) =>
     apiClient.get<Blob>(`/calls/${id}/recording`, { responseType: "blob" }),
 

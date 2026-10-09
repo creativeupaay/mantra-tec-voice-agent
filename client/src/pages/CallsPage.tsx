@@ -103,6 +103,7 @@ const CallsPage: FC = () => {
     (urlTab as any) || 'all'
   )
   const [intentFilter, setIntentFilter] = useState('all')
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'unreviewed' | 'reviewed'>('all')
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -118,9 +119,12 @@ const CallsPage: FC = () => {
   const [escalatedCount, setEscalatedCount] = useState(0)
   const [resolvedCount, setResolvedCount] = useState(0)
   const [callbackRequiredCount, setCallbackRequiredCount] = useState(0)
+  const [reviewedCount, setReviewedCount] = useState(0)
+  const [unreviewedCount, setUnreviewedCount] = useState(0)
 
   const [isLoading, setIsLoading] = useState(true)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [togglingReviewedId, setTogglingReviewedId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -142,7 +146,7 @@ const CallsPage: FC = () => {
   // Reset page to 1 when filters change
   useEffect(() => {
     setPage(1)
-  }, [activeFilter, intentFilter, datePreset, dateFrom, dateTo])
+  }, [activeFilter, intentFilter, reviewFilter, datePreset, dateFrom, dateTo])
 
   // Fetch paginated calls list from backend API
   const fetchCalls = async () => {
@@ -154,6 +158,7 @@ const CallsPage: FC = () => {
         search: debouncedSearch,
         status: activeFilter,
         intent: intentFilter,
+        reviewed: reviewFilter,
         datePreset,
         dateFrom,
         dateTo,
@@ -174,6 +179,12 @@ const CallsPage: FC = () => {
         if (response.counts.callback_required !== undefined) {
           setCallbackRequiredCount(response.counts.callback_required)
         }
+        if (response.counts.reviewed !== undefined) {
+          setReviewedCount(response.counts.reviewed)
+        }
+        if (response.counts.unreviewed !== undefined) {
+          setUnreviewedCount(response.counts.unreviewed)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch paginated calls', err)
@@ -184,7 +195,7 @@ const CallsPage: FC = () => {
 
   useEffect(() => {
     fetchCalls()
-  }, [page, rowsPerPage, debouncedSearch, activeFilter, intentFilter, datePreset, dateFrom, dateTo])
+  }, [page, rowsPerPage, debouncedSearch, activeFilter, intentFilter, reviewFilter, datePreset, dateFrom, dateTo])
 
   // Email Deep-Link Handling: fetch only the targeted single call by callId and open drawer
   useEffect(() => {
@@ -273,6 +284,98 @@ const CallsPage: FC = () => {
     }
   }
 
+  // TOGGLE CALL REVIEWED (Persists to MongoDB, optimistic update, emits event)
+  const handleToggleReviewed = async (call: ICall) => {
+    const targetId = call._id || call.call_id
+    if (!targetId) return
+
+    const newReviewedState = !Boolean(call.is_reviewed)
+    const previousCalls = [...calls]
+    const previousSelectedCall = selectedCall ? { ...selectedCall } : null
+
+    // 1. Optimistic UI update
+    setCalls(prev =>
+      prev.map(c => {
+        if (c._id === targetId || c.call_id === targetId) {
+          return {
+            ...c,
+            is_reviewed: newReviewedState,
+            reviewed_at: newReviewedState ? new Date().toISOString() : undefined,
+          }
+        }
+        return c
+      })
+    )
+
+    if (selectedCall && (selectedCall._id === targetId || selectedCall.call_id === targetId)) {
+      setSelectedCall(prev =>
+        prev
+          ? {
+              ...prev,
+              is_reviewed: newReviewedState,
+              reviewed_at: newReviewedState ? new Date().toISOString() : undefined,
+            }
+          : null
+      )
+    }
+
+    // Adjust local counts optimistically
+    setReviewedCount(prev => (newReviewedState ? prev + 1 : Math.max(0, prev - 1)))
+    setUnreviewedCount(prev => (newReviewedState ? Math.max(0, prev - 1) : prev + 1))
+
+    try {
+      setTogglingReviewedId(targetId)
+
+      // 2. Call backend API to persist in MongoDB
+      const res = await callApi.updateReviewed(targetId, newReviewedState)
+
+      if (res && res.success) {
+        const updatedData = res.data || {}
+        setCalls(prev =>
+          prev.map(c => {
+            if (c._id === targetId || c.call_id === targetId) {
+              return {
+                ...c,
+                ...updatedData,
+                is_reviewed: newReviewedState,
+              }
+            }
+            return c
+          })
+        )
+
+        if (selectedCall && (selectedCall._id === targetId || selectedCall.call_id === targetId)) {
+          setSelectedCall(prev => (prev ? { ...prev, ...updatedData, is_reviewed: newReviewedState } : null))
+        }
+
+        // Dispatch global status update event for Navbar & Dashboard live sync
+        window.dispatchEvent(
+          new CustomEvent('call-status-updated', {
+            detail: { callId: targetId, is_reviewed: newReviewedState },
+          })
+        )
+
+        showToast(
+          `Call from ${call.caller_name || call.phone_number} marked as ${newReviewedState ? 'reviewed' : 'unreviewed'}.`,
+          'success'
+        )
+      } else {
+        throw new Error((res as any)?.message || 'Failed to update review status in database')
+      }
+    } catch (err: any) {
+      console.error('Failed to toggle review status:', err)
+      // Rollback optimistic update on error
+      setCalls(previousCalls)
+      if (previousSelectedCall) {
+        setSelectedCall(previousSelectedCall)
+      }
+      fetchCalls()
+      showToast(err.message || 'Database error updating review status', 'error')
+    } finally {
+      setTogglingReviewedId(null)
+    }
+  }
+
   const openModal = (title: string, content: string) => {
     setModalTitle(title)
     setModalContent(content)
@@ -323,9 +426,14 @@ const CallsPage: FC = () => {
           <h2 className="text-2xl font-semibold text-text-primary">Call Management</h2>
           <p className="text-xs text-text-secondary mt-0.5">Filter, inspect transcripts, and handle call escalations</p>
         </div>
-        <span className="text-[13px] text-text-muted tabular-nums font-mono">
-          {totalCalls} total calls
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] font-medium text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+            {reviewedCount} reviewed
+          </span>
+          <span className="text-[13px] text-text-muted tabular-nums font-mono">
+            {totalCalls} total calls
+          </span>
+        </div>
       </div>
 
       <CallFilters
@@ -336,6 +444,8 @@ const CallsPage: FC = () => {
         intentFilter={intentFilter}
         setIntentFilter={setIntentFilter}
         intentOptions={intentOptions}
+        reviewFilter={reviewFilter}
+        setReviewFilter={setReviewFilter}
         datePreset={datePreset}
         setDatePreset={setDatePreset}
         dateFrom={dateFrom}
@@ -345,6 +455,8 @@ const CallsPage: FC = () => {
         escalatedCount={escalatedCount}
         resolvedCount={resolvedCount}
         callbackRequiredCount={callbackRequiredCount}
+        reviewedCount={reviewedCount}
+        unreviewedCount={unreviewedCount}
       />
 
       <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col min-h-[600px] lg:min-h-[700px] shadow-2xs">
@@ -357,6 +469,8 @@ const CallsPage: FC = () => {
           STATUS_LABELS={STATUS_LABELS}
           onResolveCall={handleResolveCall}
           resolvingId={resolvingId}
+          onToggleReviewed={handleToggleReviewed}
+          togglingReviewedId={togglingReviewedId}
         />
 
         {/* Material UI Style Pagination Footer */}
@@ -434,6 +548,8 @@ const CallsPage: FC = () => {
               STATUS_LABELS={STATUS_LABELS}
               onResolveCall={handleResolveCall}
               resolvingId={resolvingId}
+              onToggleReviewed={handleToggleReviewed}
+              togglingReviewedId={togglingReviewedId}
             />
           </div>
         </>,

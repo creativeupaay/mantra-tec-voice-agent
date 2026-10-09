@@ -50,9 +50,16 @@ const callSchema = new Schema(
     is_red_flagged: { type: Boolean, default: false },
     red_flag_reason: { type: String },
     guardrail_triggered: { type: String },
+    // Reviewed / Read status fields
+    is_reviewed: { type: Boolean, default: false },
+    reviewed_at: { type: Date },
+    reviewed_by: { type: String },
   },
   { timestamps: true },
 );
+
+// Indexes for fast filtering and query performance
+callSchema.index({ is_reviewed: 1, timestamp: -1 });
 
 export interface ICall {
   _id: mongoose.Types.ObjectId | string;
@@ -73,8 +80,12 @@ export interface ICall {
   is_red_flagged?: boolean;
   red_flag_reason?: string;
   guardrail_triggered?: string;
+  is_reviewed?: boolean;
+  reviewed_at?: Date;
+  reviewed_by?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export const Call = model("Call", callSchema);
+

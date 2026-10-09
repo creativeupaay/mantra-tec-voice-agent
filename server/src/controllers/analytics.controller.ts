@@ -72,7 +72,7 @@ export const getCallAnalytics = async (
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // ── 1. KPIs ───────────────────────────────────────────────────────────────
-    const [totalCalls, statusCounts, durationResult, redFlagCount] =
+    const [totalCalls, statusCounts, durationResult, redFlagCount, reviewedCount] =
       await Promise.all([
         Call.countDocuments(),
 
@@ -86,6 +86,8 @@ export const getCallAnalytics = async (
         Call.countDocuments({
           $or: [{ is_red_flag: true }, { is_red_flagged: true }],
         }),
+
+        Call.countDocuments({ is_reviewed: true }),
       ]);
 
     // Map status counts to named fields
@@ -101,6 +103,8 @@ export const getCallAnalytics = async (
       missedCount: statusMap["missed"] || 0,
       liveCount: statusMap["live"] || (totalCalls - (statusMap["resolved"] || 0) - (statusMap["escalated"] || 0) - (statusMap["missed"] || 0)),
       redFlagCount,
+      reviewedCount,
+      unreviewedCount: Math.max(0, totalCalls - reviewedCount),
       avgDurationSeconds: Math.round(durationResult[0]?.avg || 0),
     };
 

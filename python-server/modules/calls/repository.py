@@ -36,6 +36,7 @@ class CallRepository:
         doc.setdefault("is_red_flag", False)
         doc.setdefault("is_red_flagged", False)
         doc.setdefault("call_category", CallCategory.INQUIRY.value)
+        doc.setdefault("is_reviewed", False)
         result = await self._col.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return Call(**doc)

@@ -1,4 +1,5 @@
 import { FC, useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   AudioWaveform,
@@ -10,6 +11,8 @@ import {
   PhoneOff,
   AlertOctagon,
   ChevronDown,
+  ChevronRight,
+  CheckCheck,
 } from 'lucide-react'
 import {
   PieChart,
@@ -24,8 +27,19 @@ import {
 } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { analyticsApi, callApi } from '../api/client'
-import { ICall } from '../types/call'
+import { ICall, CallStatus } from '../types/call'
 import { parseToDate } from '../utils/format'
+import CallTable from '../components/calls/CallTable'
+import CallDetailPanel from '../components/calls/CallDetailPanel'
+import Modal from '../components/Modal'
+
+const STATUS_LABELS: Record<CallStatus, string> = {
+  live: 'Live',
+  resolved: 'Resolved',
+  escalated: 'Escalated',
+  missed: 'Missed',
+  callback_required: 'Callback Required',
+}
 
 // Helper for generating SVG sparklines
 const Sparkline = ({ data }: { data: number[] }) => {
@@ -83,6 +97,14 @@ const HomePage: FC = () => {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Call review & detail drawer states
+  const [selectedCall, setSelectedCall] = useState<ICall | null>(null)
+  const [togglingReviewedId, setTogglingReviewedId] = useState<string | null>(null)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalTitle, setModalTitle] = useState('')
+  const [modalContent, setModalContent] = useState('')
 
   // ── Unified Data Fetching ───────────────────────────────────────────
   const fetchDashboardData = async () => {
@@ -214,7 +236,80 @@ const HomePage: FC = () => {
   const missedCount = useMemo(() => filteredCalls.filter(c => c.status === 'missed').length, [filteredCalls])
   const liveCount = useMemo(() => filteredCalls.filter(c => c.status === 'live' || !c.status).length, [filteredCalls])
   const redFlagCount = useMemo(() => filteredCalls.filter(c => Boolean(c.is_red_flag || c.is_red_flagged)).length, [filteredCalls])
+  const reviewedCount = useMemo(() => filteredCalls.filter(c => Boolean(c.is_reviewed)).length, [filteredCalls])
+  const unreviewedCount = useMemo(() => filteredCalls.filter(c => !c.is_reviewed).length, [filteredCalls])
   const totalCallsCount = filteredCalls.length
+
+  const recentCallsToDisplay = useMemo(() => {
+    return filteredCalls.slice(0, 8)
+  }, [filteredCalls])
+
+  const handleToggleReviewed = async (call: ICall) => {
+    const targetId = call._id || call.call_id
+    if (!targetId) return
+
+    const newReviewedState = !Boolean(call.is_reviewed)
+
+    setCallsList(prev =>
+      prev.map(c => {
+        if (c._id === targetId || c.call_id === targetId) {
+          return {
+            ...c,
+            is_reviewed: newReviewedState,
+            reviewed_at: newReviewedState ? new Date().toISOString() : undefined,
+          }
+        }
+        return c
+      })
+    )
+
+    if (selectedCall && (selectedCall._id === targetId || selectedCall.call_id === targetId)) {
+      setSelectedCall(prev =>
+        prev
+          ? {
+              ...prev,
+              is_reviewed: newReviewedState,
+              reviewed_at: newReviewedState ? new Date().toISOString() : undefined,
+            }
+          : null
+      )
+    }
+
+    try {
+      setTogglingReviewedId(targetId)
+      const res = await callApi.updateReviewed(targetId, newReviewedState)
+      if (res && res.success) {
+        window.dispatchEvent(
+          new CustomEvent('call-status-updated', {
+            detail: { callId: targetId, is_reviewed: newReviewedState },
+          })
+        )
+      }
+    } catch (err) {
+      console.error('Failed to toggle review status from dashboard:', err)
+      fetchDashboardData()
+    } finally {
+      setTogglingReviewedId(null)
+    }
+  }
+
+  const handleResolveCall = async (callId: string) => {
+    try {
+      setResolvingId(callId)
+      await callApi.updateStatus(callId, 'resolved')
+      fetchDashboardData()
+    } catch (err) {
+      console.error('Failed to resolve call from dashboard:', err)
+    } finally {
+      setResolvingId(null)
+    }
+  }
+
+  const openModal = (title: string, content: string) => {
+    setModalTitle(title)
+    setModalContent(content)
+    setIsModalOpen(true)
+  }
 
   // Check if viewing a multi-month range (3 months, 6 months, 12 months)
   const isMultiMonth = useMemo(() => {
@@ -388,6 +483,13 @@ const HomePage: FC = () => {
       isLive: liveCount > 0,
     },
     {
+      label: 'Reviewed Calls',
+      value: `${reviewedCount} / ${totalCallsCount}`,
+      trendData: [0, 1, 2, 4, 6, 8, reviewedCount],
+      icon: CheckCheck,
+      isReviewedCard: true,
+    },
+    {
       label: 'Escalated Calls',
       value: escalatedCount,
       trendData: [0, 1, 0, 1, 2, 1, escalatedCount],
@@ -499,14 +601,23 @@ const HomePage: FC = () => {
         {/* Other KPI Cards */}
         {kpiCards.map((stat) => {
           const isEscalated = (stat as any).isEscalated
+          const isReviewedCard = (stat as any).isReviewedCard
           return (
             <div
               key={stat.label}
-              onClick={isEscalated ? () => navigate('/calls?tab=escalated') : undefined}
+              onClick={
+                isEscalated
+                  ? () => navigate('/calls?tab=escalated')
+                  : isReviewedCard
+                    ? () => navigate('/calls')
+                    : undefined
+              }
               className={`rounded-2xl border p-5 flex flex-col justify-between transition-all shadow-2xs ${
                 isEscalated
                   ? 'bg-red-500/5 border-red-500/30 hover:border-red-500/60 cursor-pointer hover:bg-red-500/10'
-                  : 'bg-surface-card border-border hover:border-border-strong'
+                  : isReviewedCard
+                    ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/50 cursor-pointer hover:bg-emerald-500/10'
+                    : 'bg-surface-card border-border hover:border-border-strong'
               }`}
             >
               <div>
@@ -518,16 +629,36 @@ const HomePage: FC = () => {
                     <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                   )}
                   <stat.icon
-                    className={`w-4 h-4 ${isEscalated ? 'text-red-500' : 'text-text-muted'}`}
+                    className={`w-4 h-4 ${
+                      isEscalated
+                        ? 'text-red-500'
+                        : isReviewedCard
+                          ? 'text-emerald-500'
+                          : 'text-text-muted'
+                    }`}
                     strokeWidth={2}
                   />
-                  <p className={`text-[13px] font-medium ${isEscalated ? 'text-red-400' : 'text-text-secondary'}`}>
+                  <p
+                    className={`text-[13px] font-medium ${
+                      isEscalated
+                        ? 'text-red-400'
+                        : isReviewedCard
+                          ? 'text-emerald-600'
+                          : 'text-text-secondary'
+                    }`}
+                  >
                     {stat.label}
                   </p>
                 </div>
-                <p className={`text-2xl font-semibold font-mono tabular-nums mb-2 ${
-                  isEscalated ? 'text-red-500' : 'text-text-primary'
-                }`}>
+                <p
+                  className={`text-2xl font-semibold font-mono tabular-nums mb-2 ${
+                    isEscalated
+                      ? 'text-red-500'
+                      : isReviewedCard
+                        ? 'text-emerald-600'
+                        : 'text-text-primary'
+                  }`}
+                >
                   {stat.value}
                 </p>
                 {isEscalated && escalatedCount > 0 && (
@@ -605,6 +736,79 @@ const HomePage: FC = () => {
           </div>
         </div>
       </div>
+
+      {/* RECENT CALLS SECTION WITH REVIEW CHECKBOXES */}
+      <div className="bg-surface-card rounded-2xl border border-border overflow-hidden shadow-2xs">
+        <div className="p-5 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-text-primary">Recent Calls</h3>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                {reviewedCount} / {filteredCalls.length} Reviewed
+              </span>
+            </div>
+            <p className="text-xs text-text-secondary mt-0.5">
+              Review and mark incoming customer conversations
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/calls')}
+            className="text-xs font-semibold text-accent hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
+          >
+            <span>View All in Calls</span>
+            <ChevronRight size={14} />
+          </button>
+        </div>
+
+        <CallTable
+          isLoading={loading}
+          filtered={recentCallsToDisplay}
+          selectedCall={selectedCall}
+          setSelectedCall={setSelectedCall}
+          openModal={openModal}
+          STATUS_LABELS={STATUS_LABELS}
+          onResolveCall={handleResolveCall}
+          resolvingId={resolvingId}
+          onToggleReviewed={handleToggleReviewed}
+          togglingReviewedId={togglingReviewedId}
+        />
+      </div>
+
+      {/* Detail Panel Drawer rendered at body level via portal */}
+      {selectedCall &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/20"
+              onClick={() => setSelectedCall(null)}
+            />
+            <div className="fixed top-0 right-0 h-full z-50 w-[720px] max-w-full shadow-2xl animate-in slide-in-from-right duration-200">
+              <CallDetailPanel
+                selectedCall={selectedCall}
+                setSelectedCall={setSelectedCall}
+                openModal={openModal}
+                STATUS_LABELS={STATUS_LABELS}
+                onResolveCall={handleResolveCall}
+                resolvingId={resolvingId}
+                onToggleReviewed={handleToggleReviewed}
+                togglingReviewedId={togglingReviewedId}
+              />
+            </div>
+          </>,
+          document.body
+        )}
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={modalTitle}
+      >
+        <div className="bg-surface-page border border-border rounded-xl p-6">
+          <pre className="text-[14px] leading-relaxed text-text-primary whitespace-pre-wrap font-sans">
+            {modalContent}
+          </pre>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -11,6 +11,9 @@ export interface ICall {
   status: CallStatus
   is_red_flag: boolean
   is_red_flagged?: boolean
+  is_reviewed?: boolean
+  reviewed_at?: string
+  reviewed_by?: string
   call_category?: CallCategory
   red_flag_reason?: string
   guardrail_triggered?: string
@@ -38,6 +41,8 @@ export interface ICallListResponse {
     escalated: number
     resolved: number
     callback_required?: number
+    reviewed?: number
+    unreviewed?: number
   }
 }
 

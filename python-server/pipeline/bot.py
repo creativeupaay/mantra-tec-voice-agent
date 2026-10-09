@@ -199,12 +199,14 @@ class SilenceTimeoutMonitor:
     """Monitors silence/inactivity during a call across Gemini Live and classic pipelines.
 
     Workflow:
-      1. When bot stops speaking (greeting or answer), inactivity countdown starts.
-      2. If caller remains silent for `initial_timeout` (default 10s):
-         Prompt bot to confirm if user is still on the line.
-      3. If caller remains silent for another `confirm_timeout` (default 6s):
-         Prompt bot to say goodbye and automatically cut the call.
-      4. Any user speech resets the silence timer and returns phase to 0.
+      1. When bot stops speaking (greeting or answer), inactivity countdown begins.
+      2. If caller remains silent for `initial_timeout` (default 20s):
+         Phase 1: Ask gentle confirmation 1 ('Hello? Kya aap line par hain?').
+      3. If caller remains silent for another `confirm_timeout` (default 15s):
+         Phase 2: Ask gentle confirmation 2 ('Aapki aawaz nahi aa rahi hai, kya aap sun pa rahe hain?').
+      4. If caller remains silent for another 10s after Phase 2:
+         Phase 3: Politely state wrapup goodbye and cleanly disconnect the call.
+      5. Any user speech or interruption resets the silence phase to 0 and clears the timer.
     """
 
     def __init__(
@@ -219,22 +221,24 @@ class SilenceTimeoutMonitor:
     ):
         self.call_id = call_id
         self.state = state
-        self.initial_timeout = max(3.0, initial_timeout)
-        self.confirm_timeout = max(2.0, confirm_timeout)
+        self.initial_timeout = max(10.0, initial_timeout)
+        self.confirm_timeout = max(8.0, confirm_timeout)
         self.send_prompt_fn = send_prompt_fn
         self.disconnect_fn = disconnect_fn
 
         self.bot_is_speaking: bool = True  # True initially while greeting is being delivered
         self.last_activity_time: float = time.monotonic()
-        self.silence_phase: int = 0  # 0: normal wait, 1: confirmation asked, 2: disconnecting
+        self.silence_phase: int = 0  # 0: normal, 1: check 1 asked, 2: check 2 asked, 3: disconnecting
         self.is_active: bool = False
         self._watchdog_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        self._is_prompting: bool = False
 
     def start(self):
         self.is_active = True
         self.bot_is_speaking = True
         self.last_activity_time = time.monotonic()
+        self.silence_phase = 0
         self._watchdog_task = asyncio.create_task(self._watchdog_loop())
         logger.info(
             f"[bot] SilenceTimeoutMonitor started for call {self.call_id} "
@@ -263,8 +267,11 @@ class SilenceTimeoutMonitor:
     def on_user_speech(self, text: str = ""):
         """Called whenever caller speaks or interrupts."""
         self.last_activity_time = time.monotonic()
-        if self.silence_phase == 1:
-            logger.info(f"[bot] User resumed speaking during confirmation check ('{text[:30]}'). Resetting silence timer.")
+        if self.silence_phase > 0:
+            logger.info(
+                f"[bot] Call {self.call_id}: User resumed speaking during silence check phase {self.silence_phase} "
+                f"('{text[:30]}'). Resetting silence timer to normal."
+            )
         self.silence_phase = 0
 
     async def _watchdog_loop(self):
@@ -274,8 +281,8 @@ class SilenceTimeoutMonitor:
                 if not self.is_active:
                     break
 
-                # Do not count silence while bot is speaking or generating audio
-                if self.bot_is_speaking:
+                # Do not count silence while bot is actively speaking or delivering audio
+                if self.bot_is_speaking or self._is_prompting:
                     continue
 
                 elapsed = time.monotonic() - self.last_activity_time
@@ -283,23 +290,36 @@ class SilenceTimeoutMonitor:
                 if self.silence_phase == 0:
                     if elapsed >= self.initial_timeout:
                         async with self._lock:
-                            if self.silence_phase == 0 and not self.bot_is_speaking and self.is_active:
+                            if self.silence_phase == 0 and not self.bot_is_speaking and not self._is_prompting and self.is_active:
                                 self.silence_phase = 1
-                                self.bot_is_speaking = True
+                                self.last_activity_time = time.monotonic()
                                 logger.info(
                                     f"[bot] Call {self.call_id}: Inactivity detected ({elapsed:.1f}s >= {self.initial_timeout}s). "
-                                    f"Asking confirmation check."
+                                    f"Asking check 1."
                                 )
-                                await self._trigger_confirmation()
+                                await self._trigger_check(stage=1)
+
                 elif self.silence_phase == 1:
                     if elapsed >= self.confirm_timeout:
                         async with self._lock:
-                            if self.silence_phase == 1 and not self.bot_is_speaking and self.is_active:
+                            if self.silence_phase == 1 and not self.bot_is_speaking and not self._is_prompting and self.is_active:
                                 self.silence_phase = 2
-                                self.bot_is_speaking = True
+                                self.last_activity_time = time.monotonic()
                                 logger.info(
-                                    f"[bot] Call {self.call_id}: Still silent after confirmation ({elapsed:.1f}s >= {self.confirm_timeout}s). "
-                                    f"Disconnecting call now."
+                                    f"[bot] Call {self.call_id}: Still silent after check 1 ({elapsed:.1f}s >= {self.confirm_timeout}s). "
+                                    f"Asking check 2."
+                                )
+                                await self._trigger_check(stage=2)
+
+                elif self.silence_phase == 2:
+                    # Give 10s after check 2 before concluding caller is gone
+                    if elapsed >= 10.0:
+                        async with self._lock:
+                            if self.silence_phase == 2 and not self.bot_is_speaking and not self._is_prompting and self.is_active:
+                                self.silence_phase = 3
+                                logger.info(
+                                    f"[bot] Call {self.call_id}: Caller still silent after check 2 ({elapsed:.1f}s >= 10s). "
+                                    f"Gracefully wrapping up and disconnecting."
                                 )
                                 await self._trigger_disconnect_wrapup()
                                 break
@@ -309,38 +329,59 @@ class SilenceTimeoutMonitor:
                 logger.error(f"[bot] Error in SilenceTimeoutMonitor watchdog: {e}")
                 await asyncio.sleep(1.0)
 
-    async def _trigger_confirmation(self):
-        is_hindi = self.state.preferred_language in ("hi", "hinglish")
-        if is_hindi:
-            prompt = (
-                "Caller kafi der se chup hain (inactivity check). Polite aur natural Hinglish mein check kijiye: "
-                "'Hello? Kya aap line par hain?' ya 'Hello, kya aap mujhe sun pa rahe hain?' "
-                "Sirf ek chhota sentence boliye."
-            )
-        else:
-            prompt = (
-                "The caller has been silent for a while. In a polite, natural tone, briefly check if they are still on the line: "
-                "'Hello, are you still there?' or 'Hello, can you hear me?' "
-                "Keep it strictly to one short sentence."
-            )
-        await self.send_prompt_fn(prompt)
+    async def _trigger_check(self, stage: int = 1):
+        self._is_prompting = True
+        self.bot_is_speaking = True
+        try:
+            is_hindi = self.state.preferred_language in ("hi", "hinglish")
+            if stage == 1:
+                if is_hindi:
+                    prompt = (
+                        "Caller thodi der se chup hain. Bahut polite aur natural Hinglish mein ek chhota sentence boliye: "
+                        "'Hello? Kya aap line par hain?'"
+                    )
+                else:
+                    prompt = (
+                        "The caller has been silent for a moment. In a polite, natural tone, briefly check if they are still on the line: "
+                        "'Hello, are you still there?'"
+                    )
+            else:
+                if is_hindi:
+                    prompt = (
+                        "Caller se abhi tak koi response nahi mila. Bahut polite tone mein puchiye: "
+                        "'Hello, aapki aawaz nahi aa rahi hai, kya aap mujhe sun pa rahe hain?'"
+                    )
+                else:
+                    prompt = (
+                        "Still no response from caller. Ask politely: "
+                        "'Hello, I cannot hear you clearly, are you able to hear me?'"
+                    )
+            await self.send_prompt_fn(prompt)
+        finally:
+            self._is_prompting = False
+            self.last_activity_time = time.monotonic()
 
     async def _trigger_disconnect_wrapup(self):
-        is_hindi = self.state.preferred_language in ("hi", "hinglish")
-        if is_hindi:
-            prompt = (
-                "Caller abhi bhi silent hain check ke baad bhi. Polite Hinglish mein boliye: "
-                "'Aapki taraf se koi response na milne ke karan, main call disconnect kar rahi hoon. Mantra Tech mein call karne ke liye dhanyawad. Have a nice day!' "
-                "Koi sawaal mat puchiye."
-            )
-        else:
-            prompt = (
-                "The caller is still silent after the check. Say politely: "
-                "'Since I haven't received a response, I will disconnect the call now. Thank you for calling Mantra Tech, have a great day!' "
-                "Do not ask any questions."
-            )
-        await self.send_prompt_fn(prompt)
-        await self.disconnect_fn(delay=4.5)
+        self._is_prompting = True
+        self.bot_is_speaking = True
+        try:
+            is_hindi = self.state.preferred_language in ("hi", "hinglish")
+            if is_hindi:
+                prompt = (
+                    "Caller ki taraf se response na aane par, polite Hinglish mein boliye: "
+                    "'Aapki taraf se koi response na milne ke karan, main call disconnect kar rahi hoon. Mantra Tech mein call karne ke liye dhanyawad. Have a nice day!' "
+                    "Koi sawaal mat puchiye."
+                )
+            else:
+                prompt = (
+                    "No response received from caller after multiple checks. Say politely: "
+                    "'Since I haven't received a response, I will disconnect the call now. Thank you for calling Mantra Tech, have a great day!' "
+                    "Do not ask any questions."
+                )
+            await self.send_prompt_fn(prompt)
+            await self.disconnect_fn(delay=4.5)
+        finally:
+            self._is_prompting = False
 
 
 # ── Bot Core ──────────────────────────────────────────────────────────────────
@@ -390,8 +431,15 @@ async def run_bot(
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
 
 
+    silence_monitor: SilenceTimeoutMonitor | None = None
+
+    def _on_user_speech(text: str = ""):
+        if silence_monitor is not None:
+            silence_monitor.on_user_speech(text)
+
     if gemini_mode:
         from google.genai.types import ThinkingConfig
+        from pipecat.services.google.gemini_live.llm import GeminiVADParams, StartSensitivity
 
         llm = GeminiLiveLLMService(
             model=settings.gemini_model,
@@ -404,13 +452,17 @@ async def run_bot(
                 temperature=0.7,
                 max_tokens=1024,
                 thinking=ThinkingConfig(thinking_budget=0),
+                vad=GeminiVADParams(
+                    start_sensitivity=StartSensitivity.START_SENSITIVITY_LOW,
+                    silence_duration_ms=600,
+                ),
             ),
         )
         llm.register_function(None, agent_graph.dispatch)
 
         user_transcript_collector = UserTranscriptCollector(
             state,
-            on_speech=lambda text: silence_monitor.on_user_speech(text) if 'silence_monitor' in locals() else None,
+            on_speech=_on_user_speech,
         )
         credit_tracker = create_credit_tracker(state)
         # Must sit AFTER transport.output() so both user + bot audio are captured.
@@ -637,18 +689,18 @@ async def run_bot(
         except Exception as e:
             logger.warning(f"[bot] Could not register call in DB: {e}")
 
-        # Every call starts with a warm, natural Hindi/Hinglish greeting by default
+        # Natural human call pickup: simply say "Hello?" without corporate speech
         if gemini_mode:
             greeting_hint = (
-                "Greet the caller calmly and warmly in a relaxed tone in Hinglish: "
-                "'Hello, thank you for calling Mantra Tech, main Priya. Bataiye main aapki kya madad kar sakti hoon?' "
-                "CRITICAL: If the caller speaks English, switch smoothly to English. If the caller speaks Hindi or Hinglish, continue in natural Hinglish."
+                "The call just connected. Just say a single, calm, natural word: 'Hello?' "
+                "CRITICAL: Do NOT give a scripted corporate speech. Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech mein call karne ke liye dhanyawad'. "
+                "Just say 'Hello?' and listen to the caller."
             )
         else:
             greeting_hint = (
-                "Greet the caller calmly and warmly in a relaxed tone in Hindi: "
-                "'Hello, Mantra Tech में call करने के लिए thank you, मैं Priya बात कर रही हूँ। बताइए मैं आपकी क्या help कर सकती हूँ?' "
-                "CRITICAL: If the caller speaks English, switch smoothly to English. If the caller speaks Hindi or Hinglish, continue in natural Hindi."
+                "The call just connected. Say just a single, natural word: 'Hello?' "
+                "CRITICAL: Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech में call करने के लिए thank you'. "
+                "Just say 'Hello?' and wait for the caller."
             )
 
         if gemini_mode:
@@ -685,11 +737,13 @@ async def run_bot(
 
     @assistant_aggregator.event_handler("on_assistant_turn_started")
     async def on_assistant_turn_started(aggregator):
-        silence_monitor.on_bot_started_speaking()
+        if silence_monitor is not None:
+            silence_monitor.on_bot_started_speaking()
 
     @assistant_aggregator.event_handler("on_assistant_turn_stopped")
     async def on_assistant_turn_stopped(aggregator, message: AssistantTurnStoppedMessage):
-        silence_monitor.on_bot_stopped_speaking()
+        if silence_monitor is not None:
+            silence_monitor.on_bot_stopped_speaking()
         content = (message.content or "").strip()
         if content:
             state.transcript_lines.append(f"assistant: {content}")
@@ -701,7 +755,7 @@ async def run_bot(
         async def on_user_turn_stopped(aggregator, strategy, message: UserTurnStoppedMessage):
             content = (message.content or "").strip()
             if content:
-                silence_monitor.on_user_speech(content)
+                _on_user_speech(content)
                 state.transcript_lines.append(f"user: {content}")
                 logger.info(f"[bot] Transcript — user: {content}")
 

@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { Link } from 'react-router-dom'
-import { Flag, Printer, X, Calendar, Clock, AlertTriangle, Maximize2, CheckCircle, UserCheck, Bot, Phone, Sparkles, Package, FileText, PhoneForwarded } from 'lucide-react'
+import { Flag, Printer, X, Calendar, Clock, AlertTriangle, Maximize2, CheckCircle, UserCheck, Bot, Phone, Sparkles, Package, FileText, PhoneForwarded, CheckCheck, CheckSquare } from 'lucide-react'
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
 import { formatDuration, formatTime } from '../../utils/format'
@@ -13,6 +13,8 @@ interface CallDetailPanelProps {
   STATUS_LABELS: Record<CallStatus, string>
   onResolveCall?: (callId: string) => void
   resolvingId?: string | null
+  onToggleReviewed?: (call: ICall) => void
+  togglingReviewedId?: string | null
 }
 
 interface BulkDetailItem {
@@ -127,10 +129,14 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
   STATUS_LABELS,
   onResolveCall,
   resolvingId,
+  onToggleReviewed,
+  togglingReviewedId,
 }) => {
   const targetId = selectedCall._id || selectedCall.call_id
   const isEscalated = selectedCall.status === 'escalated'
   const isCallbackRequired = selectedCall.status === 'callback_required'
+  const isReviewed = Boolean(selectedCall.is_reviewed)
+  const isTogglingReviewed = togglingReviewedId === targetId
   const escalationReason =
     selectedCall.red_flag_reason ||
     selectedCall.guardrail_triggered ||
@@ -165,10 +171,19 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
       {/* 1. Panel Header */}
       <div className="flex items-start justify-between px-6 py-5 border-b border-border bg-surface-card">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3 className="text-base font-bold text-text-primary truncate">
               {selectedCall.caller_name || selectedCall.phone_number}
             </h3>
+            {isReviewed && (
+              <span
+                title={selectedCall.reviewed_at ? `Reviewed on ${formatTime(selectedCall.reviewed_at).date}` : 'Reviewed'}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+              >
+                <CheckCheck size={11} strokeWidth={2.5} />
+                Reviewed
+              </span>
+            )}
             {(selectedCall.is_red_flag || selectedCall.is_red_flagged) && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/20">
                 <Flag size={10} strokeWidth={2} />
@@ -181,7 +196,31 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
             {selectedCall.phone_number}
           </p>
         </div>
-        <div className="flex items-center space-x-1 shrink-0">
+        <div className="flex items-center space-x-2 shrink-0">
+          {/* Quick Mark Reviewed Button */}
+          {onToggleReviewed && (
+            <button
+              type="button"
+              onClick={() => onToggleReviewed(selectedCall)}
+              disabled={isTogglingReviewed}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                isReviewed
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20'
+                  : 'bg-surface-card text-text-secondary border-border hover:border-emerald-500 hover:text-emerald-600'
+              } ${isTogglingReviewed ? 'opacity-60 pointer-events-none' : ''}`}
+              title={isReviewed ? 'Click to mark as unreviewed' : 'Mark this call as reviewed (read)'}
+            >
+              {isTogglingReviewed ? (
+                <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              ) : isReviewed ? (
+                <CheckCheck size={13} strokeWidth={2.5} />
+              ) : (
+                <CheckSquare size={13} strokeWidth={2} />
+              )}
+              <span>{isReviewed ? 'Reviewed' : 'Mark Reviewed'}</span>
+            </button>
+          )}
+
           <Link
             to={`/calls/${selectedCall._id}/report`}
             target="_blank"
@@ -249,6 +288,25 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
               <StatusDot status={selectedCall.status} label={STATUS_LABELS[selectedCall.status]} />
             </div>
             <div>
+              <p className="text-text-muted mb-0.5">Review Status</p>
+              {isReviewed ? (
+                <p className="font-semibold text-emerald-600 flex items-center gap-1">
+                  <CheckCheck size={13} strokeWidth={2.5} />
+                  <span>Reviewed</span>
+                  {selectedCall.reviewed_at && (
+                    <span className="text-[10px] text-text-muted font-mono font-normal">
+                      ({formatTime(selectedCall.reviewed_at).date})
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="font-medium text-amber-500 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Pending Review</span>
+                </p>
+              )}
+            </div>
+            <div>
               <p className="text-text-muted mb-0.5">Assigned Agent</p>
               <p className="font-semibold text-text-primary flex items-center gap-1">
                 <UserCheck size={13} className="text-accent" />
@@ -281,6 +339,14 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
                 {selectedCall.call_category || 'inquiry'}
               </span>
             </div>
+            {selectedCall.reviewed_by && (
+              <div>
+                <p className="text-text-muted mb-0.5">Reviewed By</p>
+                <p className="font-medium text-text-primary truncate">
+                  {selectedCall.reviewed_by}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

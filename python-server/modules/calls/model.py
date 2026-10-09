@@ -51,6 +51,10 @@ class Call(BaseModel):
     is_red_flagged: bool = False
     red_flag_reason: Optional[str] = None
     guardrail_triggered: Optional[str] = None
+    # Reviewed / Read fields
+    is_reviewed: bool = False
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
@@ -78,6 +82,9 @@ class CallUpdate(BaseModel):
     is_red_flagged: Optional[bool] = None
     red_flag_reason: Optional[str] = None
     guardrail_triggered: Optional[str] = None
+    is_reviewed: Optional[bool] = None
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
 
 
 class CallRecording(BaseModel):
