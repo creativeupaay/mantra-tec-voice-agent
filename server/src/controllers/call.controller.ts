@@ -111,7 +111,7 @@ function getDatePresetRange(preset: string, dateFrom?: string, dateTo?: string):
 export const getAllCalls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1)
-    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string, 10) || 10))
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit as string, 10) || 10))
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : ''
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'all'
     const intent = typeof req.query.intent === 'string' ? req.query.intent.trim() : 'all'

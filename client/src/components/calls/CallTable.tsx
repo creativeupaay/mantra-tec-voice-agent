@@ -1,5 +1,18 @@
 import { FC } from 'react'
-import { AudioWaveform, PhoneCall, PhoneForwarded, Flag, CheckCircle, Bot, CheckCheck, Check, CheckSquare } from 'lucide-react'
+import {
+  AudioWaveform,
+  PhoneCall,
+  CheckCircle,
+  Bot,
+  CheckCheck,
+  CheckSquare,
+  Square,
+  ChevronRight,
+  Clock,
+  Calendar,
+  AlertTriangle,
+  PhoneForwarded,
+} from 'lucide-react'
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
 import { formatDuration, formatTime } from '../../utils/format'
@@ -9,7 +22,7 @@ interface CallTableProps {
   filtered: ICall[]
   selectedCall: ICall | null
   setSelectedCall: (call: ICall | null) => void
-  openModal: (title: string, content: string) => void
+  openModal?: (title: string, content: string) => void
   STATUS_LABELS: Record<CallStatus, string>
   onResolveCall?: (callId: string) => void
   resolvingId?: string | null
@@ -30,41 +43,42 @@ const CallTable: FC<CallTableProps> = ({
 }) => {
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-text-muted">
-        <div className="w-7 h-7 rounded-full border-2 border-border border-t-text-primary animate-spin mb-3" />
-        <p className="text-[13px]">Loading calls...</p>
+      <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+        <div className="w-8 h-8 rounded-full border-2 border-border border-t-text-primary animate-spin mb-3.5" />
+        <p className="text-xs font-medium">Loading voice sessions…</p>
       </div>
     )
   }
 
   if (filtered.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-text-muted">
-        <PhoneCall size={28} strokeWidth={1.5} className="mb-2 opacity-40" />
-        <p className="text-[13px]">No calls match your filters</p>
+      <div className="flex flex-col items-center justify-center py-20 text-text-muted">
+        <div className="w-12 h-12 rounded-2xl bg-surface-page border border-border flex items-center justify-center mb-3 text-text-muted">
+          <PhoneCall size={20} strokeWidth={1.5} />
+        </div>
+        <p className="text-xs font-semibold text-text-primary mb-1">No call sessions found</p>
+        <p className="text-[11px] text-text-secondary">Try adjusting your filters, intent, or date range</p>
       </div>
     )
   }
 
   return (
     <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-thin">
-      <table className="w-full min-w-[780px] text-left border-collapse">
-        <thead className="sticky top-0 z-10 bg-surface-card border-b border-border shadow-2xs">
-          <tr className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-            <th className="pl-4 pr-1 py-3.5 w-[46px] text-center" title="Review Status (Read / Reviewed)">
-              <div className="flex items-center justify-center">
-                <CheckSquare size={14} className="text-text-muted" />
-              </div>
+      <table className="w-full min-w-[760px] text-left border-collapse">
+        <thead className="sticky top-0 z-10 bg-surface-card/95 backdrop-blur-xs border-b border-border shadow-2xs">
+          <tr className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
+            <th className="pl-4 pr-1 py-3 w-[44px] text-center" title="Review Status">
+              <span className="sr-only">Reviewed</span>
             </th>
-            <th className="px-4 py-3.5 w-[22%] text-left">Caller</th>
-            <th className="px-5 py-3.5 w-[26%] text-left">Intent &amp; Category</th>
-            <th className="px-4 py-3.5 w-[11%] text-left">Duration</th>
-            <th className="px-4 py-3.5 w-[14%] text-left">Status</th>
-            <th className="px-5 py-3.5 w-[14%] text-left">Date &amp; Time (IST)</th>
-            <th className="px-5 py-3.5 w-[10%] text-right">Actions</th>
+            <th className="px-4 py-3 w-[24%] text-left">Caller Session</th>
+            <th className="px-4 py-3 w-[25%] text-left">Intent &amp; Classification</th>
+            <th className="px-3 py-3 w-[10%] text-left">Duration</th>
+            <th className="px-4 py-3 w-[14%] text-left">Status</th>
+            <th className="px-4 py-3 w-[15%] text-left">Timestamp (IST)</th>
+            <th className="px-4 py-3 w-[12%] text-right">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody className="divide-y divide-border/70">
           {filtered.map(call => {
             const { date, time } = formatTime(call.timestamp)
             const targetId = call._id || call.call_id
@@ -78,14 +92,18 @@ const CallTable: FC<CallTableProps> = ({
               <tr
                 key={targetId}
                 onClick={() => setSelectedCall(isSelected ? null : call)}
-                className={`group cursor-pointer transition-colors h-[64px] ${
-                  isSelected ? 'bg-surface-page/90' : isReviewed ? 'hover:bg-surface-page/40' : 'hover:bg-surface-page/60'
+                className={`group cursor-pointer transition-all h-[62px] ${
+                  isSelected
+                    ? 'bg-surface-page border-l-2 border-l-text-primary'
+                    : isReviewed
+                      ? 'hover:bg-surface-page/50'
+                      : 'hover:bg-surface-page/80 bg-surface-card'
                 }`}
               >
-                {/* 0. REVIEW CHECKBOX / READ SYMBOL */}
+                {/* 0. REVIEW CHECKBOX / READ TOGGLE */}
                 <td
-                  className="pl-4 pr-1 py-3.5 w-[46px] align-middle text-center"
-                  onClick={(e) => {
+                  className="pl-4 pr-1 py-3 w-[44px] align-middle text-center"
+                  onClick={e => {
                     e.stopPropagation()
                     if (onToggleReviewed) onToggleReviewed(call)
                   }}
@@ -98,126 +116,103 @@ const CallTable: FC<CallTableProps> = ({
                         ? `Reviewed${call.reviewed_at ? ' on ' + formatTime(call.reviewed_at).date : ''} — Click to mark unreviewed`
                         : 'Mark call as reviewed (read)'
                     }
-                    className={`w-6 h-6 rounded-md border flex items-center justify-center mx-auto transition-all cursor-pointer group/chk ${
+                    className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                       isReviewed
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs hover:bg-emerald-700 hover:border-emerald-700'
-                        : 'bg-surface-page border-border text-text-muted hover:border-emerald-500 hover:bg-emerald-500/10'
-                    } ${isTogglingThis ? 'opacity-60 pointer-events-none' : ''}`}
-                    aria-label={isReviewed ? 'Mark as unreviewed' : 'Mark as reviewed'}
+                        ? 'text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30'
+                        : 'text-text-muted hover:text-text-primary hover:bg-surface-page border border-border'
+                    } ${isTogglingThis ? 'opacity-40 pointer-events-none' : ''}`}
                   >
                     {isTogglingThis ? (
-                      <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      <div className="w-2.5 h-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                     ) : isReviewed ? (
-                      <CheckCheck size={14} strokeWidth={2.5} />
+                      <CheckCheck size={13} strokeWidth={2.5} />
                     ) : (
-                      <Check size={12} strokeWidth={2.5} className="opacity-0 group-hover/chk:opacity-100 text-emerald-600 transition-opacity" />
+                      <Square size={12} strokeWidth={2} className="opacity-60" />
                     )}
                   </button>
                 </td>
 
-                {/* 1. CALLER */}
-                <td className="px-4 py-3.5 w-[22%] align-middle min-w-0">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-text-secondary shrink-0 border ${
-                      isEscalated
-                        ? 'bg-red-500/10 border-red-500/30 text-red-500'
-                        : isCallback
-                          ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600'
-                          : 'bg-surface-page border-border'
-                    }`}>
-                      {call.status === 'live'
-                        ? <PhoneCall size={14} strokeWidth={2} />
-                        : isCallback
-                          ? <PhoneForwarded size={14} strokeWidth={2} />
-                          : <AudioWaveform size={14} strokeWidth={2} />
-                      }
+                {/* 1. CALLER INFO */}
+                <td className="px-4 py-3 align-middle">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-xl bg-surface-page border border-border flex items-center justify-center text-text-primary shrink-0 group-hover:border-text-primary/30 transition-colors shadow-2xs">
+                      <AudioWaveform size={14} strokeWidth={2} />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                        <p className={`text-[13px] font-bold leading-tight truncate ${isReviewed ? 'text-text-primary' : 'text-text-primary'}`}>
-                          {call.caller_name || call.phone_number}
-                        </p>
-                        {isReviewed && (
-                          <span
-                            title={call.reviewed_at ? `Reviewed on ${formatTime(call.reviewed_at).date}` : 'Reviewed'}
-                            className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                          >
-                            <CheckCheck size={10} strokeWidth={2.5} />
-                            <span>Reviewed</span>
-                          </span>
-                        )}
-                        {(call.is_red_flag || call.is_red_flagged) && (
-                          <span title="Red flag" className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-red-500/10 text-red-500 border border-red-500/20">
-                            <Flag size={9} strokeWidth={2} />
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-text-muted font-mono leading-tight mt-0.5 truncate">
-                        {call.phone_number}
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-text-primary truncate leading-snug">
+                        {call.caller_name || 'Anonymous Caller'}
+                      </p>
+                      <p className="text-[11px] text-text-muted font-mono leading-none mt-0.5">
+                        {call.phone_number || 'No number'}
                       </p>
                     </div>
                   </div>
                 </td>
 
                 {/* 2. INTENT & CATEGORY */}
-                <td className="px-5 py-3.5 w-[28%] align-middle min-w-0">
-                  <div className="flex flex-col justify-center min-w-0">
-                    <span className="text-[12px] font-bold text-text-primary flex items-center gap-1.5 truncate" title={call.detected_intent || 'General Inquiry'}>
-                      <Bot size={13} className="text-accent shrink-0" />
-                      <span className="truncate">{call.detected_intent || 'General Inquiry'}</span>
+                <td className="px-4 py-3 align-middle">
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs font-medium text-text-primary truncate flex items-center gap-1.5">
+                      <Bot size={12} className="text-text-muted shrink-0" />
+                      <span className="truncate">{call.detected_intent || 'General Query'}</span>
                     </span>
-                    <span className="text-[11px] text-text-muted capitalize truncate mt-0.5">
-                      {call.call_category || 'inquiry'}
+                    <span className="text-[10px] font-medium text-text-muted capitalize">
+                      {call.call_category || 'Inquiry'}
                     </span>
                   </div>
                 </td>
 
                 {/* 3. DURATION */}
-                <td className="px-4 py-3.5 w-[12%] align-middle">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[12px] font-semibold text-text-secondary tabular-nums font-mono">
-                      {formatDuration(call.duration)}
-                    </span>
-                    {call.status === 'live' && (
-                      <div className="w-1.5 h-1.5 rounded-full animate-live-pulse bg-accent shrink-0" />
-                    )}
-                  </div>
+                <td className="px-3 py-3 align-middle">
+                  <span className="text-xs font-mono font-medium text-text-primary tabular-nums">
+                    {formatDuration(call.duration)}
+                  </span>
                 </td>
 
                 {/* 4. STATUS */}
-                <td className="px-4 py-3.5 w-[14%] align-middle">
-                  <StatusDot status={call.status} label={STATUS_LABELS[call.status]} />
+                <td className="px-4 py-3 align-middle">
+                  <div className="flex items-center">
+                    <StatusDot
+                      status={call.status}
+                      label={STATUS_LABELS[call.status] || call.status}
+                    />
+                  </div>
                 </td>
 
-                {/* 5. DATE & TIME */}
-                <td className="px-5 py-3.5 w-[14%] align-middle font-mono text-[11px] leading-tight">
-                  <div className="flex flex-col justify-center">
-                    <span className="font-semibold text-text-primary">{date}</span>
-                    <span className="text-[10px] text-text-muted mt-0.5">{time}</span>
+                {/* 5. TIMESTAMP (IST) */}
+                <td className="px-4 py-3 align-middle font-mono text-xs text-text-secondary tabular-nums">
+                  <div className="leading-tight">
+                    <span className="text-text-primary font-medium">{date}</span>
+                    <span className="text-text-muted text-[10px] ml-1.5">{time}</span>
                   </div>
                 </td>
 
                 {/* 6. ACTIONS */}
-                <td className="px-5 py-3.5 w-[10%] align-middle text-right" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => setSelectedCall(call)}
-                      className="px-3 py-1.5 text-[11px] font-semibold text-text-primary bg-surface-card hover:bg-surface-page rounded-xl border border-border transition-colors cursor-pointer shadow-2xs"
-                    >
-                      View Details
-                    </button>
-
+                <td className="px-4 py-3 align-middle text-right" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-end space-x-1">
+                    {/* Quick Resolve Button if Escalated or Callback Required */}
                     {(isEscalated || isCallback) && onResolveCall && (
                       <button
+                        type="button"
                         onClick={() => onResolveCall(targetId)}
                         disabled={resolvingId === targetId}
-                        className="px-3 py-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        title={isCallback ? "Mark callback as resolved" : "Resolve call"}
+                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Mark call as resolved"
                       >
                         <CheckCircle size={11} />
-                        <span>{resolvingId === targetId ? 'Resolving...' : 'Resolve'}</span>
+                        <span>Resolve</span>
                       </button>
                     )}
+
+                    {/* Open Detail Panel Button */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCall(isSelected ? null : call)}
+                      className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-page transition-colors cursor-pointer"
+                      title="Open session details"
+                    >
+                      <ChevronRight size={15} strokeWidth={2} />
+                    </button>
                   </div>
                 </td>
               </tr>

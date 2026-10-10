@@ -7,7 +7,7 @@ import { ICall, CallStatus } from '../types/call'
 import CallFilters, { DateFilterPreset } from '../components/calls/CallFilters'
 import CallTable from '../components/calls/CallTable'
 import CallDetailPanel from '../components/calls/CallDetailPanel'
-import { CheckCircle, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import { CheckCircle, AlertCircle, X, ChevronLeft, ChevronRight, ChevronDown, CheckCheck, AudioWaveform } from 'lucide-react'
 
 const STATUS_LABELS: Record<CallStatus, string> = {
   live: 'Live',
@@ -15,79 +15,6 @@ const STATUS_LABELS: Record<CallStatus, string> = {
   escalated: 'Escalated',
   missed: 'Missed',
   callback_required: 'Callback Required',
-}
-
-/** Prefer call timestamp; fall back to Mongo ObjectId time so sorting never collapses. */
-const getCallTime = (call: ICall): number => {
-  if (call.timestamp) {
-    let str = call.timestamp.trim()
-    if (str.includes('T') && !str.endsWith('Z') && !str.includes('+') && !str.includes('-')) {
-      str += 'Z'
-    }
-    const t = new Date(str).getTime()
-    if (!Number.isNaN(t)) return t
-  }
-  if (call._id && /^[a-f\d]{24}$/i.test(call._id)) {
-    return parseInt(call._id.slice(0, 8), 16) * 1000
-  }
-  return 0
-}
-
-const startOfLocalDay = (d: Date): Date => {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
-}
-
-const endOfLocalDay = (d: Date): Date => {
-  const x = new Date(d)
-  x.setHours(23, 59, 59, 999)
-  return x
-}
-
-const getDateRange = (
-  preset: DateFilterPreset,
-  dateFrom: string,
-  dateTo: string,
-): { start: number | null; end: number | null } => {
-  const now = new Date()
-
-  switch (preset) {
-    case 'today': {
-      return {
-        start: startOfLocalDay(now).getTime(),
-        end: endOfLocalDay(now).getTime(),
-      }
-    }
-    case 'yesterday': {
-      const y = new Date(now)
-      y.setDate(y.getDate() - 1)
-      return {
-        start: startOfLocalDay(y).getTime(),
-        end: endOfLocalDay(y).getTime(),
-      }
-    }
-    case 'last_7_days': {
-      const start = startOfLocalDay(now)
-      start.setDate(start.getDate() - 6)
-      return { start: start.getTime(), end: endOfLocalDay(now).getTime() }
-    }
-    case 'last_30_days': {
-      const start = startOfLocalDay(now)
-      start.setDate(start.getDate() - 29)
-      return { start: start.getTime(), end: endOfLocalDay(now).getTime() }
-    }
-    case 'custom': {
-      const start = dateFrom ? startOfLocalDay(new Date(`${dateFrom}T00:00:00`)).getTime() : null
-      const end = dateTo ? endOfLocalDay(new Date(`${dateTo}T00:00:00`)).getTime() : null
-      return {
-        start: Number.isNaN(start as number) ? null : start,
-        end: Number.isNaN(end as number) ? null : end,
-      }
-    }
-    default:
-      return { start: null, end: null }
-  }
 }
 
 const CallsPage: FC = () => {
@@ -217,17 +144,16 @@ const CallsPage: FC = () => {
     }
   }, [urlTab])
 
-  // RESOLVE CALL WORKFLOW (Updates MongoDB, updates state, emits event, shifts tabs)
+  // RESOLVE CALL WORKFLOW
   const handleResolveCall = async (callId: string) => {
     if (!callId) {
       showToast('Invalid call ID for resolution', 'error')
       return
     }
 
-    const targetCall = calls.find(c => c._id === callId || c.call_id === callId)
     const previousCalls = [...calls]
 
-    // 1. Optimistic UI update: change status from escalated to resolved
+    // 1. Optimistic UI update: change status to resolved
     setCalls(prev =>
       prev.map(c => {
         if (c._id === callId || c.call_id === callId) {
@@ -243,8 +169,6 @@ const CallsPage: FC = () => {
 
     try {
       setResolvingId(callId)
-
-      // 2. Update MongoDB via backend API
       const res = await callApi.updateStatus(callId, 'resolved')
 
       if (res && res.success) {
@@ -262,38 +186,34 @@ const CallsPage: FC = () => {
           })
         )
 
-        // 3. Dispatch global status update event for Navbar & Dashboard live sync
-        window.dispatchEvent(new CustomEvent('call-status-updated', {
-          detail: { callId, status: 'resolved', callerName: targetCall?.caller_name }
-        }))
+        window.dispatchEvent(
+          new CustomEvent('call-status-updated', {
+            detail: { callId, status: 'resolved' },
+          })
+        )
 
-        showToast(`Call from ${targetCall?.caller_name || targetCall?.phone_number || 'customer'} marked as resolved.`, 'success')
+        showToast('Call session successfully marked as resolved.', 'success')
       } else {
-        throw new Error(res?.message || 'Failed to update MongoDB')
+        throw new Error((res as any)?.message || 'Failed to update status')
       }
     } catch (err: any) {
       console.error('Failed to resolve call:', err)
-      // Rollback optimistic update on error
       setCalls(previousCalls)
-      if (selectedCall && (selectedCall._id === callId || selectedCall.call_id === callId)) {
-        setSelectedCall(targetCall || null)
-      }
-      showToast(err.message || 'Database resolution error', 'error')
+      showToast(err.message || 'Error updating status', 'error')
     } finally {
       setResolvingId(null)
     }
   }
 
-  // TOGGLE CALL REVIEWED (Persists to MongoDB, optimistic update, emits event)
+  // REVIEW TOGGLE WORKFLOW
   const handleToggleReviewed = async (call: ICall) => {
     const targetId = call._id || call.call_id
     if (!targetId) return
 
     const newReviewedState = !Boolean(call.is_reviewed)
     const previousCalls = [...calls]
-    const previousSelectedCall = selectedCall ? { ...selectedCall } : null
+    const previousSelectedCall = selectedCall
 
-    // 1. Optimistic UI update
     setCalls(prev =>
       prev.map(c => {
         if (c._id === targetId || c.call_id === targetId) {
@@ -319,36 +239,11 @@ const CallsPage: FC = () => {
       )
     }
 
-    // Adjust local counts optimistically
-    setReviewedCount(prev => (newReviewedState ? prev + 1 : Math.max(0, prev - 1)))
-    setUnreviewedCount(prev => (newReviewedState ? Math.max(0, prev - 1) : prev + 1))
-
     try {
       setTogglingReviewedId(targetId)
-
-      // 2. Call backend API to persist in MongoDB
       const res = await callApi.updateReviewed(targetId, newReviewedState)
 
       if (res && res.success) {
-        const updatedData = res.data || {}
-        setCalls(prev =>
-          prev.map(c => {
-            if (c._id === targetId || c.call_id === targetId) {
-              return {
-                ...c,
-                ...updatedData,
-                is_reviewed: newReviewedState,
-              }
-            }
-            return c
-          })
-        )
-
-        if (selectedCall && (selectedCall._id === targetId || selectedCall.call_id === targetId)) {
-          setSelectedCall(prev => (prev ? { ...prev, ...updatedData, is_reviewed: newReviewedState } : null))
-        }
-
-        // Dispatch global status update event for Navbar & Dashboard live sync
         window.dispatchEvent(
           new CustomEvent('call-status-updated', {
             detail: { callId: targetId, is_reviewed: newReviewedState },
@@ -364,7 +259,6 @@ const CallsPage: FC = () => {
       }
     } catch (err: any) {
       console.error('Failed to toggle review status:', err)
-      // Rollback optimistic update on error
       setCalls(previousCalls)
       if (previousSelectedCall) {
         setSelectedCall(previousSelectedCall)
@@ -395,47 +289,54 @@ const CallsPage: FC = () => {
   const endIndex = Math.min(totalCalls, startIndex + calls.length)
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col h-full gap-4 font-sans text-text-primary">
       {/* Toast Banner */}
       {toast && (
         <div
-          className={`fixed top-20 right-8 z-50 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 border animate-in slide-in-from-top duration-200 ${
+          className={`fixed top-18 right-6 z-50 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border animate-in slide-in-from-top duration-200 ${
             toast.type === 'success'
               ? 'bg-text-primary text-surface-card border-border'
               : 'bg-red-500 text-white border-red-500'
           }`}
         >
           {toast.type === 'success' ? (
-            <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-white shrink-0" />
+            <AlertCircle className="w-4 h-4 text-white shrink-0" />
           )}
           <p className="text-xs font-semibold">{toast.message}</p>
           <button
             onClick={() => setToast(null)}
             className="text-text-muted hover:text-surface-card ml-2 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Always full-width header + table */}
-      <div className="flex items-center justify-between">
+      {/* ── Header ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold text-text-primary">Call Management</h2>
-          <p className="text-xs text-text-secondary mt-0.5">Filter, inspect transcripts, and handle call escalations</p>
+          <h2 className="text-xl font-bold tracking-tight text-text-primary">
+            Calls
+          </h2>
+          <p className="text-xs text-text-secondary mt-0.5">
+            Filter, inspect transcripts, and handle call resolutions
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] font-medium text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-            {reviewedCount} reviewed
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-xl flex items-center gap-1">
+            <CheckCheck size={12} strokeWidth={2.5} />
+            <span>{reviewedCount} Reviewed</span>
           </span>
-          <span className="text-[13px] text-text-muted tabular-nums font-mono">
-            {totalCalls} total calls
+          <span className="text-xs font-mono font-medium text-text-muted bg-surface-card px-2.5 py-1 rounded-xl border border-border">
+            {totalCalls} Total
           </span>
         </div>
       </div>
 
+      {/* ── Filter Toolbar ──────────────────────────────────────────── */}
       <CallFilters
         search={search}
         setSearch={setSearch}
@@ -459,7 +360,8 @@ const CallsPage: FC = () => {
         unreviewedCount={unreviewedCount}
       />
 
-      <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col min-h-[600px] lg:min-h-[700px] shadow-2xs">
+      {/* ── Table Container ─────────────────────────────────────────── */}
+      <div className="bg-surface-card rounded-2xl border border-border overflow-hidden flex-1 flex flex-col min-h-[550px] shadow-2xs">
         <CallTable
           isLoading={isLoading}
           filtered={calls}
@@ -473,20 +375,22 @@ const CallsPage: FC = () => {
           togglingReviewedId={togglingReviewedId}
         />
 
-        {/* Material UI Style Pagination Footer */}
+        {/* ── ElevenLabs Studio Pagination Footer ─────────────────────── */}
         {!isLoading && totalCalls > 0 && (
-          <div className="px-4 sm:px-6 py-3 border-t border-border bg-surface-card flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-text-secondary select-none">
+          <div className="px-5 py-3 border-t border-border bg-surface-card flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-text-secondary select-none">
             {/* Left: Rows per page selector */}
             <div className="flex items-center space-x-2 shrink-0">
-              <span className="text-[12px] text-text-muted font-medium whitespace-nowrap">Rows per page:</span>
+              <span className="text-xs text-text-muted font-medium whitespace-nowrap">
+                Rows per page:
+              </span>
               <div className="relative">
                 <select
                   value={rowsPerPage}
-                  onChange={(e) => {
+                  onChange={e => {
                     setRowsPerPage(Number(e.target.value))
                     setPage(1)
                   }}
-                  className="appearance-none bg-surface-page hover:bg-surface-card text-text-primary font-medium text-[12px] px-2.5 py-1 pr-6 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer transition-colors"
+                  className="appearance-none bg-surface-page hover:bg-surface-card text-text-primary font-semibold text-xs px-2.5 py-1 pr-6 rounded-lg border border-border focus:outline-none focus:ring-1 focus:ring-text-primary cursor-pointer transition-colors"
                 >
                   <option value={10}>10</option>
                   <option value={25}>25</option>
@@ -497,9 +401,9 @@ const CallsPage: FC = () => {
               </div>
             </div>
 
-            {/* Right: Page Range Indicator & Navigation Buttons */}
+            {/* Right: Page Range Indicator & Buttons */}
             <div className="flex items-center space-x-3 sm:space-x-4 shrink-0">
-              <span className="text-[12px] font-mono text-text-muted tabular-nums whitespace-nowrap">
+              <span className="text-xs font-mono text-text-muted tabular-nums whitespace-nowrap">
                 {totalCalls === 0 ? '0–0 of 0' : `${startIndex + 1}–${endIndex} of ${totalCalls}`}
               </span>
 
@@ -507,21 +411,23 @@ const CallsPage: FC = () => {
                 <button
                   onClick={() => setPage(prev => Math.max(1, prev - 1))}
                   disabled={page <= 1}
-                  className="p-1.5 rounded-lg border border-border text-text-primary hover:bg-surface-page disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                  className="p-1 rounded-lg border border-border text-text-primary hover:bg-surface-page disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                   title="Previous Page"
+                  aria-label="Previous Page"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                
-                <span className="text-[12px] font-semibold text-text-primary px-2 font-mono tabular-nums whitespace-nowrap shrink-0">
+
+                <span className="text-xs font-semibold text-text-primary px-2 font-mono tabular-nums whitespace-nowrap shrink-0">
                   {page} / {totalPages}
                 </span>
 
                 <button
                   onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
                   disabled={page >= totalPages}
-                  className="p-1.5 rounded-lg border border-border text-text-primary hover:bg-surface-page disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+                  className="p-1 rounded-lg border border-border text-text-primary hover:bg-surface-page disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                   title="Next Page"
+                  aria-label="Next Page"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -531,38 +437,33 @@ const CallsPage: FC = () => {
         )}
       </div>
 
-      {/* Overlay drawer rendered at body level via portal — always flush to the right viewport edge */}
-      {selectedCall && createPortal(
-        <>
-          {/* Semi-transparent backdrop */}
-          <div
-            className="fixed inset-0 z-40 bg-black/20"
-            onClick={() => setSelectedCall(null)}
-          />
-          {/* Drawer panel — flush right, broader */}
-          <div className="fixed top-0 right-0 h-full z-50 w-[720px] max-w-full shadow-2xl animate-in slide-in-from-right duration-200">
-            <CallDetailPanel
-              selectedCall={selectedCall}
-              setSelectedCall={setSelectedCall}
-              openModal={openModal}
-              STATUS_LABELS={STATUS_LABELS}
-              onResolveCall={handleResolveCall}
-              resolvingId={resolvingId}
-              onToggleReviewed={handleToggleReviewed}
-              togglingReviewedId={togglingReviewedId}
+      {/* ── Overlay Drawer via Portal ────────────────────────────────── */}
+      {selectedCall &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/25 backdrop-blur-2xs transition-opacity"
+              onClick={() => setSelectedCall(null)}
             />
-          </div>
-        </>,
-        document.body
-      )}
+            <div className="fixed top-0 right-0 h-full z-50 w-[720px] max-w-full shadow-2xl animate-in slide-in-from-right duration-200">
+              <CallDetailPanel
+                selectedCall={selectedCall}
+                setSelectedCall={setSelectedCall}
+                openModal={openModal}
+                STATUS_LABELS={STATUS_LABELS}
+                onResolveCall={handleResolveCall}
+                resolvingId={resolvingId}
+                onToggleReviewed={handleToggleReviewed}
+                togglingReviewedId={togglingReviewedId}
+              />
+            </div>
+          </>,
+          document.body
+        )}
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={modalTitle}
-      >
-        <div className="bg-surface-page border border-border rounded-xl p-6">
-          <pre className="text-[14px] leading-relaxed text-text-primary whitespace-pre-wrap font-sans">
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle}>
+        <div className="bg-surface-page border border-border rounded-xl p-5">
+          <pre className="text-xs leading-relaxed text-text-primary whitespace-pre-wrap font-sans">
             {modalContent}
           </pre>
         </div>
