@@ -479,7 +479,7 @@ async def run_bot(
                 thinking=ThinkingConfig(thinking_budget=0),
                 vad=GeminiVADParams(
                     start_sensitivity=StartSensitivity.START_SENSITIVITY_LOW,
-                    silence_duration_ms=500,
+                    silence_duration_ms=750,
                 ),
             ),
         )
