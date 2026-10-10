@@ -1,5 +1,10 @@
 import { Router } from 'express'
 import { authenticate } from '../../middleware/auth.middleware.js'
+import { validateBody } from '../../validations/auth.validation.js'
+import {
+  updateSettingsSchema,
+  sendTestEmailSchema,
+} from '../../validations/settings.validation.js'
 import {
   getSettings,
   updateSettings,
@@ -12,7 +17,7 @@ const router = Router()
 router.use(authenticate)
 
 router.get('/', getSettings)
-router.put('/', updateSettings)
-router.post('/test-email', sendTestEmail)
+router.put('/', validateBody(updateSettingsSchema), updateSettings)
+router.post('/test-email', validateBody(sendTestEmailSchema), sendTestEmail)
 
 export default router

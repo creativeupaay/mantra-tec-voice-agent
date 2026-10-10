@@ -224,6 +224,7 @@ class SilenceTimeoutMonitor:
         state: CallState,
         initial_timeout: float,
         confirm_timeout: float,
+        max_duration: float = 300.0,
         send_prompt_fn,
         disconnect_fn,
     ):
@@ -231,6 +232,7 @@ class SilenceTimeoutMonitor:
         self.state = state
         self.initial_timeout = max(30.0, initial_timeout)
         self.confirm_timeout = max(18.0, confirm_timeout)
+        self.max_duration = max(60.0, max_duration) if max_duration > 0 else 0.0
         self.send_prompt_fn = send_prompt_fn
         self.disconnect_fn = disconnect_fn
 
@@ -305,6 +307,20 @@ class SilenceTimeoutMonitor:
                     break
 
                 now = time.monotonic()
+
+                # ── Maximum call duration check ──────────────────────────────────
+                total_call_time = now - (self.state.call_started_at or self.last_activity_time)
+                if self.max_duration > 0 and total_call_time >= self.max_duration:
+                    async with self._lock:
+                        if self.is_active and self.silence_phase != 3 and not self._is_prompting:
+                            self.silence_phase = 3
+                            logger.info(
+                                f"[bot] Call {self.call_id}: Maximum call duration reached ({total_call_time:.1f}s >= {self.max_duration}s). "
+                                f"Gracefully wrapping up and disconnecting."
+                            )
+                            await self._trigger_max_duration_wrapup()
+                            break
+
                 # Do not count silence while bot is speaking, prompting, or caller asked for a moment
                 if self.bot_is_speaking or self._is_prompting or now < self.hold_until:
                     continue
@@ -401,6 +417,28 @@ class SilenceTimeoutMonitor:
                     "No response received from caller after multiple checks. Say politely: "
                     "'Since I haven't received a response, I will disconnect the call now. Thank you for calling Mantra Tech, have a great day!' "
                     "Do not ask any questions."
+                )
+            await self.send_prompt_fn(prompt)
+            await self.disconnect_fn(delay=4.5)
+        finally:
+            self._is_prompting = False
+
+    async def _trigger_max_duration_wrapup(self):
+        self._is_prompting = True
+        self.bot_is_speaking = True
+        try:
+            is_hindi = self.state.preferred_language in ("hi", "hinglish")
+            if is_hindi:
+                prompt = (
+                    "Call ka samay poora ho gaya hai. Ek polite aur samman-janak sentence boliye: "
+                    "'Sir, aapki saari details note ho chuki hain aur hamari team aapse jald contact karegi. Mantra Tech mein call karne ke liye thank you. Have a great day!' "
+                    "CRITICAL: Koi naya sawaal mat puchiye aur call disconnect kijiye."
+                )
+            else:
+                prompt = (
+                    "The maximum call time limit has been reached. Speak one polite closing sentence: "
+                    "'Sir, all your details have been noted and our team will contact you shortly. Thank you for calling Mantra Tech, have a great day!' "
+                    "CRITICAL: Do NOT ask any questions."
                 )
             await self.send_prompt_fn(prompt)
             await self.disconnect_fn(delay=4.5)
@@ -595,6 +633,7 @@ async def run_bot(
         state=state,
         initial_timeout=settings.silence_timeout_initial,
         confirm_timeout=settings.silence_timeout_confirm,
+        max_duration=settings.max_call_duration_seconds,
         send_prompt_fn=_send_system_prompt,
         disconnect_fn=_silence_disconnect,
     )
@@ -718,13 +757,15 @@ async def run_bot(
         if gemini_mode:
             greeting_hint = (
                 "The call just connected. Just say a single, calm, natural word: 'Hello?' "
-                "CRITICAL: Do NOT give a scripted corporate speech. Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech mein call karne ke liye dhanyawad'. "
+                "CRITICAL: Do NOT introduce yourself or say 'main Priya'. "
+                "Do NOT give a scripted corporate speech. Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech mein call karne ke liye dhanyawad'. "
                 "Just say 'Hello?' and listen to the caller."
             )
         else:
             greeting_hint = (
                 "The call just connected. Say just a single, natural word: 'Hello?' "
-                "CRITICAL: Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech में call करने के लिए thank you'. "
+                "CRITICAL: Do NOT introduce yourself or say 'main Priya'. "
+                "Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech में call करने के लिए thank you'. "
                 "Just say 'Hello?' and wait for the caller."
             )
 

@@ -8,7 +8,9 @@ import {
   Loader2,
   Trash2,
   PhoneForwarded,
-  Phone
+  Phone,
+  PhoneCall,
+  Send,
 } from 'lucide-react'
 import { settingsApi } from '../api/client'
 
@@ -16,6 +18,8 @@ interface SystemSettings {
   organization_name: string
   notify_on_escalation: boolean
   escalation_emails: string[]
+  notify_on_callback: boolean
+  callback_emails: string[]
   forward_to_human?: boolean
   forward_phone_number?: string
 }
@@ -25,12 +29,12 @@ const SettingsPage: FC = () => {
     organization_name: 'Mantra Tech',
     notify_on_escalation: true,
     escalation_emails: ['admin@mantratec.com', 'escalations@mantratec.com'],
+    notify_on_callback: true,
+    callback_emails: ['callback@mantratec.com', 'support@mantratec.com'],
     forward_to_human: false,
     forward_phone_number: '',
   })
 
-  const [newEmailInput, setNewEmailInput] = useState('')
-  const [emailError, setEmailError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   // Routing Card states
@@ -38,9 +42,22 @@ const SettingsPage: FC = () => {
   const [routingSaveSuccess, setRoutingSaveSuccess] = useState<string | null>(null)
   const [routingError, setRoutingError] = useState<string | null>(null)
 
-  // Email Card states
-  const [isSavingEmail, setIsSavingEmail] = useState(false)
-  const [emailSaveSuccess, setEmailSaveSuccess] = useState<string | null>(null)
+  // Escalation Email states
+  const [newEscalationInput, setNewEscalationInput] = useState('')
+  const [escalationError, setEscalationError] = useState<string | null>(null)
+  const [isTestingEscalation, setIsTestingEscalation] = useState(false)
+  const [escalationTestMsg, setEscalationTestMsg] = useState<{ success: boolean; text: string } | null>(null)
+
+  // Callback Email states
+  const [newCallbackInput, setNewCallbackInput] = useState('')
+  const [callbackError, setCallbackError] = useState<string | null>(null)
+  const [isTestingCallback, setIsTestingCallback] = useState(false)
+  const [callbackTestMsg, setCallbackTestMsg] = useState<{ success: boolean; text: string } | null>(null)
+
+  // Global Notification Save states
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false)
+  const [notificationsSaveSuccess, setNotificationsSaveSuccess] = useState<string | null>(null)
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
 
   // Load settings on mount
   useEffect(() => {
@@ -52,7 +69,15 @@ const SettingsPage: FC = () => {
     try {
       const response = await settingsApi.get()
       if (response.data?.data) {
-        setSettings(response.data.data)
+        const data = response.data.data
+        setSettings(prev => ({
+          ...prev,
+          ...data,
+          escalation_emails: Array.isArray(data.escalation_emails) ? data.escalation_emails : prev.escalation_emails,
+          callback_emails: Array.isArray(data.callback_emails) ? data.callback_emails : prev.callback_emails,
+          notify_on_escalation: data.notify_on_escalation !== undefined ? Boolean(data.notify_on_escalation) : prev.notify_on_escalation,
+          notify_on_callback: data.notify_on_callback !== undefined ? Boolean(data.notify_on_callback) : prev.notify_on_callback,
+        }))
       }
     } catch (err) {
       console.warn('Failed to fetch settings from API, using default state:', err)
@@ -92,7 +117,7 @@ const SettingsPage: FC = () => {
     try {
       const response = await settingsApi.update(settings)
       if (response.data?.data) {
-        setSettings(response.data.data)
+        setSettings(prev => ({ ...prev, ...response.data.data }))
         setRoutingSaveSuccess('Routing settings saved successfully!')
         setTimeout(() => setRoutingSaveSuccess(null), 4000)
       }
@@ -106,20 +131,19 @@ const SettingsPage: FC = () => {
 
   // ── Escalation Email Handlers ──────────────────────────────────────────────
 
-  const handleAddEmail = () => {
-    setEmailError(null)
-    const email = newEmailInput.trim().toLowerCase()
-
+  const handleAddEscalationEmail = () => {
+    setEscalationError(null)
+    const email = newEscalationInput.trim().toLowerCase()
     if (!email) return
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      setEmailError('Please enter a valid email address')
+      setEscalationError('Please enter a valid email address')
       return
     }
 
     if (settings.escalation_emails.includes(email)) {
-      setEmailError('This email is already in the notification list')
+      setEscalationError('This email is already in the escalation list')
       return
     }
 
@@ -127,39 +151,125 @@ const SettingsPage: FC = () => {
       ...prev,
       escalation_emails: [...prev.escalation_emails, email]
     }))
-    setNewEmailInput('')
+    setNewEscalationInput('')
   }
 
-  const handleRemoveEmail = (emailToRemove: string) => {
+  const handleRemoveEscalationEmail = (emailToRemove: string) => {
     setSettings(prev => ({
       ...prev,
       escalation_emails: prev.escalation_emails.filter(e => e !== emailToRemove)
     }))
   }
 
-  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleAddEmail()
+  const handleTestEscalation = async () => {
+    if (settings.escalation_emails.length === 0) {
+      setEscalationTestMsg({ success: false, text: 'Add at least one recipient email before sending a test.' })
+      return
+    }
+
+    setIsTestingEscalation(true)
+    setEscalationTestMsg(null)
+    try {
+      const res = await settingsApi.sendTestEmail({
+        emails: settings.escalation_emails,
+        type: 'escalation',
+      })
+      if (res.data?.success) {
+        setEscalationTestMsg({ success: true, text: 'Test escalation alert sent successfully!' })
+      } else {
+        setEscalationTestMsg({ success: false, text: res.data?.message || 'Failed to send test email' })
+      }
+    } catch (err: any) {
+      setEscalationTestMsg({
+        success: false,
+        text: err.response?.data?.message || err.message || 'Error sending test email',
+      })
+    } finally {
+      setIsTestingEscalation(false)
+      setTimeout(() => setEscalationTestMsg(null), 6000)
     }
   }
 
-  const handleSaveEmail = async () => {
-    setIsSavingEmail(true)
-    setEmailSaveSuccess(null)
+  // ── Callback Email Handlers ────────────────────────────────────────────────
+
+  const handleAddCallbackEmail = () => {
+    setCallbackError(null)
+    const email = newCallbackInput.trim().toLowerCase()
+    if (!email) return
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setCallbackError('Please enter a valid email address')
+      return
+    }
+
+    if (settings.callback_emails.includes(email)) {
+      setCallbackError('This email is already in the callback list')
+      return
+    }
+
+    setSettings(prev => ({
+      ...prev,
+      callback_emails: [...prev.callback_emails, email]
+    }))
+    setNewCallbackInput('')
+  }
+
+  const handleRemoveCallbackEmail = (emailToRemove: string) => {
+    setSettings(prev => ({
+      ...prev,
+      callback_emails: prev.callback_emails.filter(e => e !== emailToRemove)
+    }))
+  }
+
+  const handleTestCallback = async () => {
+    if (settings.callback_emails.length === 0) {
+      setCallbackTestMsg({ success: false, text: 'Add at least one recipient email before sending a test.' })
+      return
+    }
+
+    setIsTestingCallback(true)
+    setCallbackTestMsg(null)
+    try {
+      const res = await settingsApi.sendTestEmail({
+        emails: settings.callback_emails,
+        type: 'callback',
+      })
+      if (res.data?.success) {
+        setCallbackTestMsg({ success: true, text: 'Test callback alert sent successfully!' })
+      } else {
+        setCallbackTestMsg({ success: false, text: res.data?.message || 'Failed to send test email' })
+      }
+    } catch (err: any) {
+      setCallbackTestMsg({
+        success: false,
+        text: err.response?.data?.message || err.message || 'Error sending test email',
+      })
+    } finally {
+      setIsTestingCallback(false)
+      setTimeout(() => setCallbackTestMsg(null), 6000)
+    }
+  }
+
+  // ── Save All Notifications ─────────────────────────────────────────────────
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifications(true)
+    setNotificationsSaveSuccess(null)
+    setNotificationsError(null)
 
     try {
       const response = await settingsApi.update(settings)
       if (response.data?.data) {
-        setSettings(response.data.data)
-        setEmailSaveSuccess('Email settings saved successfully!')
-        setTimeout(() => setEmailSaveSuccess(null), 4000)
+        setSettings(prev => ({ ...prev, ...response.data.data }))
+        setNotificationsSaveSuccess('Notification preferences & recipient channels saved successfully!')
+        setTimeout(() => setNotificationsSaveSuccess(null), 4000)
       }
     } catch (err: any) {
-      console.error('Failed to save email settings:', err)
-      alert(err.response?.data?.message || 'Failed to save settings')
+      console.error('Failed to save notification settings:', err)
+      setNotificationsError(err.response?.data?.message || 'Failed to save notification settings')
     } finally {
-      setIsSavingEmail(false)
+      setIsSavingNotifications(false)
     }
   }
 
@@ -169,7 +279,7 @@ const SettingsPage: FC = () => {
       <div>
         <h2 className="text-2xl font-bold text-text-primary tracking-tight">System Settings</h2>
         <p className="text-sm text-text-secondary mt-1">
-          Manage system preferences, inbound call routing, and escalation alert recipients.
+          Manage system preferences, inbound call routing, and separate email notification channels for escalations and callbacks.
         </p>
       </div>
 
@@ -253,7 +363,7 @@ const SettingsPage: FC = () => {
                 </div>
               </div>
 
-              {/* Routing Card Footer with dedicated Save button */}
+              {/* Routing Card Footer */}
               <div className="pt-4 border-t border-border flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   {routingSaveSuccess && (
@@ -274,7 +384,7 @@ const SettingsPage: FC = () => {
                   type="button"
                   onClick={handleSaveRouting}
                   disabled={isSavingRouting}
-                  className="px-5 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50"
+                  className="px-5 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
                   {isSavingRouting && <Loader2 className="animate-spin" size={14} />}
                   <span>{isSavingRouting ? 'Saving...' : 'Save Routing Settings'}</span>
@@ -283,116 +393,149 @@ const SettingsPage: FC = () => {
             </div>
           </div>
 
-          {/* Card 2: Escalated Call Notifications */}
+          {/* Card 2: Notification Channels & Alert Recipients */}
           <div className="bg-surface-card rounded-2xl border border-border shadow-sm overflow-hidden">
             <div className="border-b border-border bg-surface-page/50 px-6">
-              <div className="flex items-center space-x-2 py-4">
-                <Bell size={18} className="text-red-500" />
-                <span className="text-sm font-semibold text-text-primary">Escalated Call Notifications</span>
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-center space-x-2">
+                  <Bell size={18} className="text-indigo-500" />
+                  <div>
+                    <span className="text-sm font-semibold text-text-primary">Notification Channels & Email Recipients</span>
+                    <span className="ml-2 text-xs text-text-secondary hidden sm:inline">
+                      Configure separate destination emails per call event
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="p-6 md:p-8 space-y-8">
-              {/* Notification Enable Toggle */}
-              <div className="flex items-center justify-between p-4 bg-surface-page rounded-xl border border-border">
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-2">
-                    <Bell size={18} className="text-red-500" />
-                    <h3 className="text-base font-semibold text-text-primary">
-                      Email Notifications for Escalated Calls
-                    </h3>
+              {/* ── USE CASE 1: Escalated Call Notifications ── */}
+              <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-5">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="p-1.5 rounded-lg bg-red-100 dark:bg-red-950/50 text-red-600">
+                        <AlertCircle size={16} />
+                      </span>
+                      <h3 className="text-base font-semibold text-text-primary">
+                        Escalated Call Notifications
+                      </h3>
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400">
+                        Priority Queue
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-secondary pl-8">
+                      Immediate email alerts dispatched when a call is escalated, encounters red flags, or requires manager intervention.
+                    </p>
                   </div>
-                  <p className="text-xs text-text-secondary pl-6">
-                    Automatically send email alerts whenever a customer call is escalated or requires urgent attention.
-                  </p>
+
+                  <label className="relative inline-flex items-center cursor-pointer ml-4">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings.notify_on_escalation)}
+                      onChange={(e) =>
+                        setSettings(prev => ({ ...prev, notify_on_escalation: e.target.checked }))
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                  </label>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.notify_on_escalation}
-                    onChange={(e) =>
-                      setSettings(prev => ({ ...prev, notify_on_escalation: e.target.checked }))
-                    }
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                </label>
-              </div>
+                {/* Email Input & Tags for Escalation */}
+                <div className="space-y-3 pt-2">
+                  <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center justify-between">
+                    <span>Escalation Email Recipients ({settings.escalation_emails.length})</span>
+                    <button
+                      type="button"
+                      onClick={handleTestEscalation}
+                      disabled={isTestingEscalation || settings.escalation_emails.length === 0}
+                      className="text-xs font-medium text-red-600 hover:text-red-700 flex items-center space-x-1 disabled:opacity-40 cursor-pointer transition-colors normal-case"
+                      title="Send a sample escalation email to verify recipient emails"
+                    >
+                      {isTestingEscalation ? (
+                        <Loader2 className="animate-spin" size={12} />
+                      ) : (
+                        <Send size={12} />
+                      )}
+                      <span>{isTestingEscalation ? 'Sending Test...' : 'Send Test Escalation Alert'}</span>
+                    </button>
+                  </label>
 
-              {/* Multiple Email Recipients Input & Badges */}
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-semibold text-text-primary flex items-center space-x-2">
-                    <Mail size={16} className="text-text-secondary" />
-                    <span>Escalation Email Recipients</span>
-                  </h4>
-                  <p className="text-xs text-text-secondary mt-1">
-                    Add multiple email addresses that will receive instant notification alerts for every escalated call.
-                  </p>
-                </div>
+                  {/* Test Feedback */}
+                  {escalationTestMsg && (
+                    <div
+                      className={`text-xs px-3 py-2 rounded-lg flex items-center space-x-1.5 ${
+                        escalationTestMsg.success
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-red-50 text-red-700 border border-red-200'
+                      }`}
+                    >
+                      {escalationTestMsg.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                      <span>{escalationTestMsg.text}</span>
+                    </div>
+                  )}
 
-                {/* Email Input Field */}
-                <div className="space-y-2">
+                  {/* Input Row */}
                   <div className="flex space-x-2">
                     <div className="relative flex-1">
                       <input
                         type="email"
-                        value={newEmailInput}
+                        value={newEscalationInput}
                         onChange={(e) => {
-                          setNewEmailInput(e.target.value)
-                          setEmailError(null)
+                          setNewEscalationInput(e.target.value)
+                          setEscalationError(null)
                         }}
-                        onKeyDown={handleEmailKeyDown}
-                        placeholder="Enter email address (e.g. manager@mantratec.com)"
-                        className="w-full pl-3.5 pr-10 py-2.5 bg-transparent border border-border rounded-xl focus:outline-none focus:border-text-primary text-sm text-text-primary transition-colors"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddEscalationEmail()
+                          }
+                        }}
+                        placeholder="e.g. manager@mantratec.com, escalations@mantratec.com"
+                        className="w-full pl-3.5 pr-4 py-2 bg-transparent border border-border rounded-xl focus:outline-none focus:border-red-500 text-sm text-text-primary transition-colors"
                       />
                     </div>
 
                     <button
                       type="button"
-                      onClick={handleAddEmail}
-                      className="px-4 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+                      onClick={handleAddEscalationEmail}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
                     >
-                      <Plus size={16} />
-                      <span>Add Email</span>
+                      <Plus size={15} />
+                      <span>Add</span>
                     </button>
                   </div>
 
-                  {emailError && (
+                  {escalationError && (
                     <p className="text-xs text-red-500 font-medium flex items-center space-x-1">
                       <AlertCircle size={14} />
-                      <span>{emailError}</span>
+                      <span>{escalationError}</span>
                     </p>
                   )}
-                </div>
 
-                {/* Active Recipients List */}
-                <div className="pt-2">
-                  <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-                    Configured Recipients ({settings.escalation_emails.length})
-                  </label>
-
+                  {/* Tag List */}
                   {settings.escalation_emails.length === 0 ? (
-                    <div className="p-4 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary">
-                      No email recipients added yet. Enter an email above to add notification targets.
+                    <div className="p-3.5 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/50">
+                      No escalation recipients added yet. Enter an email above to receive escalation alerts.
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2.5">
+                    <div className="flex flex-wrap gap-2 pt-1">
                       {settings.escalation_emails.map((email) => (
                         <div
                           key={email}
-                          className="flex items-center space-x-2.5 px-3.5 py-2 bg-surface-page border border-border rounded-xl text-xs font-medium text-text-primary group hover:border-red-300 transition-all shadow-2xs"
+                          className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary hover:border-red-300 transition-all shadow-2xs group"
                         >
-                          <Mail size={14} className="text-text-secondary" />
+                          <Mail size={13} className="text-red-500" />
                           <span className="font-mono text-xs">{email}</span>
                           <button
                             type="button"
-                            onClick={() => handleRemoveEmail(email)}
+                            onClick={() => handleRemoveEscalationEmail(email)}
                             title={`Remove ${email}`}
-                            className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 flex items-center justify-center ml-1"
+                            className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 flex items-center justify-center ml-0.5 cursor-pointer"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       ))}
@@ -401,25 +544,165 @@ const SettingsPage: FC = () => {
                 </div>
               </div>
 
-              {/* Email Save Action Footer */}
-              <div className="pt-6 border-t border-border flex items-center justify-between">
+              {/* ── USE CASE 2: Callback Required Notifications ── */}
+              <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-5">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600">
+                        <PhoneCall size={16} />
+                      </span>
+                      <h3 className="text-base font-semibold text-text-primary">
+                        Callback Required Notifications
+                      </h3>
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400">
+                        Follow-Up Queue
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-secondary pl-8">
+                      Immediate email alerts dispatched to sales or support follow-up teams whenever a caller requests a callback or agent follow-up.
+                    </p>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer ml-4">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings.notify_on_callback)}
+                      onChange={(e) =>
+                        setSettings(prev => ({ ...prev, notify_on_callback: e.target.checked }))
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {/* Email Input & Tags for Callback */}
+                <div className="space-y-3 pt-2">
+                  <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center justify-between">
+                    <span>Callback Email Recipients ({settings.callback_emails.length})</span>
+                    <button
+                      type="button"
+                      onClick={handleTestCallback}
+                      disabled={isTestingCallback || settings.callback_emails.length === 0}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center space-x-1 disabled:opacity-40 cursor-pointer transition-colors normal-case"
+                      title="Send a sample callback email to verify recipient emails"
+                    >
+                      {isTestingCallback ? (
+                        <Loader2 className="animate-spin" size={12} />
+                      ) : (
+                        <Send size={12} />
+                      )}
+                      <span>{isTestingCallback ? 'Sending Test...' : 'Send Test Callback Alert'}</span>
+                    </button>
+                  </label>
+
+                  {/* Test Feedback */}
+                  {callbackTestMsg && (
+                    <div
+                      className={`text-xs px-3 py-2 rounded-lg flex items-center space-x-1.5 ${
+                        callbackTestMsg.success
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-red-50 text-red-700 border border-red-200'
+                      }`}
+                    >
+                      {callbackTestMsg.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                      <span>{callbackTestMsg.text}</span>
+                    </div>
+                  )}
+
+                  {/* Input Row */}
+                  <div className="flex space-x-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="email"
+                        value={newCallbackInput}
+                        onChange={(e) => {
+                          setNewCallbackInput(e.target.value)
+                          setCallbackError(null)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddCallbackEmail()
+                          }
+                        }}
+                        placeholder="e.g. callback-team@mantratec.com, support@mantratec.com"
+                        className="w-full pl-3.5 pr-4 py-2 bg-transparent border border-border rounded-xl focus:outline-none focus:border-indigo-500 text-sm text-text-primary transition-colors"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddCallbackEmail}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+                    >
+                      <Plus size={15} />
+                      <span>Add</span>
+                    </button>
+                  </div>
+
+                  {callbackError && (
+                    <p className="text-xs text-red-500 font-medium flex items-center space-x-1">
+                      <AlertCircle size={14} />
+                      <span>{callbackError}</span>
+                    </p>
+                  )}
+
+                  {/* Tag List */}
+                  {settings.callback_emails.length === 0 ? (
+                    <div className="p-3.5 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/50">
+                      No callback recipients added yet. Enter an email above to receive callback alerts.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {settings.callback_emails.map((email) => (
+                        <div
+                          key={email}
+                          className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary hover:border-indigo-300 transition-all shadow-2xs group"
+                        >
+                          <Mail size={13} className="text-indigo-500" />
+                          <span className="font-mono text-xs">{email}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCallbackEmail(email)}
+                            title={`Remove ${email}`}
+                            className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 flex items-center justify-center ml-0.5 cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notification Save Action Footer */}
+              <div className="pt-4 border-t border-border flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  {emailSaveSuccess && (
+                  {notificationsSaveSuccess && (
                     <span className="text-xs font-semibold text-green-600 flex items-center space-x-1 animate-fade-in">
                       <CheckCircle2 size={16} />
-                      <span>{emailSaveSuccess}</span>
+                      <span>{notificationsSaveSuccess}</span>
+                    </span>
+                  )}
+                  {notificationsError && (
+                    <span className="text-xs font-semibold text-red-500 flex items-center space-x-1 animate-fade-in">
+                      <AlertCircle size={16} />
+                      <span>{notificationsError}</span>
                     </span>
                   )}
                 </div>
 
                 <button
                   type="button"
-                  onClick={handleSaveEmail}
-                  disabled={isSavingEmail}
-                  className="px-6 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50"
+                  onClick={handleSaveNotifications}
+                  disabled={isSavingNotifications}
+                  className="px-6 py-2.5 bg-text-primary text-surface-card rounded-xl hover:bg-black text-xs font-semibold transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
-                  {isSavingEmail && <Loader2 className="animate-spin" size={14} />}
-                  <span>{isSavingEmail ? 'Saving...' : 'Save Settings'}</span>
+                  {isSavingNotifications && <Loader2 className="animate-spin" size={14} />}
+                  <span>{isSavingNotifications ? 'Saving...' : 'Save Notification Settings'}</span>
                 </button>
               </div>
             </div>

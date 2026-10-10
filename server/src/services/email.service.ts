@@ -162,6 +162,159 @@ export async function sendTestEscalationEmail(targetEmails?: string[]): Promise<
 }
 
 /**
+ * Send an email notification for a callback-required call to all configured recipients using Resend API.
+ */
+export async function sendCallbackEmailNotification(callData: CallEscalationData): Promise<{ success: boolean; message: string }> {
+  try {
+    const settings = await Settings.findOne()
+    
+    if (!settings || !settings.notify_on_callback) {
+      console.log('[EmailService] Callback email notifications are disabled in settings.')
+      return { success: false, message: 'Callback email notifications are disabled' }
+    }
+
+    const recipients = (settings.callback_emails || []).filter(e => Boolean(e && e.includes('@')))
+    if (recipients.length === 0) {
+      console.warn('[EmailService] No valid recipient emails configured for callback notifications.')
+      return { success: false, message: 'No valid recipient emails configured' }
+    }
+
+    const apiKey = (env.RESEND_API_KEY || settings.resend_api_key || '').trim()
+    const fromEmail = (env.FROM_EMAIL || settings.resend_from_email || 'noreply@creativeupaay.in').trim()
+
+    if (!apiKey) {
+      console.warn('[EmailService] RESEND_API_KEY is not configured in process.env or settings.')
+      return { success: false, message: 'RESEND_API_KEY is not configured' }
+    }
+
+    const dashboardBase = (
+      (settings as any)?.dashboard_url ||
+      env.DASHBOARD_URL ||
+      env.CLIENT_URL ||
+      'http://localhost:5173'
+    ).replace(/\/$/, '')
+    const targetCallId = callData._id || callData.call_id || ''
+    const callDetailUrl = `${dashboardBase}/calls?callId=${targetCallId}`
+
+    const callerIdentifier = callData.caller_name || callData.phone_number || 'Customer'
+    const subject = `📞 Callback Required Alert: ${callerIdentifier} (${callData.call_category || 'General'})`
+
+    const htmlBody = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+        <div style="background-color: #4f46e5; color: #ffffff; padding: 16px 20px; border-radius: 8px 8px 0 0; text-align: center;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Callback Required Notification</h2>
+          <p style="margin: 4px 0 0 0; font-size: 14px; opacity: 0.9;">Mantra Tech Voice Agent System</p>
+        </div>
+
+        <div style="padding: 20px; color: #333333;">
+          <p style="font-size: 15px; line-height: 1.5; margin-bottom: 20px;">
+            A caller has requested or requires a <strong>CALLBACK</strong> from the support or sales team.
+          </p>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666; width: 35%;">Caller:</td>
+              <td style="padding: 10px; color: #111111;">${callData.caller_name || 'N/A'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Phone to Call:</td>
+              <td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">${callData.phone_number || 'Unknown'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
+              <td style="padding: 10px; color: #111111; text-transform: capitalize;">${callData.call_category || 'General Inquiry'}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Date & Time:</td>
+              <td style="padding: 10px; color: #111111;">${callData.timestamp ? new Date(callData.timestamp).toLocaleString() : new Date().toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Call ID:</td>
+              <td style="padding: 10px; color: #111111; font-family: monospace;">${callData.call_id || callData._id || 'N/A'}</td>
+            </tr>
+          </table>
+
+          <div style="background-color: #f5f3ff; border-left: 4px solid #6366f1; padding: 14px 16px; margin-bottom: 20px; border-radius: 4px;">
+            <h4 style="margin: 0 0 8px 0; color: #312e81; font-size: 14px;">Call Summary & Inquiry:</h4>
+            <p style="margin: 0; color: #4338ca; font-size: 14px; line-height: 1.5;">${callData.call_summary || 'No summary available.'}</p>
+          </div>
+
+          ${callData.transcript ? `
+          <div style="background-color: #f1f5f9; padding: 14px 16px; border-radius: 6px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 8px 0; color: #334155; font-size: 13px;">Recent Transcript Snippet:</h4>
+            <pre style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #1e293b;">${callData.transcript.slice(0, 500)}${callData.transcript.length > 500 ? '...' : ''}</pre>
+          </div>
+          ` : ''}
+
+          <div style="text-align: center; margin-top: 25px;">
+            <a href="${callDetailUrl}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+              View Call in Dashboard
+            </a>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #e0e0e0; padding-top: 15px; margin-top: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+          This is an automated notification from Mantra Tech Voice Agent.
+        </div>
+      </div>
+    `
+
+    const resendPayload = {
+      from: `Mantra Tech <${fromEmail}>`,
+      to: recipients,
+      subject,
+      html: htmlBody,
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'MantraTechVoiceAgent/1.0',
+      },
+      body: JSON.stringify(resendPayload),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      console.error(`[EmailService] Resend API Error (${response.status}): ${errText}`)
+      return { success: false, message: `Resend API Error: ${errText}` }
+    }
+
+    const resData = await response.json()
+    console.log(`[EmailService] Sent callback notification email to ${recipients.join(', ')} via Resend. Email ID:`, (resData as any).id)
+    return { success: true, message: `Callback notification sent to ${recipients.length} recipients` }
+  } catch (error: any) {
+    console.error('[EmailService] Failed to send callback email:', error.message || error)
+    return { success: false, message: error.message || 'Email sending failed' }
+  }
+}
+
+/**
+ * Send a sample test callback email to verify recipient emails and Resend setup.
+ */
+export async function sendTestCallbackEmail(targetEmails?: string[]): Promise<{ success: boolean; message: string }> {
+  const sampleCall: CallEscalationData = {
+    call_id: 'test-callback-sample-456',
+    caller_name: 'Test Customer (Sample)',
+    phone_number: '+919876543210',
+    call_category: 'support_callback',
+    call_summary: 'This is a test notification sent from Mantra Tech Settings to verify your callback email recipient list.',
+    transcript: 'user: Main thoda busy hoon, kya mujhe 1 ghante mein wapas call kar sakte hain?\nassistant: Ji bilkul, humari support team aapko 1 ghante mein callback karegi.',
+    timestamp: new Date().toISOString()
+  }
+
+  if (targetEmails && targetEmails.length > 0) {
+    const settings = await Settings.findOne() || new Settings()
+    settings.callback_emails = targetEmails
+    await settings.save()
+  }
+
+  return await sendCallbackEmailNotification(sampleCall)
+}
+
+/**
  * Send a 6-digit OTP email for password reset via Resend API (with console fallback for local dev).
  */
 export async function sendPasswordResetOtpEmail(

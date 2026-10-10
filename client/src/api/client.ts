@@ -392,7 +392,7 @@ export const sessionApi = {
 export const settingsApi = {
   get: () => apiClient.get<{ success: boolean; data: any }>('/settings'),
   update: (data: any) => apiClient.put<{ success: boolean; message: string; data: any }>('/settings', data),
-  sendTestEmail: (data: { emails: string[] }) =>
+  sendTestEmail: (data: { emails?: string[]; type?: 'escalation' | 'callback' }) =>
     apiClient.post<{ success: boolean; message: string }>('/settings/test-email', data),
 };
 

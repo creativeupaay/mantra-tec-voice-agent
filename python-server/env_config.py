@@ -119,9 +119,10 @@ class Settings:
     resend_api_key: str
     from_email: str
 
-    # ── Inactivity / Silence Detection ───────────────────────────────────────
+    # ── Inactivity / Silence / Call Duration Limits ──────────────────────────
     silence_timeout_initial: float  # Inactivity seconds before checking if caller is still there (e.g. 10s)
     silence_timeout_confirm: float  # Wait seconds after check before disconnecting (e.g. 6s)
+    max_call_duration_seconds: float  # Max call duration before auto-wrapping up (e.g. 300s = 5m)
 
     # ── App ──────────────────────────────────────────────────────────────────
     log_level: str
@@ -219,9 +220,10 @@ def _load() -> Settings:
         dashboard_url=(os.getenv("DASHBOARD_URL") or os.getenv("CLIENT_URL") or "http://localhost:5173").rstrip("/"),
         resend_api_key=os.getenv("RESEND_API_KEY", ""),
         from_email=os.getenv("FROM_EMAIL", "noreply@creativeupaay.in"),
-        # Inactivity / Silence Detection
+        # Inactivity / Silence / Call Duration Limits
         silence_timeout_initial=float(os.getenv("SILENCE_TIMEOUT_INITIAL_SECONDS", "20.0")),
         silence_timeout_confirm=float(os.getenv("SILENCE_TIMEOUT_CONFIRM_SECONDS", "15.0")),
+        max_call_duration_seconds=float(os.getenv("MAX_CALL_DURATION_SECONDS", "300.0")),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )

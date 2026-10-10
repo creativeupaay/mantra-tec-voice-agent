@@ -542,6 +542,22 @@ async def run_post_call_pipeline(
                 logger.info(f"[post-call] Triggered escalation email notification for call {state.call_id}")
             except Exception as e:
                 logger.error(f"[post-call] Failed to trigger escalation email notification: {e}")
+        elif call_status == CallStatus.CALLBACK_REQUIRED or callback_needed:
+            try:
+                from services.email.notifier import send_callback_email
+                phone_display = final_phone if final_phone not in (SHARED_FORWARDING_NUMBERS | {"unknown", ""}) else "Not provided by caller (Exotel trunk call)"
+                category_display = extraction.call_category.value if hasattr(extraction.call_category, 'value') else str(extraction.call_category)
+                await send_callback_email(
+                    call_id=state.call_id,
+                    caller_name=caller_name,
+                    phone_number=phone_display,
+                    call_category=category_display,
+                    call_summary=extraction.summary,
+                    transcript=transcript_text or None,
+                )
+                logger.info(f"[post-call] Triggered callback required email notification for call {state.call_id}")
+            except Exception as e:
+                logger.error(f"[post-call] Failed to trigger callback email notification: {e}")
     except Exception as e:
         logger.error(f"[post-call] Failed to finalize call {state.call_id}: {e}")
 

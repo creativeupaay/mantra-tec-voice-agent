@@ -10,7 +10,10 @@ import {
   fetchPublicGcsRecording,
 } from '../services/gcs.service.js'
 import { env } from '../config/env.config.js'
-import { sendEscalationEmailNotification } from '../services/email.service.js'
+import {
+  sendEscalationEmailNotification,
+  sendCallbackEmailNotification,
+} from '../services/email.service.js'
 
 /** Normalize call docs so the client always receives complete UI fields. */
 function normalizeCall(call: Record<string, any>) {
@@ -499,10 +502,14 @@ export const updateCallStatus = async (req: Request, res: Response, _next: NextF
       return
     }
 
-    // If call status changed to 'escalated', trigger email notification asynchronously
+    // If call status changed to 'escalated' or 'callback_required', trigger email notification asynchronously
     if (status === 'escalated') {
       sendEscalationEmailNotification(updatedCall as any).catch((err) => {
         console.error('[CallController] Failed to dispatch escalation email notification:', err)
+      })
+    } else if (status === 'callback_required') {
+      sendCallbackEmailNotification(updatedCall as any).catch((err) => {
+        console.error('[CallController] Failed to dispatch callback email notification:', err)
       })
     }
 
