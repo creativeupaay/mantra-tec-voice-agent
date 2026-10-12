@@ -17,12 +17,26 @@ export const getSettings = async (_req: Request, res: Response, next: NextFuncti
         escalation_emails: ['admin@mantratec.com'],
         notify_on_callback: true,
         callback_emails: ['callback@mantratec.com'],
+        delivery_callback_emails: ['delivery@mantratec.com'],
+        repair_callback_emails: ['repair@mantratec.com'],
+        device_issue_callback_emails: ['techsupport@mantratec.com'],
         resend_api_key: '',
         resend_from_email: 'onboarding@resend.dev',
         forward_to_human: false,
         forward_phone_number: '',
       })
       settings = created.toObject()
+    } else {
+      // Ensure defaults for any newly introduced fields in existing documents
+      if (!Array.isArray(settings.delivery_callback_emails)) {
+        settings.delivery_callback_emails = ['delivery@mantratec.com']
+      }
+      if (!Array.isArray(settings.repair_callback_emails)) {
+        settings.repair_callback_emails = ['repair@mantratec.com']
+      }
+      if (!Array.isArray(settings.device_issue_callback_emails)) {
+        settings.device_issue_callback_emails = ['techsupport@mantratec.com']
+      }
     }
 
     res.json({
@@ -43,6 +57,9 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
       escalation_emails,
       notify_on_callback,
       callback_emails,
+      delivery_callback_emails,
+      repair_callback_emails,
+      device_issue_callback_emails,
       resend_api_key,
       resend_from_email,
       forward_to_human,
@@ -72,6 +89,24 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
         .filter((e: string) => e.length > 3 && e.includes('@'))
       settings.callback_emails = Array.from(new Set(cleanEmails))
     }
+    if (Array.isArray(delivery_callback_emails)) {
+      const cleanEmails = delivery_callback_emails
+        .map((e: any) => String(e).trim().toLowerCase())
+        .filter((e: string) => e.length > 3 && e.includes('@'))
+      settings.delivery_callback_emails = Array.from(new Set(cleanEmails))
+    }
+    if (Array.isArray(repair_callback_emails)) {
+      const cleanEmails = repair_callback_emails
+        .map((e: any) => String(e).trim().toLowerCase())
+        .filter((e: string) => e.length > 3 && e.includes('@'))
+      settings.repair_callback_emails = Array.from(new Set(cleanEmails))
+    }
+    if (Array.isArray(device_issue_callback_emails)) {
+      const cleanEmails = device_issue_callback_emails
+        .map((e: any) => String(e).trim().toLowerCase())
+        .filter((e: string) => e.length > 3 && e.includes('@'))
+      settings.device_issue_callback_emails = Array.from(new Set(cleanEmails))
+    }
     if (resend_api_key !== undefined) settings.resend_api_key = String(resend_api_key).trim()
     if (resend_from_email !== undefined) settings.resend_from_email = String(resend_from_email).trim()
     if (forward_to_human !== undefined) settings.forward_to_human = Boolean(forward_to_human)
@@ -89,15 +124,21 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
   }
 }
 
-// Send test email notification (escalation or callback)
+// Send test email notification (escalation or categorized callback)
 export const sendTestEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { emails, type } = req.body
     const targetEmails = Array.isArray(emails) && emails.length > 0 ? emails : undefined
 
     let result
-    if (type === 'callback') {
-      result = await sendTestCallbackEmail(targetEmails)
+    if (type === 'callback_delivery') {
+      result = await sendTestCallbackEmail(targetEmails, 'delivery')
+    } else if (type === 'callback_repair') {
+      result = await sendTestCallbackEmail(targetEmails, 'repair')
+    } else if (type === 'callback_device_issue') {
+      result = await sendTestCallbackEmail(targetEmails, 'device_issue')
+    } else if (type === 'callback') {
+      result = await sendTestCallbackEmail(targetEmails, 'general')
     } else {
       result = await sendTestEscalationEmail(targetEmails)
     }

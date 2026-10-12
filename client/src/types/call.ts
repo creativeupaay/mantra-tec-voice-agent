@@ -2,6 +2,8 @@ export type CallStatus = 'live' | 'resolved' | 'escalated' | 'missed' | 'callbac
 
 export type CallCategory = 'support' | 'sales' | 'booking' | 'inquiry' | 'feedback' | 'complaint' | 'technical' | 'billing'
 
+export type CallbackCategory = 'delivery' | 'repair' | 'device_issue' | 'general'
+
 export interface ICall {
   _id: string
   call_id: string
@@ -15,6 +17,7 @@ export interface ICall {
   reviewed_at?: string
   reviewed_by?: string
   call_category?: CallCategory
+  callback_category?: CallbackCategory
   red_flag_reason?: string
   guardrail_triggered?: string
   recording_url?: string

@@ -55,6 +55,7 @@ class Call(BaseModel):
     is_reviewed: bool = False
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[str] = None
+    callback_category: Optional[str] = None  # "delivery" | "repair" | "device_issue" | "general"
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
@@ -76,6 +77,7 @@ class CallUpdate(BaseModel):
     call_summary: Optional[str] = None
     detected_intent: Optional[str] = None
     call_category: Optional[CallCategory] = None
+    callback_category: Optional[str] = None
     call_outcome: Optional[str] = None
     recording_url: Optional[str] = None
     recording_path: Optional[str] = None

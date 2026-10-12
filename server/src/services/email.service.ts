@@ -161,10 +161,15 @@ export async function sendTestEscalationEmail(targetEmails?: string[]): Promise<
   return await sendEscalationEmailNotification(sampleCall)
 }
 
+export type CallbackCategory = 'delivery' | 'repair' | 'device_issue' | 'general'
+
 /**
- * Send an email notification for a callback-required call to all configured recipients using Resend API.
+ * Send an email notification for a callback-required call to configured category recipients using Resend API.
  */
-export async function sendCallbackEmailNotification(callData: CallEscalationData): Promise<{ success: boolean; message: string }> {
+export async function sendCallbackEmailNotification(
+  callData: CallEscalationData,
+  explicitCategory?: CallbackCategory
+): Promise<{ success: boolean; message: string }> {
   try {
     const settings = await Settings.findOne()
     
@@ -173,10 +178,70 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
       return { success: false, message: 'Callback email notifications are disabled' }
     }
 
-    const recipients = (settings.callback_emails || []).filter(e => Boolean(e && e.includes('@')))
+    // Determine category: either explicit, or from callData.callback_category, or infer from summary/transcript
+    let category: CallbackCategory = explicitCategory || (callData as any).callback_category
+
+    if (!category) {
+      const textToAnalyze = `${callData.call_category || ''} ${callData.call_summary || ''} ${callData.transcript || ''}`.toLowerCase()
+      if (textToAnalyze.includes('repair') || textToAnalyze.includes('rma') || textToAnalyze.includes('service center') || textToAnalyze.includes('servicing')) {
+        category = 'repair'
+      } else if (textToAnalyze.includes('delivery') || textToAnalyze.includes('courier') || textToAnalyze.includes('dispatch') || textToAnalyze.includes('tracking') || textToAnalyze.includes('order')) {
+        category = 'delivery'
+      } else if (textToAnalyze.includes('not working') || textToAnalyze.includes('chal nahi raha') || textToAnalyze.includes('malfunction') || textToAnalyze.includes('defective') || textToAnalyze.includes('sensor error') || textToAnalyze.includes('kharab')) {
+        category = 'device_issue'
+      } else {
+        category = 'general'
+      }
+    }
+
+    // Route to category-specific recipients with fallback to general callback_emails
+    let targetEmailList: string[] = []
+    let categoryBadgeText = 'Follow-Up Queue'
+    let categoryThemeColor = '#4f46e5' // Indigo
+    let categorySubjectPrefix = '📞 Callback Required Alert'
+    let categoryDescription = 'A caller has requested or requires a <strong>CALLBACK</strong> from the support or sales team.'
+
+    switch (category) {
+      case 'delivery':
+        targetEmailList = settings.delivery_callback_emails || []
+        categoryBadgeText = 'New Device Delivery Follow-up'
+        categoryThemeColor = '#0284c7' // Blue/Sky
+        categorySubjectPrefix = '📦 Delivery Inquiry Callback'
+        categoryDescription = 'A customer has inquired about <strong>NEW DEVICE DELIVERY / ORDER STATUS / DISPATCH TRACKING</strong> and requested a callback.'
+        break
+      case 'repair':
+        targetEmailList = settings.repair_callback_emails || []
+        categoryBadgeText = 'Device Repair & Service Status'
+        categoryThemeColor = '#d97706' // Amber
+        categorySubjectPrefix = '🔧 Repair & Service Status Callback'
+        categoryDescription = 'A customer who sent their device for <strong>REPAIR / SERVICING / RMA</strong> is asking for a progress update and requested a callback.'
+        break
+      case 'device_issue':
+        targetEmailList = settings.device_issue_callback_emails || []
+        categoryBadgeText = 'Device Not Working / Malfunction Complaint'
+        categoryThemeColor = '#e11d48' // Rose/Red
+        categorySubjectPrefix = '⚠️ Device Malfunction Complaint Callback'
+        categoryDescription = 'A customer is complaining that their <strong>DEVICE IS NOT WORKING / MALFUNCTIONING</strong> and urgently requires technical support callback.'
+        break
+      case 'general':
+      default:
+        targetEmailList = settings.callback_emails || []
+        categoryBadgeText = 'General Callback Queue'
+        categoryThemeColor = '#4f46e5'
+        categorySubjectPrefix = '📞 Callback Required Alert'
+        categoryDescription = 'A caller has requested or requires a <strong>CALLBACK</strong> from the customer follow-up team.'
+        break
+    }
+
+    let recipients = (targetEmailList || []).filter(e => Boolean(e && e.includes('@')))
+    // If specific category has no emails configured, fall back to general callback_emails
     if (recipients.length === 0) {
-      console.warn('[EmailService] No valid recipient emails configured for callback notifications.')
-      return { success: false, message: 'No valid recipient emails configured' }
+      recipients = (settings.callback_emails || []).filter(e => Boolean(e && e.includes('@')))
+    }
+
+    if (recipients.length === 0) {
+      console.warn(`[EmailService] No valid recipient emails configured for ${category} callback notifications.`)
+      return { success: false, message: `No valid recipient emails configured for ${category} callback` }
     }
 
     const apiKey = (env.RESEND_API_KEY || settings.resend_api_key || '').trim()
@@ -197,18 +262,21 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
     const callDetailUrl = `${dashboardBase}/calls?callId=${targetCallId}`
 
     const callerIdentifier = callData.caller_name || callData.phone_number || 'Customer'
-    const subject = `📞 Callback Required Alert: ${callerIdentifier} (${callData.call_category || 'General'})`
+    const subject = `${categorySubjectPrefix}: ${callerIdentifier} (${callData.call_category || 'Inquiry'})`
 
     const htmlBody = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-        <div style="background-color: #4f46e5; color: #ffffff; padding: 16px 20px; border-radius: 8px 8px 0 0; text-align: center;">
-          <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Callback Required Notification</h2>
-          <p style="margin: 4px 0 0 0; font-size: 14px; opacity: 0.9;">Mantra Tech Voice Agent System</p>
+        <div style="background-color: ${categoryThemeColor}; color: #ffffff; padding: 16px 20px; border-radius: 8px 8px 0 0; text-align: center;">
+          <span style="display: inline-block; padding: 3px 10px; background-color: rgba(255,255,255,0.2); border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+            ${categoryBadgeText}
+          </span>
+          <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Callback Notification</h2>
+          <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Mantra Tech Voice Agent System</p>
         </div>
 
         <div style="padding: 20px; color: #333333;">
           <p style="font-size: 15px; line-height: 1.5; margin-bottom: 20px;">
-            A caller has requested or requires a <strong>CALLBACK</strong> from the support or sales team.
+            ${categoryDescription}
           </p>
 
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
@@ -222,7 +290,7 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
             </tr>
             <tr style="border-bottom: 1px solid #eeeeee;">
               <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
-              <td style="padding: 10px; color: #111111; text-transform: capitalize;">${callData.call_category || 'General Inquiry'}</td>
+              <td style="padding: 10px; color: #111111; text-transform: capitalize;">${callData.call_category || category}</td>
             </tr>
             <tr style="border-bottom: 1px solid #eeeeee;">
               <td style="padding: 10px; font-weight: bold; color: #666666;">Date & Time:</td>
@@ -234,9 +302,9 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
             </tr>
           </table>
 
-          <div style="background-color: #f5f3ff; border-left: 4px solid #6366f1; padding: 14px 16px; margin-bottom: 20px; border-radius: 4px;">
-            <h4 style="margin: 0 0 8px 0; color: #312e81; font-size: 14px;">Call Summary & Inquiry:</h4>
-            <p style="margin: 0; color: #4338ca; font-size: 14px; line-height: 1.5;">${callData.call_summary || 'No summary available.'}</p>
+          <div style="background-color: #f8fafc; border-left: 4px solid ${categoryThemeColor}; padding: 14px 16px; margin-bottom: 20px; border-radius: 4px;">
+            <h4 style="margin: 0 0 8px 0; color: #1e293b; font-size: 14px;">Call Summary & Inquiry:</h4>
+            <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.5;">${callData.call_summary || 'No summary available.'}</p>
           </div>
 
           ${callData.transcript ? `
@@ -247,14 +315,14 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
           ` : ''}
 
           <div style="text-align: center; margin-top: 25px;">
-            <a href="${callDetailUrl}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+            <a href="${callDetailUrl}" style="background-color: ${categoryThemeColor}; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
               View Call in Dashboard
             </a>
           </div>
         </div>
 
         <div style="border-top: 1px solid #e0e0e0; padding-top: 15px; margin-top: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-          This is an automated notification from Mantra Tech Voice Agent.
+          This is an automated categorized notification from Mantra Tech Voice Agent.
         </div>
       </div>
     `
@@ -283,8 +351,8 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
     }
 
     const resData = await response.json()
-    console.log(`[EmailService] Sent callback notification email to ${recipients.join(', ')} via Resend. Email ID:`, (resData as any).id)
-    return { success: true, message: `Callback notification sent to ${recipients.length} recipients` }
+    console.log(`[EmailService] Sent ${category} callback email to ${recipients.join(', ')} via Resend. Email ID:`, (resData as any).id)
+    return { success: true, message: `${categoryBadgeText} email sent to ${recipients.length} recipients` }
   } catch (error: any) {
     console.error('[EmailService] Failed to send callback email:', error.message || error)
     return { success: false, message: error.message || 'Email sending failed' }
@@ -292,26 +360,80 @@ export async function sendCallbackEmailNotification(callData: CallEscalationData
 }
 
 /**
- * Send a sample test callback email to verify recipient emails and Resend setup.
+ * Send a sample test callback email for a specific category to verify recipient emails and Resend setup.
  */
-export async function sendTestCallbackEmail(targetEmails?: string[]): Promise<{ success: boolean; message: string }> {
-  const sampleCall: CallEscalationData = {
-    call_id: 'test-callback-sample-456',
-    caller_name: 'Test Customer (Sample)',
-    phone_number: '+919876543210',
-    call_category: 'support_callback',
-    call_summary: 'This is a test notification sent from Mantra Tech Settings to verify your callback email recipient list.',
-    transcript: 'user: Main thoda busy hoon, kya mujhe 1 ghante mein wapas call kar sakte hain?\nassistant: Ji bilkul, humari support team aapko 1 ghante mein callback karegi.',
-    timestamp: new Date().toISOString()
+export async function sendTestCallbackEmail(
+  targetEmails?: string[],
+  category: CallbackCategory = 'general'
+): Promise<{ success: boolean; message: string }> {
+  let sampleCall: CallEscalationData
+
+  switch (category) {
+    case 'delivery':
+      sampleCall = {
+        call_id: 'test-delivery-sample-101',
+        caller_name: 'Rajesh Sharma (Sample Delivery Query)',
+        phone_number: '+919876543210',
+        call_category: 'delivery',
+        call_summary: 'Customer called inquiring about delivery and courier tracking for newly ordered Mantra MFS110 L1 biometric device. Docket #DTDC-99281. Requested callback from dispatch team.',
+        transcript: 'user: Maine naya MFS110 order kiya tha, kab tak deliver hoga? Tracking number kaam nahi kar raha.\nassistant: Ji Rajesh ji, main delivery aur dispatch team se aapka callback arrange karwa deti hoon taaki wo exact tracking check karke aapko update dein.',
+        timestamp: new Date().toISOString()
+      }
+      break
+
+    case 'repair':
+      sampleCall = {
+        call_id: 'test-repair-sample-202',
+        caller_name: 'Amit Patel (Sample RMA / Repair Query)',
+        phone_number: '+919876543211',
+        call_category: 'repair',
+        call_summary: 'Customer inquiring about RMA status for device sent to Mantra service center 5 days ago for optical prism repair. Requested callback from service department.',
+        transcript: 'user: Maine apna biometric device repair ke liye bheja tha RMA number 4829 ke sath. Kya update hai?\nassistant: Ji Amit ji, main repair desk ko aapki request bhej deti hoon. Hamari service team repair sheet check karke aapse callback karegi.',
+        timestamp: new Date().toISOString()
+      }
+      break
+
+    case 'device_issue':
+      sampleCall = {
+        call_id: 'test-device-issue-sample-303',
+        caller_name: 'Sunil Verma (Sample Device Complaint)',
+        phone_number: '+919876543212',
+        call_category: 'device_issue',
+        call_summary: 'Customer complaining that device red LED is blinking and finger is not capturing during authentication. Requested callback from senior technical support engineer.',
+        transcript: 'user: Mere paas Mantra MFS110 device hai par chal nahi raha. Red light blink ho rahi hai aur capture nahi kar raha.\nassistant: Ji Sunil ji, pareshan mat hoiye. Main technical support team se turant callback arrange kar rahi hoon taaki wo issue solve kar sakein.',
+        timestamp: new Date().toISOString()
+      }
+      break
+
+    case 'general':
+    default:
+      sampleCall = {
+        call_id: 'test-callback-sample-456',
+        caller_name: 'Pooja Mehta (Sample General Follow-up)',
+        phone_number: '+919876543213',
+        call_category: 'support_callback',
+        call_summary: 'This is a test notification sent from Mantra Tech Settings to verify your callback email recipient list.',
+        transcript: 'user: Main thoda busy hoon, kya mujhe thodi der mein wapas call kar sakte hain?\nassistant: Ji bilkul, hamari follow-up team aapko callback karegi.',
+        timestamp: new Date().toISOString()
+      }
+      break
   }
 
   if (targetEmails && targetEmails.length > 0) {
     const settings = await Settings.findOne() || new Settings()
-    settings.callback_emails = targetEmails
+    if (category === 'delivery') {
+      settings.delivery_callback_emails = targetEmails
+    } else if (category === 'repair') {
+      settings.repair_callback_emails = targetEmails
+    } else if (category === 'device_issue') {
+      settings.device_issue_callback_emails = targetEmails
+    } else {
+      settings.callback_emails = targetEmails
+    }
     await settings.save()
   }
 
-  return await sendCallbackEmailNotification(sampleCall)
+  return await sendCallbackEmailNotification(sampleCall, category)
 }
 
 /**

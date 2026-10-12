@@ -28,6 +28,30 @@ export const updateSettingsSchema = z.object({
         .email({ message: 'Each callback recipient must be a valid email address' })
     )
     .optional(),
+  delivery_callback_emails: z
+    .array(
+      z
+        .string({ message: 'Email address must be a string' })
+        .trim()
+        .email({ message: 'Each delivery callback recipient must be a valid email address' })
+    )
+    .optional(),
+  repair_callback_emails: z
+    .array(
+      z
+        .string({ message: 'Email address must be a string' })
+        .trim()
+        .email({ message: 'Each repair callback recipient must be a valid email address' })
+    )
+    .optional(),
+  device_issue_callback_emails: z
+    .array(
+      z
+        .string({ message: 'Email address must be a string' })
+        .trim()
+        .email({ message: 'Each device issue callback recipient must be a valid email address' })
+    )
+    .optional(),
   resend_api_key: z.string().trim().optional(),
   resend_from_email: z.string().trim().optional(),
   forward_to_human: z.boolean({ message: 'forward_to_human must be a boolean' }).optional(),
@@ -44,8 +68,14 @@ export const sendTestEmailSchema = z.object({
     )
     .optional(),
   type: z
-    .enum(['escalation', 'callback'] as const, {
-      message: 'Test email type must be either escalation or callback',
+    .enum([
+      'escalation',
+      'callback',
+      'callback_delivery',
+      'callback_repair',
+      'callback_device_issue',
+    ] as const, {
+      message: 'Test email type must be escalation, callback, callback_delivery, callback_repair, or callback_device_issue',
     })
     .optional(),
 })

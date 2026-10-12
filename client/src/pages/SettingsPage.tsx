@@ -5,12 +5,15 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   Trash2,
   PhoneForwarded,
   Phone,
   PhoneCall,
   Send,
+  Package,
+  Wrench,
 } from 'lucide-react'
 import { settingsApi } from '../api/client'
 
@@ -20,9 +23,103 @@ interface SystemSettings {
   escalation_emails: string[]
   notify_on_callback: boolean
   callback_emails: string[]
+  delivery_callback_emails: string[]
+  repair_callback_emails: string[]
+  device_issue_callback_emails: string[]
   forward_to_human?: boolean
   forward_phone_number?: string
 }
+
+type CallbackTab = 'delivery' | 'repair' | 'device_issue' | 'general'
+
+interface CallbackCategoryConfig {
+  id: CallbackTab
+  name: string
+  shortLabel: string
+  badgeText: string
+  icon: typeof Package
+  accentColor: string
+  accentBg: string
+  accentBorder: string
+  activeTabClass: string
+  badgeClass: string
+  btnClass: string
+  field: 'delivery_callback_emails' | 'repair_callback_emails' | 'device_issue_callback_emails' | 'callback_emails'
+  testType: 'callback_delivery' | 'callback_repair' | 'callback_device_issue' | 'callback'
+  description: string
+  placeholder: string
+}
+
+const CALLBACK_CATEGORY_CONFIG: CallbackCategoryConfig[] = [
+  {
+    id: 'delivery',
+    name: 'New Device Delivery Enquiries',
+    shortLabel: 'Delivery Enquiries',
+    badgeText: 'Logistics & Dispatch',
+    icon: Package,
+    accentColor: 'text-sky-600 dark:text-sky-400',
+    accentBg: 'bg-sky-50 dark:bg-sky-950/40',
+    accentBorder: 'border-sky-300 dark:border-sky-800',
+    activeTabClass: 'border-sky-500 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300',
+    badgeClass: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
+    btnClass: 'bg-sky-600 hover:bg-sky-700 text-white',
+    field: 'delivery_callback_emails',
+    testType: 'callback_delivery',
+    description: 'Dispatched when a caller is asking about new device delivery, order dispatch, courier tracking, or shipment status.',
+    placeholder: 'e.g. delivery@mantratec.com, dispatch@mantratec.com',
+  },
+  {
+    id: 'repair',
+    name: 'Device Repair & Service Status',
+    shortLabel: 'Repair & RMA',
+    badgeText: 'RMA / Service Desk',
+    icon: Wrench,
+    accentColor: 'text-amber-600 dark:text-amber-400',
+    accentBg: 'bg-amber-50 dark:bg-amber-950/40',
+    accentBorder: 'border-amber-300 dark:border-amber-800',
+    activeTabClass: 'border-amber-500 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300',
+    badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+    btnClass: 'bg-amber-600 hover:bg-amber-700 text-white',
+    field: 'repair_callback_emails',
+    testType: 'callback_repair',
+    description: 'Dispatched when a caller sent their biometric device for repair / RMA / servicing and is asking for progress or return date.',
+    placeholder: 'e.g. repair-desk@mantratec.com, rma@mantratec.com',
+  },
+  {
+    id: 'device_issue',
+    name: 'Device Not Working / Complaints',
+    shortLabel: 'Device Issues',
+    badgeText: 'Technical Support',
+    icon: AlertTriangle,
+    accentColor: 'text-rose-600 dark:text-rose-400',
+    accentBg: 'bg-rose-50 dark:bg-rose-950/40',
+    accentBorder: 'border-rose-300 dark:border-rose-800',
+    activeTabClass: 'border-rose-500 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300',
+    badgeClass: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400',
+    btnClass: 'bg-rose-600 hover:bg-rose-700 text-white',
+    field: 'device_issue_callback_emails',
+    testType: 'callback_device_issue',
+    description: 'Dispatched when a caller currently has the device and complains that it is malfunctioning, failing to scan, or not working.',
+    placeholder: 'e.g. techsupport@mantratec.com, hardware-help@mantratec.com',
+  },
+  {
+    id: 'general',
+    name: 'General & Fallback Callback Queue',
+    shortLabel: 'General / Fallback',
+    badgeText: 'Default Follow-Up',
+    icon: PhoneCall,
+    accentColor: 'text-indigo-600 dark:text-indigo-400',
+    accentBg: 'bg-indigo-50 dark:bg-indigo-950/40',
+    accentBorder: 'border-indigo-300 dark:border-indigo-800',
+    activeTabClass: 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300',
+    badgeClass: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
+    btnClass: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+    field: 'callback_emails',
+    testType: 'callback',
+    description: 'Fallback queue for all other callback requests (RD service renewals, helpline busy callbacks) or when a category has no emails.',
+    placeholder: 'e.g. callback@mantratec.com, support@mantratec.com',
+  },
+]
 
 const SettingsPage: FC = () => {
   const [settings, setSettings] = useState<SystemSettings>({
@@ -31,6 +128,9 @@ const SettingsPage: FC = () => {
     escalation_emails: ['admin@mantratec.com', 'escalations@mantratec.com'],
     notify_on_callback: true,
     callback_emails: ['callback@mantratec.com', 'support@mantratec.com'],
+    delivery_callback_emails: ['delivery@mantratec.com'],
+    repair_callback_emails: ['repair@mantratec.com'],
+    device_issue_callback_emails: ['techsupport@mantratec.com'],
     forward_to_human: false,
     forward_phone_number: '',
   })
@@ -48,11 +148,32 @@ const SettingsPage: FC = () => {
   const [isTestingEscalation, setIsTestingEscalation] = useState(false)
   const [escalationTestMsg, setEscalationTestMsg] = useState<{ success: boolean; text: string } | null>(null)
 
-  // Callback Email states
-  const [newCallbackInput, setNewCallbackInput] = useState('')
-  const [callbackError, setCallbackError] = useState<string | null>(null)
-  const [isTestingCallback, setIsTestingCallback] = useState(false)
-  const [callbackTestMsg, setCallbackTestMsg] = useState<{ success: boolean; text: string } | null>(null)
+  // Categorized Callback Email states
+  const [activeCallbackTab, setActiveCallbackTab] = useState<CallbackTab>('delivery')
+  const [categoryInputs, setCategoryInputs] = useState<Record<CallbackTab, string>>({
+    delivery: '',
+    repair: '',
+    device_issue: '',
+    general: '',
+  })
+  const [categoryErrors, setCategoryErrors] = useState<Record<CallbackTab, string | null>>({
+    delivery: null,
+    repair: null,
+    device_issue: null,
+    general: null,
+  })
+  const [isTestingCategory, setIsTestingCategory] = useState<Record<CallbackTab, boolean>>({
+    delivery: false,
+    repair: false,
+    device_issue: false,
+    general: false,
+  })
+  const [categoryTestMsgs, setCategoryTestMsgs] = useState<Record<CallbackTab, { success: boolean; text: string } | null>>({
+    delivery: null,
+    repair: null,
+    device_issue: null,
+    general: null,
+  })
 
   // Global Notification Save states
   const [isSavingNotifications, setIsSavingNotifications] = useState(false)
@@ -75,6 +196,9 @@ const SettingsPage: FC = () => {
           ...data,
           escalation_emails: Array.isArray(data.escalation_emails) ? data.escalation_emails : prev.escalation_emails,
           callback_emails: Array.isArray(data.callback_emails) ? data.callback_emails : prev.callback_emails,
+          delivery_callback_emails: Array.isArray(data.delivery_callback_emails) ? data.delivery_callback_emails : prev.delivery_callback_emails,
+          repair_callback_emails: Array.isArray(data.repair_callback_emails) ? data.repair_callback_emails : prev.repair_callback_emails,
+          device_issue_callback_emails: Array.isArray(data.device_issue_callback_emails) ? data.device_issue_callback_emails : prev.device_issue_callback_emails,
           notify_on_escalation: data.notify_on_escalation !== undefined ? Boolean(data.notify_on_escalation) : prev.notify_on_escalation,
           notify_on_callback: data.notify_on_callback !== undefined ? Boolean(data.notify_on_callback) : prev.notify_on_callback,
         }))
@@ -190,64 +314,113 @@ const SettingsPage: FC = () => {
     }
   }
 
-  // ── Callback Email Handlers ────────────────────────────────────────────────
+  // ── Categorized Callback Email Handlers ───────────────────────────────────
 
-  const handleAddCallbackEmail = () => {
-    setCallbackError(null)
-    const email = newCallbackInput.trim().toLowerCase()
+  const getCategoryEmails = (catId: CallbackTab): string[] => {
+    switch (catId) {
+      case 'delivery':
+        return settings.delivery_callback_emails || []
+      case 'repair':
+        return settings.repair_callback_emails || []
+      case 'device_issue':
+        return settings.device_issue_callback_emails || []
+      case 'general':
+      default:
+        return settings.callback_emails || []
+    }
+  }
+
+  const setCategoryEmails = (catId: CallbackTab, newEmails: string[]) => {
+    setSettings(prev => {
+      switch (catId) {
+        case 'delivery':
+          return { ...prev, delivery_callback_emails: newEmails }
+        case 'repair':
+          return { ...prev, repair_callback_emails: newEmails }
+        case 'device_issue':
+          return { ...prev, device_issue_callback_emails: newEmails }
+        case 'general':
+        default:
+          return { ...prev, callback_emails: newEmails }
+      }
+    })
+  }
+
+  const handleAddCategoryEmail = (catId: CallbackTab) => {
+    setCategoryErrors(prev => ({ ...prev, [catId]: null }))
+    const email = (categoryInputs[catId] || '').trim().toLowerCase()
     if (!email) return
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      setCallbackError('Please enter a valid email address')
+      setCategoryErrors(prev => ({ ...prev, [catId]: 'Please enter a valid email address' }))
       return
     }
 
-    if (settings.callback_emails.includes(email)) {
-      setCallbackError('This email is already in the callback list')
+    const currentList = getCategoryEmails(catId)
+    if (currentList.includes(email)) {
+      setCategoryErrors(prev => ({ ...prev, [catId]: 'This email is already in this recipient list' }))
       return
     }
 
-    setSettings(prev => ({
-      ...prev,
-      callback_emails: [...prev.callback_emails, email]
-    }))
-    setNewCallbackInput('')
+    setCategoryEmails(catId, [...currentList, email])
+    setCategoryInputs(prev => ({ ...prev, [catId]: '' }))
   }
 
-  const handleRemoveCallbackEmail = (emailToRemove: string) => {
-    setSettings(prev => ({
-      ...prev,
-      callback_emails: prev.callback_emails.filter(e => e !== emailToRemove)
-    }))
+  const handleRemoveCategoryEmail = (catId: CallbackTab, emailToRemove: string) => {
+    const currentList = getCategoryEmails(catId)
+    setCategoryEmails(catId, currentList.filter(e => e !== emailToRemove))
   }
 
-  const handleTestCallback = async () => {
-    if (settings.callback_emails.length === 0) {
-      setCallbackTestMsg({ success: false, text: 'Add at least one recipient email before sending a test.' })
+  const handleTestCategory = async (catId: CallbackTab) => {
+    const currentList = getCategoryEmails(catId)
+    if (currentList.length === 0) {
+      setCategoryTestMsgs(prev => ({
+        ...prev,
+        [catId]: { success: false, text: 'Add at least one recipient email before sending a test.' }
+      }))
       return
     }
 
-    setIsTestingCallback(true)
-    setCallbackTestMsg(null)
+    setIsTestingCategory(prev => ({ ...prev, [catId]: true }))
+    setCategoryTestMsgs(prev => ({ ...prev, [catId]: null }))
+
+    const testTypeMap: Record<CallbackTab, 'callback_delivery' | 'callback_repair' | 'callback_device_issue' | 'callback'> = {
+      delivery: 'callback_delivery',
+      repair: 'callback_repair',
+      device_issue: 'callback_device_issue',
+      general: 'callback',
+    }
+
     try {
       const res = await settingsApi.sendTestEmail({
-        emails: settings.callback_emails,
-        type: 'callback',
+        emails: currentList,
+        type: testTypeMap[catId],
       })
       if (res.data?.success) {
-        setCallbackTestMsg({ success: true, text: 'Test callback alert sent successfully!' })
+        setCategoryTestMsgs(prev => ({
+          ...prev,
+          [catId]: { success: true, text: res.data?.message || 'Test alert sent successfully!' }
+        }))
       } else {
-        setCallbackTestMsg({ success: false, text: res.data?.message || 'Failed to send test email' })
+        setCategoryTestMsgs(prev => ({
+          ...prev,
+          [catId]: { success: false, text: res.data?.message || 'Failed to send test email' }
+        }))
       }
     } catch (err: any) {
-      setCallbackTestMsg({
-        success: false,
-        text: err.response?.data?.message || err.message || 'Error sending test email',
-      })
+      setCategoryTestMsgs(prev => ({
+        ...prev,
+        [catId]: {
+          success: false,
+          text: err.response?.data?.message || err.message || 'Error sending test email',
+        }
+      }))
     } finally {
-      setIsTestingCallback(false)
-      setTimeout(() => setCallbackTestMsg(null), 6000)
+      setIsTestingCategory(prev => ({ ...prev, [catId]: false }))
+      setTimeout(() => {
+        setCategoryTestMsgs(prev => ({ ...prev, [catId]: null }))
+      }, 6000)
     }
   }
 
@@ -258,8 +431,38 @@ const SettingsPage: FC = () => {
     setNotificationsSaveSuccess(null)
     setNotificationsError(null)
 
+    // Prepare updated settings including any pending input in active fields
+    const updatedSettings = { ...settings }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+    // Flush pending escalation email input if valid
+    const pendingEsc = newEscalationInput.trim().toLowerCase()
+    if (pendingEsc && emailRegex.test(pendingEsc) && !updatedSettings.escalation_emails.includes(pendingEsc)) {
+      updatedSettings.escalation_emails = [...updatedSettings.escalation_emails, pendingEsc]
+      setNewEscalationInput('')
+    }
+
+    // Flush any pending category email input if valid
+    const catKeys: Record<CallbackTab, 'delivery_callback_emails' | 'repair_callback_emails' | 'device_issue_callback_emails' | 'callback_emails'> = {
+      delivery: 'delivery_callback_emails',
+      repair: 'repair_callback_emails',
+      device_issue: 'device_issue_callback_emails',
+      general: 'callback_emails',
+    }
+
+    const newInputs = { ...categoryInputs }
+    for (const [cat, key] of Object.entries(catKeys) as [CallbackTab, (typeof catKeys)[CallbackTab]][]) {
+      const pendingVal = (categoryInputs[cat] || '').trim().toLowerCase()
+      if (pendingVal && emailRegex.test(pendingVal) && !updatedSettings[key].includes(pendingVal)) {
+        updatedSettings[key] = [...updatedSettings[key], pendingVal]
+        newInputs[cat] = ''
+      }
+    }
+    setCategoryInputs(newInputs)
+    setSettings(updatedSettings)
+
     try {
-      const response = await settingsApi.update(settings)
+      const response = await settingsApi.update(updatedSettings)
       if (response.data?.data) {
         setSettings(prev => ({ ...prev, ...response.data.data }))
         setNotificationsSaveSuccess('Notification preferences & recipient channels saved successfully!')
@@ -544,7 +747,7 @@ const SettingsPage: FC = () => {
                 </div>
               </div>
 
-              {/* ── USE CASE 2: Callback Required Notifications ── */}
+              {/* ── USE CASE 2: Categorized Callback Notifications & Routing ── */}
               <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-5">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
@@ -553,14 +756,14 @@ const SettingsPage: FC = () => {
                         <PhoneCall size={16} />
                       </span>
                       <h3 className="text-base font-semibold text-text-primary">
-                        Callback Required Notifications
+                        Callback Notifications & Department Routing
                       </h3>
                       <span className="px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400">
-                        Follow-Up Queue
+                        Multi-Queue Routing
                       </span>
                     </div>
                     <p className="text-xs text-text-secondary pl-8">
-                      Immediate email alerts dispatched to sales or support follow-up teams whenever a caller requests a callback or agent follow-up.
+                      Route callback requests to separate recipient emails based on the enquiry type: New Device Delivery, Repair Status, Device Not Working complaints, or General Follow-up.
                     </p>
                   </div>
 
@@ -577,104 +780,201 @@ const SettingsPage: FC = () => {
                   </label>
                 </div>
 
-                {/* Email Input & Tags for Callback */}
-                <div className="space-y-3 pt-2">
-                  <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center justify-between">
-                    <span>Callback Email Recipients ({settings.callback_emails.length})</span>
-                    <button
-                      type="button"
-                      onClick={handleTestCallback}
-                      disabled={isTestingCallback || settings.callback_emails.length === 0}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center space-x-1 disabled:opacity-40 cursor-pointer transition-colors normal-case"
-                      title="Send a sample callback email to verify recipient emails"
-                    >
-                      {isTestingCallback ? (
-                        <Loader2 className="animate-spin" size={12} />
-                      ) : (
-                        <Send size={12} />
-                      )}
-                      <span>{isTestingCallback ? 'Sending Test...' : 'Send Test Callback Alert'}</span>
-                    </button>
-                  </label>
+                {/* Category Navigation Pills */}
+                <div className="space-y-4 pt-1">
+                  <div className="flex flex-wrap gap-2 border-b border-border/80 pb-3">
+                    {CALLBACK_CATEGORY_CONFIG.map((cat) => {
+                      const IconComponent = cat.icon
+                      const count = getCategoryEmails(cat.id).length
+                      const isActive = activeCallbackTab === cat.id
 
-                  {/* Test Feedback */}
-                  {callbackTestMsg && (
-                    <div
-                      className={`text-xs px-3 py-2 rounded-lg flex items-center space-x-1.5 ${
-                        callbackTestMsg.success
-                          ? 'bg-green-50 text-green-700 border border-green-200'
-                          : 'bg-red-50 text-red-700 border border-red-200'
-                      }`}
-                    >
-                      {callbackTestMsg.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-                      <span>{callbackTestMsg.text}</span>
-                    </div>
-                  )}
-
-                  {/* Input Row */}
-                  <div className="flex space-x-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="email"
-                        value={newCallbackInput}
-                        onChange={(e) => {
-                          setNewCallbackInput(e.target.value)
-                          setCallbackError(null)
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleAddCallbackEmail()
-                          }
-                        }}
-                        placeholder="e.g. callback-team@mantratec.com, support@mantratec.com"
-                        className="w-full pl-3.5 pr-4 py-2 bg-transparent border border-border rounded-xl focus:outline-none focus:border-indigo-500 text-sm text-text-primary transition-colors"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddCallbackEmail}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
-                    >
-                      <Plus size={15} />
-                      <span>Add</span>
-                    </button>
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setActiveCallbackTab(cat.id)}
+                          className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+                            isActive
+                              ? `${cat.activeTabClass} shadow-2xs`
+                              : 'border-border/60 bg-surface-card hover:bg-surface-page text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          <IconComponent size={14} className={isActive ? cat.accentColor : 'text-text-muted'} />
+                          <span>{cat.shortLabel}</span>
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                              isActive ? cat.badgeClass : 'bg-surface-page text-text-muted border border-border'
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
 
-                  {callbackError && (
-                    <p className="text-xs text-red-500 font-medium flex items-center space-x-1">
-                      <AlertCircle size={14} />
-                      <span>{callbackError}</span>
-                    </p>
-                  )}
+                  {/* Active Category Studio Card */}
+                  {(() => {
+                    const activeCat = CALLBACK_CATEGORY_CONFIG.find(c => c.id === activeCallbackTab) || CALLBACK_CATEGORY_CONFIG[0]
+                    const IconComponent = activeCat.icon
+                    const currentList = getCategoryEmails(activeCat.id)
+                    const inputVal = categoryInputs[activeCat.id] || ''
+                    const errorMsg = categoryErrors[activeCat.id]
+                    const isTesting = isTestingCategory[activeCat.id]
+                    const testMsg = categoryTestMsgs[activeCat.id]
 
-                  {/* Tag List */}
-                  {settings.callback_emails.length === 0 ? (
-                    <div className="p-3.5 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/50">
-                      No callback recipients added yet. Enter an email above to receive callback alerts.
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {settings.callback_emails.map((email) => (
-                        <div
-                          key={email}
-                          className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary hover:border-indigo-300 transition-all shadow-2xs group"
-                        >
-                          <Mail size={13} className="text-indigo-500" />
-                          <span className="font-mono text-xs">{email}</span>
+                    return (
+                      <div className={`p-4 rounded-xl border ${activeCat.accentBorder} ${activeCat.accentBg} space-y-4 transition-all`}>
+                        {/* Header Row */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center space-x-2.5">
+                            <span className={`p-2 rounded-lg bg-surface-card border border-border/60 ${activeCat.accentColor}`}>
+                              <IconComponent size={17} />
+                            </span>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <h4 className="text-sm font-bold text-text-primary">
+                                  {activeCat.name}
+                                </h4>
+                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${activeCat.badgeClass}`}>
+                                  {activeCat.badgeText}
+                                </span>
+                              </div>
+                              <p className="text-xs text-text-secondary mt-0.5">
+                                {activeCat.description}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Test Button for this Category */}
                           <button
                             type="button"
-                            onClick={() => handleRemoveCallbackEmail(email)}
-                            title={`Remove ${email}`}
-                            className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 flex items-center justify-center ml-0.5 cursor-pointer"
+                            onClick={() => handleTestCategory(activeCat.id)}
+                            disabled={isTesting || currentList.length === 0}
+                            className={`text-xs font-semibold ${activeCat.accentColor} hover:opacity-80 flex items-center space-x-1.5 disabled:opacity-40 cursor-pointer transition-colors self-start sm:self-center shrink-0`}
+                            title={`Send a sample ${activeCat.shortLabel} alert to verify recipients`}
                           >
-                            <Trash2 size={13} />
+                            {isTesting ? (
+                              <Loader2 className="animate-spin" size={13} />
+                            ) : (
+                              <Send size={13} />
+                            )}
+                            <span>{isTesting ? 'Sending Test...' : `Test ${activeCat.shortLabel} Alert`}</span>
                           </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
+
+                        {/* Test Feedback */}
+                        {testMsg && (
+                          <div
+                            className={`text-xs px-3 py-2 rounded-lg flex items-center space-x-1.5 ${
+                              testMsg.success
+                                ? 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/30 dark:border-green-800'
+                                : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                            }`}
+                          >
+                            {testMsg.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                            <span>{testMsg.text}</span>
+                          </div>
+                        )}
+
+                        {/* Input Row */}
+                        <div className="flex space-x-2">
+                          <div className="relative flex-1">
+                            <input
+                              type="email"
+                              value={inputVal}
+                              onChange={(e) => {
+                                setCategoryInputs(prev => ({ ...prev, [activeCat.id]: e.target.value }))
+                                setCategoryErrors(prev => ({ ...prev, [activeCat.id]: null }))
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  handleAddCategoryEmail(activeCat.id)
+                                }
+                              }}
+                              placeholder={activeCat.placeholder}
+                              className="w-full pl-3.5 pr-4 py-2 bg-surface-card border border-border rounded-xl focus:outline-none focus:border-indigo-500 text-sm text-text-primary transition-colors"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddCategoryEmail(activeCat.id)}
+                            className={`px-4 py-2 ${activeCat.btnClass} rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-xs cursor-pointer`}
+                          >
+                            <Plus size={15} />
+                            <span>Add</span>
+                          </button>
+                        </div>
+
+                        {errorMsg && (
+                          <p className="text-xs text-red-500 font-medium flex items-center space-x-1">
+                            <AlertCircle size={14} />
+                            <span>{errorMsg}</span>
+                          </p>
+                        )}
+
+                        {/* Recipients List */}
+                        {currentList.length === 0 ? (
+                          <div className="p-3.5 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/60">
+                            No recipient emails for {activeCat.name} yet. If empty, alerts will automatically fall back to General / Fallback recipients.
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2 pt-0.5">
+                            {currentList.map((email) => (
+                              <div
+                                key={email}
+                                className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary shadow-2xs group"
+                              >
+                                <Mail size={13} className={activeCat.accentColor} />
+                                <span className="font-mono text-xs">{email}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCategoryEmail(activeCat.id, email)}
+                                  title={`Remove ${email}`}
+                                  className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center justify-center ml-0.5 cursor-pointer"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* All-Categories Quick Overview Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                    {CALLBACK_CATEGORY_CONFIG.map((cat) => {
+                      const IconComponent = cat.icon
+                      const count = getCategoryEmails(cat.id).length
+                      const isCurrent = activeCallbackTab === cat.id
+
+                      return (
+                        <div
+                          key={cat.id}
+                          onClick={() => setActiveCallbackTab(cat.id)}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                            isCurrent
+                              ? 'border-indigo-400 bg-surface-card shadow-2xs'
+                              : 'border-border/60 bg-surface-card/40 hover:bg-surface-card'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <IconComponent size={13} className={cat.accentColor} />
+                            <span className="text-[11px] font-medium text-text-secondary truncate">
+                              {cat.shortLabel}
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold text-text-primary text-[11px] shrink-0 ml-1">
+                            {count}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
 

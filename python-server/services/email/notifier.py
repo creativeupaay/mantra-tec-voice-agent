@@ -129,10 +129,11 @@ async def send_callback_email(
     caller_name: Optional[str] = None,
     phone_number: Optional[str] = None,
     call_category: Optional[str] = None,
+    callback_type: Optional[str] = "general",
     call_summary: Optional[str] = None,
     transcript: Optional[str] = None,
 ):
-    """Send an automated callback-required email notification using Resend API to all configured callback recipients in settings."""
+    """Send an automated callback-required email notification using Resend API to categorized recipients in settings."""
     try:
         db = get_db()
         settings_doc = await db.settings.find_one()
@@ -141,8 +142,23 @@ async def send_callback_email(
             logger.info("[EmailNotifier] Callback email notifications are disabled in settings.")
             return
 
+        cb_type = (callback_type or "general").lower()
+        if cb_type not in ("delivery", "repair", "device_issue", "general"):
+            cb_type = "general"
+
+        category_key_map = {
+            "delivery": "delivery_callback_emails",
+            "repair": "repair_callback_emails",
+            "device_issue": "device_issue_callback_emails",
+        }
+        category_key = category_key_map.get(cb_type)
+
         recipients: List[str] = []
-        if settings_doc and isinstance(settings_doc.get("callback_emails"), list):
+        if category_key and settings_doc and isinstance(settings_doc.get(category_key), list):
+            recipients = [e for e in settings_doc.get(category_key) if isinstance(e, str) and "@" in e]
+
+        # Graceful fallback to general callback_emails if category-specific list is empty
+        if not recipients and settings_doc and isinstance(settings_doc.get("callback_emails"), list):
             recipients = [e for e in settings_doc.get("callback_emails") if isinstance(e, str) and "@" in e]
         
         if not recipients:
@@ -165,19 +181,44 @@ async def send_callback_email(
         ).rstrip("/")
         call_link = f"{dashboard_base}/calls?callId={call_id}"
 
+        # Customize styling & text per category
+        if cb_type == "delivery":
+            badge_text = "New Device Delivery Follow-up"
+            theme_color = "#0284c7"  # Sky Blue
+            subject_prefix = "📦 Delivery Inquiry Callback"
+            lead_desc = "A customer has inquired about <strong>NEW DEVICE DELIVERY / ORDER STATUS / DISPATCH TRACKING</strong> and requested a callback."
+        elif cb_type == "repair":
+            badge_text = "Device Repair & Service Status"
+            theme_color = "#d97706"  # Amber
+            subject_prefix = "🔧 Repair & Service Status Callback"
+            lead_desc = "A customer who sent their device for <strong>REPAIR / SERVICING / RMA</strong> is asking for a progress update and requested a callback."
+        elif cb_type == "device_issue":
+            badge_text = "Device Not Working / Malfunction Complaint"
+            theme_color = "#e11d48"  # Rose / Crimson
+            subject_prefix = "⚠️ Device Malfunction Complaint Callback"
+            lead_desc = "A customer is complaining that their <strong>DEVICE IS NOT WORKING / MALFUNCTIONING</strong> and urgently requires technical support callback."
+        else:
+            badge_text = "General Callback Queue"
+            theme_color = "#4f46e5"  # Indigo
+            subject_prefix = "📞 Callback Required Alert"
+            lead_desc = "A caller requires a <strong>CALLBACK</strong> from the customer follow-up team."
+
         caller_id = caller_name or phone_number or "Customer"
-        subject = f"📞 Callback Required Alert: {caller_id} ({call_category or 'General'})"
+        subject = f"{subject_prefix}: {caller_id} ({call_category or cb_type.title()})"
 
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
-          <div style="background-color: #4f46e5; color: #ffffff; padding: 16px 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Callback Required Notification</h2>
-            <p style="margin: 4px 0 0 0; font-size: 14px; opacity: 0.9;">Mantra Tech Voice Agent System</p>
+          <div style="background-color: {theme_color}; color: #ffffff; padding: 16px 20px; border-radius: 8px 8px 0 0; text-align: center;">
+            <span style="display: inline-block; padding: 3px 10px; background-color: rgba(255,255,255,0.2); border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+              {badge_text}
+            </span>
+            <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Callback Notification</h2>
+            <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Mantra Tech Voice Agent System</p>
           </div>
 
           <div style="padding: 20px; color: #333333;">
             <p style="font-size: 15px; line-height: 1.5; margin-bottom: 20px;">
-              A caller requires a <strong>CALLBACK</strong> from the support or sales team.
+              {lead_desc}
             </p>
 
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
@@ -191,7 +232,7 @@ async def send_callback_email(
               </tr>
               <tr style="border-bottom: 1px solid #eeeeee;">
                 <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
-                <td style="padding: 10px; color: #111111; text-transform: capitalize;">{call_category or 'General Inquiry'}</td>
+                <td style="padding: 10px; color: #111111; text-transform: capitalize;">{call_category or cb_type}</td>
               </tr>
               <tr>
                 <td style="padding: 10px; font-weight: bold; color: #666666;">Call ID:</td>
@@ -199,22 +240,22 @@ async def send_callback_email(
               </tr>
             </table>
 
-            <div style="background-color: #f5f3ff; border-left: 4px solid #6366f1; padding: 14px 16px; margin-bottom: 20px; border-radius: 4px;">
-              <h4 style="margin: 0 0 8px 0; color: #312e81; font-size: 14px;">Call Summary & Inquiry:</h4>
-              <p style="margin: 0; color: #4338ca; font-size: 14px; line-height: 1.5;">{call_summary or 'No summary available.'}</p>
+            <div style="background-color: #f8fafc; border-left: 4px solid {theme_color}; padding: 14px 16px; margin-bottom: 20px; border-radius: 4px;">
+              <h4 style="margin: 0 0 8px 0; color: #1e293b; font-size: 14px;">Call Summary & Inquiry:</h4>
+              <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.5;">{call_summary or 'No summary available.'}</p>
             </div>
 
             {f'<div style="background-color: #f1f5f9; padding: 14px 16px; border-radius: 6px; margin-bottom: 20px;"><h4 style="margin: 0 0 8px 0; color: #334155; font-size: 13px;">Recent Transcript:</h4><pre style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #1e293b;">{transcript[:500] if transcript else ""}</pre></div>' if transcript else ''}
 
             <div style="text-align: center; margin-top: 25px;">
-              <a href="{call_link}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
+              <a href="{call_link}" style="background-color: {theme_color}; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">
                 View Call in Dashboard
               </a>
             </div>
           </div>
 
           <div style="border-top: 1px solid #e0e0e0; padding-top: 15px; margin-top: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-            This is an automated notification from Mantra Tech Voice Agent.
+            This is an automated categorized notification from Mantra Tech Voice Agent.
           </div>
         </div>
         """
@@ -239,6 +280,6 @@ async def send_callback_email(
 
         with urllib.request.urlopen(req) as resp:
             resp_body = resp.read().decode("utf-8")
-            logger.info(f"[EmailNotifier] Sent callback email to {recipients} via Resend. Response: {resp_body}")
+            logger.info(f"[EmailNotifier] Sent {cb_type} callback email to {recipients} via Resend. Response: {resp_body}")
     except Exception as e:
-        logger.error(f"[EmailNotifier] Failed to send callback email via Resend: {e}")
+        logger.error(f"[EmailNotifier] Failed to send {callback_type} callback email via Resend: {e}")

@@ -108,6 +108,44 @@ def _extract_fallback_phone_from_transcript(transcript: str) -> Optional[str]:
     return None
 
 
+def _infer_callback_type(
+    transcript: str, summary: str, intent: str, category: str
+) -> str:
+    """Infer the categorized callback route if LLM omitted callback_type."""
+    text = f"{transcript} {summary} {intent} {category}".lower()
+
+    # 1. Device Sent for Repair / RMA / Service Update
+    if any(k in text for k in [
+        "repair", "repairing", "rma", "service center", "servicing",
+        "sent for repair", "bheja tha", "repair status", "device repair",
+        "marammat", "sudharne ke liye", "repair slip", "challan", "service update",
+        "bheja hua", "service desk"
+    ]):
+        return "repair"
+
+    # 2. New Device Delivery / Order / Courier Tracking
+    if any(k in text for k in [
+        "delivery", "courier", "dispatch", "dispatched", "tracking",
+        "docket", "shipped", "shipping", "order status", "naya device kab",
+        "delivery enquiry", "delivery inquiry", "parcel", "shipment",
+        "kab aayega", "delivery update", "awb", "consignment", "order delivery",
+        "deliver kab"
+    ]):
+        return "delivery"
+
+    # 3. Device Not Working / Malfunction / Technical Complaint
+    if any(k in text for k in [
+        "not working", "chal nahi raha", "kaam nahi kar raha", "malfunction",
+        "defective", "sensor error", "light nahi", "capture nahi", "kharab",
+        "complaint", "device issue", "device problem", "hardware issue",
+        "work nahi kar raha", "scan nahi", "fingerprint nahi", "finger print nahi",
+        "driver error", "red light", "tampered", "issue aa raha"
+    ]):
+        return "device_issue"
+
+    return "general"
+
+
 class PostCallExtraction(BaseModel):
     """Structured output from the LLM after analyzing the call transcript."""
     
@@ -200,6 +238,17 @@ class PostCallExtraction(BaseModel):
             "or if the customer reported support wasn't picking up and a callback was arranged."
         ),
     )
+    callback_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "If callback_required is True, determine the specific callback route category:\n"
+            "- 'delivery': Caller inquired about new device order status, courier dispatch, tracking, or delivery updates.\n"
+            "- 'repair': Caller sent their device to Mantra for repair/service/RMA and is asking for status or return.\n"
+            "- 'device_issue': Caller currently has the device and is complaining that it is malfunctioning, defective, or not working.\n"
+            "- 'general': Any other callback (such as RD service subscription renewal, helpline unreachable callback, general query).\n"
+            "If callback_required is False, must be None."
+        ),
+    )
     contact_phone_number: Optional[str] = Field(
         None,
         description="The customer's contact mobile phone number mentioned or confirmed during the conversation (e.g. '9876543210'). If corrected or repeated, extract the final verified digits. Only digits.",
@@ -270,9 +319,16 @@ async def run_post_call_pipeline(
                         "     not answering / unresponsive / line busy, AND the agent arranged a callback for them, "
                         "     set support_unresponsive_callback = true and callback_required = true. "
                         "   - This specific case IS an escalation because support was unreachable and a callback was promised.\n"
-                        "3. OTHER CALLBACKS (Delivery issues, Device subscription / renewal):\n"
-                        "   - If a callback was arranged for an order/delivery issue or device subscription/renewal, "
-                        "     set callback_required = true (support_unresponsive_callback remains false).\n\n"
+                        "3. OTHER CALLBACKS (Delivery, Repair, Device Issues, Renewal):\n"
+                        "   - If a callback was arranged for an order/delivery issue, device repair status, device not working complaint, or renewal, "
+                        "     set callback_required = true (support_unresponsive_callback remains false).\n"
+                        "4. CALLBACK CATEGORIZATION & ROUTING (CRITICAL FOR NOTIFICATION EMAILS):\n"
+                        "   - If callback_required is true, identify and set callback_type:\n"
+                        "     * 'delivery': Call is regarding new device order status, delivery enquiry, courier dispatch, or tracking.\n"
+                        "     * 'repair': Caller sent their device to Mantra for repair/service/RMA and is asking for status update or returned shipment.\n"
+                        "     * 'device_issue': Caller currently has the device and is complaining that it is malfunctioning, defective, or not working.\n"
+                        "     * 'general': Any other callback (such as RD service subscription renewal, helpline unreachable callback, general query).\n"
+                        "   - If callback_required is false, set callback_type = null.\n\n"
                         "Extract the customer's contact phone number mentioned or confirmed during the conversation into contact_phone_number. "
                         "If the customer corrected or repeated digits (or if a 10-digit number was confirmed by the agent), extract the accurate digits. "
                         "DO NOT use forwarding trunk numbers (such as 07969268119, 07948501661, 079-69268-000).\n"
@@ -406,6 +462,17 @@ async def run_post_call_pipeline(
             callback_needed = True
             extraction.callback_required = True
 
+    callback_category_val = None
+    if callback_needed:
+        callback_category_val = getattr(extraction, "callback_type", None)
+        if not callback_category_val or callback_category_val.lower() not in ("delivery", "repair", "device_issue", "general"):
+            callback_category_val = _infer_callback_type(
+                transcript=full_transcript_lower,
+                summary=lower_summary,
+                intent=(extraction.intent or "").lower(),
+                category=str(extraction.call_category).lower(),
+            )
+
     # 1. Did the caller report support wasn't answering / picking up?
     support_unresponsive_terms = [
         "call nahi utha rahe", "call nahi utha raha", "phone nahi utha rahe", "phone nahi utha raha",
@@ -511,6 +578,7 @@ async def run_post_call_pipeline(
             summary=extraction.summary,
             intent=extraction.intent,
             call_category=extraction.call_category,
+            callback_category=callback_category_val,
             outcome=call_outcome,
             status=call_status,
             caller_name=caller_name,
@@ -521,7 +589,7 @@ async def run_post_call_pipeline(
         )
         logger.info(
             f"[post-call] Finalized call {state.call_id} "
-            f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome}, phone={final_phone})"
+            f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome}, phone={final_phone}, callback_category={callback_category_val})"
         )
 
         if call_status == CallStatus.ESCALATED:
@@ -552,10 +620,11 @@ async def run_post_call_pipeline(
                     caller_name=caller_name,
                     phone_number=phone_display,
                     call_category=category_display,
+                    callback_type=callback_category_val,
                     call_summary=extraction.summary,
                     transcript=transcript_text or None,
                 )
-                logger.info(f"[post-call] Triggered callback required email notification for call {state.call_id}")
+                logger.info(f"[post-call] Triggered {callback_category_val} callback required email notification for call {state.call_id}")
             except Exception as e:
                 logger.error(f"[post-call] Failed to trigger callback email notification: {e}")
     except Exception as e:

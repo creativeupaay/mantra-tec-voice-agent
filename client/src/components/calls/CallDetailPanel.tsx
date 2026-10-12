@@ -351,11 +351,25 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
 
       {isCallbackRequired && onResolveCall && (
         <div className="px-5 py-3 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <PhoneForwarded className="w-4 h-4 text-indigo-600 shrink-0" />
-            <span className="text-xs font-bold text-indigo-600 truncate">
-              Callback Required — Pending Customer Follow-up
-            </span>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-indigo-600 truncate block">
+                Callback Required — Pending Customer Follow-up
+              </span>
+              <span className="text-[10px] text-text-muted">
+                Routed to queue:{' '}
+                <strong className="text-text-primary capitalize">
+                  {selectedCall.callback_category === 'delivery'
+                    ? 'Delivery / Dispatch Desk'
+                    : selectedCall.callback_category === 'repair'
+                      ? 'Repair / Service Desk'
+                      : selectedCall.callback_category === 'device_issue'
+                        ? 'Hardware Support / Device Complaints'
+                        : 'General Support Queue'}
+                </strong>
+              </span>
+            </div>
           </div>
           <button
             onClick={() => onResolveCall(targetId)}
@@ -551,6 +565,31 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
                 {selectedCall.call_category || 'Inquiry'}
               </span>
             </div>
+
+            {isCallbackRequired && (
+              <div>
+                <p className="text-text-muted text-[11px] mb-0.5">Callback Queue</p>
+                <span
+                  className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider border ${
+                    selectedCall.callback_category === 'delivery'
+                      ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                      : selectedCall.callback_category === 'repair'
+                        ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                        : selectedCall.callback_category === 'device_issue'
+                          ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                          : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                  }`}
+                >
+                  {selectedCall.callback_category === 'delivery'
+                    ? 'Delivery Inquiry'
+                    : selectedCall.callback_category === 'repair'
+                      ? 'Repair Desk'
+                      : selectedCall.callback_category === 'device_issue'
+                        ? 'Device Issue'
+                        : 'General Callback'}
+                </span>
+              </div>
+            )}
 
             <div>
               <p className="text-text-muted text-[11px] mb-0.5">Date (IST)</p>

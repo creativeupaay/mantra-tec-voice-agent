@@ -171,11 +171,32 @@ const CallTable: FC<CallTableProps> = ({
 
                 {/* 4. STATUS */}
                 <td className="px-4 py-3 align-middle">
-                  <div className="flex items-center">
+                  <div className="flex flex-col gap-1 items-start">
                     <StatusDot
                       status={call.status}
                       label={STATUS_LABELS[call.status] || call.status}
                     />
+                    {isCallback && (
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm border uppercase tracking-wider leading-none ${
+                          call.callback_category === 'delivery'
+                            ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                            : call.callback_category === 'repair'
+                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              : call.callback_category === 'device_issue'
+                                ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                                : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                        }`}
+                      >
+                        {call.callback_category === 'delivery'
+                          ? 'Delivery'
+                          : call.callback_category === 'repair'
+                            ? 'Repair'
+                            : call.callback_category === 'device_issue'
+                              ? 'Device Issue'
+                              : 'General'}
+                      </span>
+                    )}
                   </div>
                 </td>
 
