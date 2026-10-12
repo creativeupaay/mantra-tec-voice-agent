@@ -20,6 +20,7 @@ export const getSettings = async (_req: Request, res: Response, next: NextFuncti
         delivery_callback_emails: ['delivery@mantratec.com'],
         repair_callback_emails: ['repair@mantratec.com'],
         device_issue_callback_emails: ['techsupport@mantratec.com'],
+        sales_callback_emails: ['sales@mantratec.com'],
         resend_api_key: '',
         resend_from_email: 'onboarding@resend.dev',
         forward_to_human: false,
@@ -36,6 +37,9 @@ export const getSettings = async (_req: Request, res: Response, next: NextFuncti
       }
       if (!Array.isArray(settings.device_issue_callback_emails)) {
         settings.device_issue_callback_emails = ['techsupport@mantratec.com']
+      }
+      if (!Array.isArray(settings.sales_callback_emails)) {
+        settings.sales_callback_emails = ['sales@mantratec.com']
       }
     }
 
@@ -60,6 +64,7 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
       delivery_callback_emails,
       repair_callback_emails,
       device_issue_callback_emails,
+      sales_callback_emails,
       resend_api_key,
       resend_from_email,
       forward_to_human,
@@ -107,6 +112,12 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
         .filter((e: string) => e.length > 3 && e.includes('@'))
       settings.device_issue_callback_emails = Array.from(new Set(cleanEmails))
     }
+    if (Array.isArray(sales_callback_emails)) {
+      const cleanEmails = sales_callback_emails
+        .map((e: any) => String(e).trim().toLowerCase())
+        .filter((e: string) => e.length > 3 && e.includes('@'))
+      settings.sales_callback_emails = Array.from(new Set(cleanEmails))
+    }
     if (resend_api_key !== undefined) settings.resend_api_key = String(resend_api_key).trim()
     if (resend_from_email !== undefined) settings.resend_from_email = String(resend_from_email).trim()
     if (forward_to_human !== undefined) settings.forward_to_human = Boolean(forward_to_human)
@@ -137,6 +148,8 @@ export const sendTestEmail = async (req: Request, res: Response, next: NextFunct
       result = await sendTestCallbackEmail(targetEmails, 'repair')
     } else if (type === 'callback_device_issue') {
       result = await sendTestCallbackEmail(targetEmails, 'device_issue')
+    } else if (type === 'callback_sales') {
+      result = await sendTestCallbackEmail(targetEmails, 'sales')
     } else if (type === 'callback') {
       result = await sendTestCallbackEmail(targetEmails, 'general')
     } else {

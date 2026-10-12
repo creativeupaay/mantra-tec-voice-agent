@@ -161,7 +161,7 @@ export async function sendTestEscalationEmail(targetEmails?: string[]): Promise<
   return await sendEscalationEmailNotification(sampleCall)
 }
 
-export type CallbackCategory = 'delivery' | 'repair' | 'device_issue' | 'general'
+export type CallbackCategory = 'delivery' | 'repair' | 'device_issue' | 'sales' | 'general'
 
 /**
  * Send an email notification for a callback-required call to configured category recipients using Resend API.
@@ -185,10 +185,12 @@ export async function sendCallbackEmailNotification(
       const textToAnalyze = `${callData.call_category || ''} ${callData.call_summary || ''} ${callData.transcript || ''}`.toLowerCase()
       if (textToAnalyze.includes('repair') || textToAnalyze.includes('rma') || textToAnalyze.includes('service center') || textToAnalyze.includes('servicing')) {
         category = 'repair'
-      } else if (textToAnalyze.includes('delivery') || textToAnalyze.includes('courier') || textToAnalyze.includes('dispatch') || textToAnalyze.includes('tracking') || textToAnalyze.includes('order')) {
+      } else if (textToAnalyze.includes('delivery') || textToAnalyze.includes('courier') || textToAnalyze.includes('dispatch') || textToAnalyze.includes('tracking') || textToAnalyze.includes('order status') || textToAnalyze.includes('shipped')) {
         category = 'delivery'
       } else if (textToAnalyze.includes('not working') || textToAnalyze.includes('chal nahi raha') || textToAnalyze.includes('malfunction') || textToAnalyze.includes('defective') || textToAnalyze.includes('sensor error') || textToAnalyze.includes('kharab')) {
         category = 'device_issue'
+      } else if (textToAnalyze.includes('sales') || textToAnalyze.includes('buy') || textToAnalyze.includes('purchase') || textToAnalyze.includes('bulk') || textToAnalyze.includes('wholesale') || textToAnalyze.includes('quotation') || textToAnalyze.includes('rfq') || textToAnalyze.includes('price') || textToAnalyze.includes('pricing') || textToAnalyze.includes('distributor') || textToAnalyze.includes('dealer')) {
+        category = 'sales'
       } else {
         category = 'general'
       }
@@ -222,6 +224,13 @@ export async function sendCallbackEmailNotification(
         categoryThemeColor = '#e11d48' // Rose/Red
         categorySubjectPrefix = '⚠️ Device Malfunction Complaint Callback'
         categoryDescription = 'A customer is complaining that their <strong>DEVICE IS NOT WORKING / MALFUNCTIONING</strong> and urgently requires technical support callback.'
+        break
+      case 'sales':
+        targetEmailList = settings.sales_callback_emails || []
+        categoryBadgeText = 'Sales & Commercial Opportunity'
+        categoryThemeColor = '#059669' // Emerald Green
+        categorySubjectPrefix = '💼 Sales Inquiry Callback'
+        categoryDescription = 'A prospective customer or partner has inquired about <strong>PURCHASING DEVICES / BULK ORDERS / QUOTATIONS / PRICING</strong> and requested a callback.'
         break
       case 'general':
       default:
@@ -405,6 +414,18 @@ export async function sendTestCallbackEmail(
       }
       break
 
+    case 'sales':
+      sampleCall = {
+        call_id: 'test-sales-sample-404',
+        caller_name: 'Vikram Singhania (Sample Sales Query)',
+        phone_number: '+919876543214',
+        call_category: 'sales',
+        call_summary: 'Customer called inquiring about bulk purchase of 100 units of Mantra Iris & Fingerprint scanner devices for enterprise attendance. Requested formal quotation and callback from sales executive.',
+        transcript: 'user: Mujhe 100 biometric devices chahiye hamari company ke liye. Bulk discount aur quotation chahiye.\nassistant: Ji Vikram ji, main sales department ko aapki requirement forward kar rahi hoon. Hamare sales manager aapse jald hi call karke quotation share karenge.',
+        timestamp: new Date().toISOString()
+      }
+      break
+
     case 'general':
     default:
       sampleCall = {
@@ -427,6 +448,8 @@ export async function sendTestCallbackEmail(
       settings.repair_callback_emails = targetEmails
     } else if (category === 'device_issue') {
       settings.device_issue_callback_emails = targetEmails
+    } else if (category === 'sales') {
+      settings.sales_callback_emails = targetEmails
     } else {
       settings.callback_emails = targetEmails
     }

@@ -14,6 +14,7 @@ import {
   Send,
   Package,
   Wrench,
+  TrendingUp,
 } from 'lucide-react'
 import { settingsApi } from '../api/client'
 
@@ -26,11 +27,12 @@ interface SystemSettings {
   delivery_callback_emails: string[]
   repair_callback_emails: string[]
   device_issue_callback_emails: string[]
+  sales_callback_emails: string[]
   forward_to_human?: boolean
   forward_phone_number?: string
 }
 
-type CallbackTab = 'delivery' | 'repair' | 'device_issue' | 'general'
+type CallbackTab = 'delivery' | 'repair' | 'device_issue' | 'sales' | 'general'
 
 interface CallbackCategoryConfig {
   id: CallbackTab
@@ -39,13 +41,9 @@ interface CallbackCategoryConfig {
   badgeText: string
   icon: typeof Package
   accentColor: string
-  accentBg: string
-  accentBorder: string
-  activeTabClass: string
   badgeClass: string
-  btnClass: string
-  field: 'delivery_callback_emails' | 'repair_callback_emails' | 'device_issue_callback_emails' | 'callback_emails'
-  testType: 'callback_delivery' | 'callback_repair' | 'callback_device_issue' | 'callback'
+  field: 'delivery_callback_emails' | 'repair_callback_emails' | 'device_issue_callback_emails' | 'sales_callback_emails' | 'callback_emails'
+  testType: 'callback_delivery' | 'callback_repair' | 'callback_device_issue' | 'callback_sales' | 'callback'
   description: string
   placeholder: string
 }
@@ -57,12 +55,8 @@ const CALLBACK_CATEGORY_CONFIG: CallbackCategoryConfig[] = [
     shortLabel: 'Delivery Enquiries',
     badgeText: 'Logistics & Dispatch',
     icon: Package,
-    accentColor: 'text-sky-600 dark:text-sky-400',
-    accentBg: 'bg-sky-50 dark:bg-sky-950/40',
-    accentBorder: 'border-sky-300 dark:border-sky-800',
-    activeTabClass: 'border-sky-500 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300',
-    badgeClass: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
-    btnClass: 'bg-sky-600 hover:bg-sky-700 text-white',
+    accentColor: 'text-sky-600',
+    badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200/80',
     field: 'delivery_callback_emails',
     testType: 'callback_delivery',
     description: 'Dispatched when a caller is asking about new device delivery, order dispatch, courier tracking, or shipment status.',
@@ -74,12 +68,8 @@ const CALLBACK_CATEGORY_CONFIG: CallbackCategoryConfig[] = [
     shortLabel: 'Repair & RMA',
     badgeText: 'RMA / Service Desk',
     icon: Wrench,
-    accentColor: 'text-amber-600 dark:text-amber-400',
-    accentBg: 'bg-amber-50 dark:bg-amber-950/40',
-    accentBorder: 'border-amber-300 dark:border-amber-800',
-    activeTabClass: 'border-amber-500 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300',
-    badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-    btnClass: 'bg-amber-600 hover:bg-amber-700 text-white',
+    accentColor: 'text-amber-600',
+    badgeClass: 'bg-amber-50 text-amber-700 border border-amber-200/80',
     field: 'repair_callback_emails',
     testType: 'callback_repair',
     description: 'Dispatched when a caller sent their biometric device for repair / RMA / servicing and is asking for progress or return date.',
@@ -91,16 +81,25 @@ const CALLBACK_CATEGORY_CONFIG: CallbackCategoryConfig[] = [
     shortLabel: 'Device Issues',
     badgeText: 'Technical Support',
     icon: AlertTriangle,
-    accentColor: 'text-rose-600 dark:text-rose-400',
-    accentBg: 'bg-rose-50 dark:bg-rose-950/40',
-    accentBorder: 'border-rose-300 dark:border-rose-800',
-    activeTabClass: 'border-rose-500 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300',
-    badgeClass: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400',
-    btnClass: 'bg-rose-600 hover:bg-rose-700 text-white',
+    accentColor: 'text-rose-600',
+    badgeClass: 'bg-rose-50 text-rose-700 border border-rose-200/80',
     field: 'device_issue_callback_emails',
     testType: 'callback_device_issue',
     description: 'Dispatched when a caller currently has the device and complains that it is malfunctioning, failing to scan, or not working.',
     placeholder: 'e.g. techsupport@mantratec.com, hardware-help@mantratec.com',
+  },
+  {
+    id: 'sales',
+    name: 'Sales, Bulk Orders & Quotation Enquiries',
+    shortLabel: 'Sales & Quotes',
+    badgeText: 'Commercial & Sales',
+    icon: TrendingUp,
+    accentColor: 'text-emerald-600',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
+    field: 'sales_callback_emails',
+    testType: 'callback_sales',
+    description: 'Dispatched when a caller is asking to buy devices, request quotations (RFQ), bulk purchases, or commercial pricing.',
+    placeholder: 'e.g. sales@mantratec.com, b2b@mantratec.com',
   },
   {
     id: 'general',
@@ -108,18 +107,15 @@ const CALLBACK_CATEGORY_CONFIG: CallbackCategoryConfig[] = [
     shortLabel: 'General / Fallback',
     badgeText: 'Default Follow-Up',
     icon: PhoneCall,
-    accentColor: 'text-indigo-600 dark:text-indigo-400',
-    accentBg: 'bg-indigo-50 dark:bg-indigo-950/40',
-    accentBorder: 'border-indigo-300 dark:border-indigo-800',
-    activeTabClass: 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300',
-    badgeClass: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400',
-    btnClass: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+    accentColor: 'text-indigo-600',
+    badgeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200/80',
     field: 'callback_emails',
     testType: 'callback',
     description: 'Fallback queue for all other callback requests (RD service renewals, helpline busy callbacks) or when a category has no emails.',
     placeholder: 'e.g. callback@mantratec.com, support@mantratec.com',
   },
 ]
+
 
 const SettingsPage: FC = () => {
   const [settings, setSettings] = useState<SystemSettings>({
@@ -131,6 +127,7 @@ const SettingsPage: FC = () => {
     delivery_callback_emails: ['delivery@mantratec.com'],
     repair_callback_emails: ['repair@mantratec.com'],
     device_issue_callback_emails: ['techsupport@mantratec.com'],
+    sales_callback_emails: ['sales@mantratec.com'],
     forward_to_human: false,
     forward_phone_number: '',
   })
@@ -154,24 +151,28 @@ const SettingsPage: FC = () => {
     delivery: '',
     repair: '',
     device_issue: '',
+    sales: '',
     general: '',
   })
   const [categoryErrors, setCategoryErrors] = useState<Record<CallbackTab, string | null>>({
     delivery: null,
     repair: null,
     device_issue: null,
+    sales: null,
     general: null,
   })
   const [isTestingCategory, setIsTestingCategory] = useState<Record<CallbackTab, boolean>>({
     delivery: false,
     repair: false,
     device_issue: false,
+    sales: false,
     general: false,
   })
   const [categoryTestMsgs, setCategoryTestMsgs] = useState<Record<CallbackTab, { success: boolean; text: string } | null>>({
     delivery: null,
     repair: null,
     device_issue: null,
+    sales: null,
     general: null,
   })
 
@@ -199,6 +200,7 @@ const SettingsPage: FC = () => {
           delivery_callback_emails: Array.isArray(data.delivery_callback_emails) ? data.delivery_callback_emails : prev.delivery_callback_emails,
           repair_callback_emails: Array.isArray(data.repair_callback_emails) ? data.repair_callback_emails : prev.repair_callback_emails,
           device_issue_callback_emails: Array.isArray(data.device_issue_callback_emails) ? data.device_issue_callback_emails : prev.device_issue_callback_emails,
+          sales_callback_emails: Array.isArray(data.sales_callback_emails) ? data.sales_callback_emails : prev.sales_callback_emails,
           notify_on_escalation: data.notify_on_escalation !== undefined ? Boolean(data.notify_on_escalation) : prev.notify_on_escalation,
           notify_on_callback: data.notify_on_callback !== undefined ? Boolean(data.notify_on_callback) : prev.notify_on_callback,
         }))
@@ -324,6 +326,8 @@ const SettingsPage: FC = () => {
         return settings.repair_callback_emails || []
       case 'device_issue':
         return settings.device_issue_callback_emails || []
+      case 'sales':
+        return settings.sales_callback_emails || []
       case 'general':
       default:
         return settings.callback_emails || []
@@ -339,6 +343,8 @@ const SettingsPage: FC = () => {
           return { ...prev, repair_callback_emails: newEmails }
         case 'device_issue':
           return { ...prev, device_issue_callback_emails: newEmails }
+        case 'sales':
+          return { ...prev, sales_callback_emails: newEmails }
         case 'general':
         default:
           return { ...prev, callback_emails: newEmails }
@@ -385,10 +391,11 @@ const SettingsPage: FC = () => {
     setIsTestingCategory(prev => ({ ...prev, [catId]: true }))
     setCategoryTestMsgs(prev => ({ ...prev, [catId]: null }))
 
-    const testTypeMap: Record<CallbackTab, 'callback_delivery' | 'callback_repair' | 'callback_device_issue' | 'callback'> = {
+    const testTypeMap: Record<CallbackTab, 'callback_delivery' | 'callback_repair' | 'callback_device_issue' | 'callback_sales' | 'callback'> = {
       delivery: 'callback_delivery',
       repair: 'callback_repair',
       device_issue: 'callback_device_issue',
+      sales: 'callback_sales',
       general: 'callback',
     }
 
@@ -443,10 +450,11 @@ const SettingsPage: FC = () => {
     }
 
     // Flush any pending category email input if valid
-    const catKeys: Record<CallbackTab, 'delivery_callback_emails' | 'repair_callback_emails' | 'device_issue_callback_emails' | 'callback_emails'> = {
+    const catKeys: Record<CallbackTab, 'delivery_callback_emails' | 'repair_callback_emails' | 'device_issue_callback_emails' | 'sales_callback_emails' | 'callback_emails'> = {
       delivery: 'delivery_callback_emails',
       repair: 'repair_callback_emails',
       device_issue: 'device_issue_callback_emails',
+      sales: 'sales_callback_emails',
       general: 'callback_emails',
     }
 
@@ -612,19 +620,19 @@ const SettingsPage: FC = () => {
               </div>
             </div>
 
-            <div className="p-6 md:p-8 space-y-8">
+            <div className="p-6 md:p-8 space-y-6">
               {/* ── USE CASE 1: Escalated Call Notifications ── */}
-              <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-5">
+              <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="p-1.5 rounded-lg bg-red-100 dark:bg-red-950/50 text-red-600">
+                    <div className="flex items-center space-x-2.5">
+                      <span className="p-1.5 rounded-lg bg-rose-50 border border-rose-100 text-rose-600">
                         <AlertCircle size={16} />
                       </span>
-                      <h3 className="text-base font-semibold text-text-primary">
+                      <h4 className="text-sm font-semibold text-text-primary">
                         Escalated Call Notifications
-                      </h3>
-                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400">
+                      </h4>
+                      <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200">
                         Priority Queue
                       </span>
                     </div>
@@ -633,7 +641,7 @@ const SettingsPage: FC = () => {
                     </p>
                   </div>
 
-                  <label className="relative inline-flex items-center cursor-pointer ml-4">
+                  <label className="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
                     <input
                       type="checkbox"
                       checked={Boolean(settings.notify_on_escalation)}
@@ -642,19 +650,21 @@ const SettingsPage: FC = () => {
                       }
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-text-primary"></div>
                   </label>
                 </div>
 
                 {/* Email Input & Tags for Escalation */}
-                <div className="space-y-3 pt-2">
-                  <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center justify-between">
-                    <span>Escalation Email Recipients ({settings.escalation_emails.length})</span>
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-text-secondary">
+                      Escalation Email Recipients ({settings.escalation_emails.length})
+                    </span>
                     <button
                       type="button"
                       onClick={handleTestEscalation}
                       disabled={isTestingEscalation || settings.escalation_emails.length === 0}
-                      className="text-xs font-medium text-red-600 hover:text-red-700 flex items-center space-x-1 disabled:opacity-40 cursor-pointer transition-colors normal-case"
+                      className="text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-card px-2.5 py-1 rounded-lg border border-border flex items-center space-x-1.5 disabled:opacity-40 cursor-pointer transition-colors"
                       title="Send a sample escalation email to verify recipient emails"
                     >
                       {isTestingEscalation ? (
@@ -664,15 +674,15 @@ const SettingsPage: FC = () => {
                       )}
                       <span>{isTestingEscalation ? 'Sending Test...' : 'Send Test Escalation Alert'}</span>
                     </button>
-                  </label>
+                  </div>
 
                   {/* Test Feedback */}
                   {escalationTestMsg && (
                     <div
-                      className={`text-xs px-3 py-2 rounded-lg flex items-center space-x-1.5 ${
+                      className={`text-xs px-3 py-2 rounded-xl flex items-center space-x-1.5 ${
                         escalationTestMsg.success
-                          ? 'bg-green-50 text-green-700 border border-green-200'
-                          : 'bg-red-50 text-red-700 border border-red-200'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
                       }`}
                     >
                       {escalationTestMsg.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
@@ -697,22 +707,22 @@ const SettingsPage: FC = () => {
                           }
                         }}
                         placeholder="e.g. manager@mantratec.com, escalations@mantratec.com"
-                        className="w-full pl-3.5 pr-4 py-2 bg-transparent border border-border rounded-xl focus:outline-none focus:border-red-500 text-sm text-text-primary transition-colors"
+                        className="w-full pl-3.5 pr-4 py-2 bg-surface-card border border-border hover:border-border-strong rounded-xl focus:outline-none focus:ring-1 focus:ring-text-primary/20 focus:border-text-primary text-xs text-text-primary placeholder:text-text-muted transition-all"
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={handleAddEscalationEmail}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+                      className="px-4 py-2 bg-text-primary hover:bg-black text-surface-card rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
                     >
-                      <Plus size={15} />
+                      <Plus size={14} />
                       <span>Add</span>
                     </button>
                   </div>
 
                   {escalationError && (
-                    <p className="text-xs text-red-500 font-medium flex items-center space-x-1">
+                    <p className="text-xs text-rose-600 font-medium flex items-center space-x-1">
                       <AlertCircle size={14} />
                       <span>{escalationError}</span>
                     </p>
@@ -720,7 +730,7 @@ const SettingsPage: FC = () => {
 
                   {/* Tag List */}
                   {settings.escalation_emails.length === 0 ? (
-                    <div className="p-3.5 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/50">
+                    <div className="p-4 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/60">
                       No escalation recipients added yet. Enter an email above to receive escalation alerts.
                     </div>
                   ) : (
@@ -728,15 +738,15 @@ const SettingsPage: FC = () => {
                       {settings.escalation_emails.map((email) => (
                         <div
                           key={email}
-                          className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary hover:border-red-300 transition-all shadow-2xs group"
+                          className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary hover:border-border-strong transition-all shadow-2xs group"
                         >
-                          <Mail size={13} className="text-red-500" />
+                          <Mail size={13} className="text-rose-500" />
                           <span className="font-mono text-xs">{email}</span>
                           <button
                             type="button"
                             onClick={() => handleRemoveEscalationEmail(email)}
                             title={`Remove ${email}`}
-                            className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 flex items-center justify-center ml-0.5 cursor-pointer"
+                            className="text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded-md flex items-center justify-center ml-0.5 cursor-pointer"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -748,17 +758,17 @@ const SettingsPage: FC = () => {
               </div>
 
               {/* ── USE CASE 2: Categorized Callback Notifications & Routing ── */}
-              <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-5">
+              <div className="rounded-xl border border-border bg-surface-page/40 p-5 space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600">
+                    <div className="flex items-center space-x-2.5">
+                      <span className="p-1.5 rounded-lg bg-blue-50 border border-blue-100 text-blue-600">
                         <PhoneCall size={16} />
                       </span>
-                      <h3 className="text-base font-semibold text-text-primary">
+                      <h4 className="text-sm font-semibold text-text-primary">
                         Callback Notifications & Department Routing
-                      </h3>
-                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400">
+                      </h4>
+                      <span className="px-2.5 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                         Multi-Queue Routing
                       </span>
                     </div>
@@ -767,7 +777,7 @@ const SettingsPage: FC = () => {
                     </p>
                   </div>
 
-                  <label className="relative inline-flex items-center cursor-pointer ml-4">
+                  <label className="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
                     <input
                       type="checkbox"
                       checked={Boolean(settings.notify_on_callback)}
@@ -776,13 +786,13 @@ const SettingsPage: FC = () => {
                       }
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-text-primary"></div>
                   </label>
                 </div>
 
-                {/* Category Navigation Pills */}
+                {/* Category Navigation Tabs */}
                 <div className="space-y-4 pt-1">
-                  <div className="flex flex-wrap gap-2 border-b border-border/80 pb-3">
+                  <div className="p-1 bg-surface-card border border-border rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-1">
                     {CALLBACK_CATEGORY_CONFIG.map((cat) => {
                       const IconComponent = cat.icon
                       const count = getCategoryEmails(cat.id).length
@@ -793,17 +803,23 @@ const SettingsPage: FC = () => {
                           key={cat.id}
                           type="button"
                           onClick={() => setActiveCallbackTab(cat.id)}
-                          className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+                          className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all cursor-pointer ${
                             isActive
-                              ? `${cat.activeTabClass} shadow-2xs`
-                              : 'border-border/60 bg-surface-card hover:bg-surface-page text-text-secondary hover:text-text-primary'
+                              ? 'bg-surface-page text-text-primary shadow-xs border border-border/80 font-semibold'
+                              : 'text-text-secondary hover:text-text-primary hover:bg-surface-page/50 font-medium'
                           }`}
                         >
-                          <IconComponent size={14} className={isActive ? cat.accentColor : 'text-text-muted'} />
-                          <span>{cat.shortLabel}</span>
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <IconComponent size={14} className={isActive ? cat.accentColor : 'text-text-muted'} />
+                            <span className="truncate">{cat.shortLabel}</span>
+                          </div>
                           <span
-                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                              isActive ? cat.badgeClass : 'bg-surface-page text-text-muted border border-border'
+                            className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shrink-0 ${
+                              count > 0
+                                ? isActive
+                                  ? 'bg-text-primary text-surface-card'
+                                  : 'bg-surface-card border border-border text-text-secondary'
+                                : 'text-text-muted opacity-50'
                             }`}
                           >
                             {count}
@@ -824,19 +840,19 @@ const SettingsPage: FC = () => {
                     const testMsg = categoryTestMsgs[activeCat.id]
 
                     return (
-                      <div className={`p-4 rounded-xl border ${activeCat.accentBorder} ${activeCat.accentBg} space-y-4 transition-all`}>
+                      <div className="p-5 rounded-xl border border-border bg-surface-card space-y-4 shadow-2xs transition-all">
                         {/* Header Row */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex items-center space-x-2.5">
-                            <span className={`p-2 rounded-lg bg-surface-card border border-border/60 ${activeCat.accentColor}`}>
-                              <IconComponent size={17} />
+                            <span className={`p-2 rounded-xl bg-surface-page border border-border ${activeCat.accentColor}`}>
+                              <IconComponent size={16} />
                             </span>
                             <div>
                               <div className="flex items-center space-x-2">
-                                <h4 className="text-sm font-bold text-text-primary">
+                                <h4 className="text-sm font-semibold text-text-primary">
                                   {activeCat.name}
                                 </h4>
-                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${activeCat.badgeClass}`}>
+                                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wider ${activeCat.badgeClass}`}>
                                   {activeCat.badgeText}
                                 </span>
                               </div>
@@ -851,13 +867,13 @@ const SettingsPage: FC = () => {
                             type="button"
                             onClick={() => handleTestCategory(activeCat.id)}
                             disabled={isTesting || currentList.length === 0}
-                            className={`text-xs font-semibold ${activeCat.accentColor} hover:opacity-80 flex items-center space-x-1.5 disabled:opacity-40 cursor-pointer transition-colors self-start sm:self-center shrink-0`}
+                            className="text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-page px-2.5 py-1.5 rounded-lg border border-border flex items-center space-x-1.5 disabled:opacity-40 cursor-pointer transition-colors self-start sm:self-center shrink-0"
                             title={`Send a sample ${activeCat.shortLabel} alert to verify recipients`}
                           >
                             {isTesting ? (
-                              <Loader2 className="animate-spin" size={13} />
+                              <Loader2 className="animate-spin" size={12} />
                             ) : (
-                              <Send size={13} />
+                              <Send size={12} />
                             )}
                             <span>{isTesting ? 'Sending Test...' : `Test ${activeCat.shortLabel} Alert`}</span>
                           </button>
@@ -866,10 +882,10 @@ const SettingsPage: FC = () => {
                         {/* Test Feedback */}
                         {testMsg && (
                           <div
-                            className={`text-xs px-3 py-2 rounded-lg flex items-center space-x-1.5 ${
+                            className={`text-xs px-3 py-2 rounded-xl flex items-center space-x-1.5 ${
                               testMsg.success
-                                ? 'bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/30 dark:border-green-800'
-                                : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/30 dark:border-red-800'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
                             {testMsg.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
@@ -894,22 +910,22 @@ const SettingsPage: FC = () => {
                                 }
                               }}
                               placeholder={activeCat.placeholder}
-                              className="w-full pl-3.5 pr-4 py-2 bg-surface-card border border-border rounded-xl focus:outline-none focus:border-indigo-500 text-sm text-text-primary transition-colors"
+                              className="w-full pl-3.5 pr-4 py-2 bg-surface-page/50 border border-border hover:border-border-strong rounded-xl focus:outline-none focus:ring-1 focus:ring-text-primary/20 focus:border-text-primary text-xs text-text-primary placeholder:text-text-muted transition-all"
                             />
                           </div>
 
                           <button
                             type="button"
                             onClick={() => handleAddCategoryEmail(activeCat.id)}
-                            className={`px-4 py-2 ${activeCat.btnClass} rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-xs cursor-pointer`}
+                            className="px-4 py-2 bg-text-primary hover:bg-black text-surface-card rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
                           >
-                            <Plus size={15} />
+                            <Plus size={14} />
                             <span>Add</span>
                           </button>
                         </div>
 
                         {errorMsg && (
-                          <p className="text-xs text-red-500 font-medium flex items-center space-x-1">
+                          <p className="text-xs text-rose-600 font-medium flex items-center space-x-1">
                             <AlertCircle size={14} />
                             <span>{errorMsg}</span>
                           </p>
@@ -917,7 +933,7 @@ const SettingsPage: FC = () => {
 
                         {/* Recipients List */}
                         {currentList.length === 0 ? (
-                          <div className="p-3.5 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-card/60">
+                          <div className="p-4 border border-dashed border-border rounded-xl text-center text-xs text-text-secondary bg-surface-page/30">
                             No recipient emails for {activeCat.name} yet. If empty, alerts will automatically fall back to General / Fallback recipients.
                           </div>
                         ) : (
@@ -925,7 +941,7 @@ const SettingsPage: FC = () => {
                             {currentList.map((email) => (
                               <div
                                 key={email}
-                                className="flex items-center space-x-2 px-3 py-1.5 bg-surface-card border border-border rounded-xl text-xs font-medium text-text-primary shadow-2xs group"
+                                className="flex items-center space-x-2 px-3 py-1.5 bg-surface-page border border-border rounded-xl text-xs font-medium text-text-primary hover:border-border-strong transition-all shadow-2xs group"
                               >
                                 <Mail size={13} className={activeCat.accentColor} />
                                 <span className="font-mono text-xs">{email}</span>
@@ -933,7 +949,7 @@ const SettingsPage: FC = () => {
                                   type="button"
                                   onClick={() => handleRemoveCategoryEmail(activeCat.id, email)}
                                   title={`Remove ${email}`}
-                                  className="text-text-secondary hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center justify-center ml-0.5 cursor-pointer"
+                                  className="text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors p-1 rounded-md flex items-center justify-center ml-0.5 cursor-pointer"
                                 >
                                   <Trash2 size={13} />
                                 </button>
@@ -944,37 +960,6 @@ const SettingsPage: FC = () => {
                       </div>
                     )
                   })()}
-
-                  {/* All-Categories Quick Overview Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                    {CALLBACK_CATEGORY_CONFIG.map((cat) => {
-                      const IconComponent = cat.icon
-                      const count = getCategoryEmails(cat.id).length
-                      const isCurrent = activeCallbackTab === cat.id
-
-                      return (
-                        <div
-                          key={cat.id}
-                          onClick={() => setActiveCallbackTab(cat.id)}
-                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                            isCurrent
-                              ? 'border-indigo-400 bg-surface-card shadow-2xs'
-                              : 'border-border/60 bg-surface-card/40 hover:bg-surface-card'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <IconComponent size={13} className={cat.accentColor} />
-                            <span className="text-[11px] font-medium text-text-secondary truncate">
-                              {cat.shortLabel}
-                            </span>
-                          </div>
-                          <span className="font-mono font-bold text-text-primary text-[11px] shrink-0 ml-1">
-                            {count}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
                 </div>
               </div>
 

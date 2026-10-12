@@ -56,7 +56,7 @@ const callSchema = new Schema(
     reviewed_by: { type: String },
     callback_category: {
       type: String,
-      enum: ["delivery", "repair", "device_issue", "general"],
+      enum: ["delivery", "repair", "device_issue", "sales", "general"],
     },
   },
   { timestamps: true },
@@ -78,7 +78,7 @@ export interface ICall {
   call_summary?: string;
   detected_intent?: string;
   call_category?: CallCategory;
-  callback_category?: "delivery" | "repair" | "device_issue" | "general";
+  callback_category?: "delivery" | "repair" | "device_issue" | "sales" | "general";
   call_outcome?: string;
   recording_url?: string;
   recording_path?: string;

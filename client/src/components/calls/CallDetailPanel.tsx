@@ -366,7 +366,9 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
                       ? 'Repair / Service Desk'
                       : selectedCall.callback_category === 'device_issue'
                         ? 'Hardware Support / Device Complaints'
-                        : 'General Support Queue'}
+                        : selectedCall.callback_category === 'sales'
+                          ? 'Sales / Commercial & Quotations'
+                          : 'General Support Queue'}
                 </strong>
               </span>
             </div>
@@ -577,7 +579,9 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
                         ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
                         : selectedCall.callback_category === 'device_issue'
                           ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                          : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                          : selectedCall.callback_category === 'sales'
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
                   }`}
                 >
                   {selectedCall.callback_category === 'delivery'
@@ -586,7 +590,9 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
                       ? 'Repair Desk'
                       : selectedCall.callback_category === 'device_issue'
                         ? 'Device Issue'
-                        : 'General Callback'}
+                        : selectedCall.callback_category === 'sales'
+                          ? 'Sales & Quotes'
+                          : 'General Callback'}
                 </span>
               </div>
             )}

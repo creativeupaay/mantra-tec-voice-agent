@@ -185,7 +185,9 @@ const CallTable: FC<CallTableProps> = ({
                               ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
                               : call.callback_category === 'device_issue'
                                 ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                                : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                                : call.callback_category === 'sales'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                  : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
                         }`}
                       >
                         {call.callback_category === 'delivery'
@@ -194,7 +196,9 @@ const CallTable: FC<CallTableProps> = ({
                             ? 'Repair'
                             : call.callback_category === 'device_issue'
                               ? 'Device Issue'
-                              : 'General'}
+                              : call.callback_category === 'sales'
+                                ? 'Sales'
+                                : 'General'}
                       </span>
                     )}
                   </div>

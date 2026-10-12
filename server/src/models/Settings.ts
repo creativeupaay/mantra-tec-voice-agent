@@ -9,6 +9,7 @@ export interface ISettings extends Document {
   delivery_callback_emails: string[]
   repair_callback_emails: string[]
   device_issue_callback_emails: string[]
+  sales_callback_emails: string[]
   resend_api_key?: string
   resend_from_email?: string
   forward_to_human: boolean
@@ -27,6 +28,7 @@ const SettingsSchema: Schema = new Schema(
     delivery_callback_emails: { type: [String], default: ['delivery@mantratec.com'] },
     repair_callback_emails: { type: [String], default: ['repair@mantratec.com'] },
     device_issue_callback_emails: { type: [String], default: ['techsupport@mantratec.com'] },
+    sales_callback_emails: { type: [String], default: ['sales@mantratec.com'] },
     resend_api_key: { type: String, default: '' },
     resend_from_email: { type: String, default: 'onboarding@resend.dev' },
     forward_to_human: { type: Boolean, default: false },

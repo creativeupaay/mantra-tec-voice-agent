@@ -55,7 +55,7 @@ class Call(BaseModel):
     is_reviewed: bool = False
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[str] = None
-    callback_category: Optional[str] = None  # "delivery" | "repair" | "device_issue" | "general"
+    callback_category: Optional[str] = None  # "delivery" | "repair" | "device_issue" | "sales" | "general"
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 

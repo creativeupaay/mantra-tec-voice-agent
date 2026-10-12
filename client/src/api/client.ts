@@ -399,7 +399,8 @@ export const settingsApi = {
       | 'callback'
       | 'callback_delivery'
       | 'callback_repair'
-      | 'callback_device_issue';
+      | 'callback_device_issue'
+      | 'callback_sales';
   }) =>
     apiClient.post<{ success: boolean; message: string }>('/settings/test-email', data),
 };

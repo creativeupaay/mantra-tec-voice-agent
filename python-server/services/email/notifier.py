@@ -143,13 +143,14 @@ async def send_callback_email(
             return
 
         cb_type = (callback_type or "general").lower()
-        if cb_type not in ("delivery", "repair", "device_issue", "general"):
+        if cb_type not in ("delivery", "repair", "device_issue", "sales", "general"):
             cb_type = "general"
 
         category_key_map = {
             "delivery": "delivery_callback_emails",
             "repair": "repair_callback_emails",
             "device_issue": "device_issue_callback_emails",
+            "sales": "sales_callback_emails",
         }
         category_key = category_key_map.get(cb_type)
 
@@ -197,6 +198,11 @@ async def send_callback_email(
             theme_color = "#e11d48"  # Rose / Crimson
             subject_prefix = "⚠️ Device Malfunction Complaint Callback"
             lead_desc = "A customer is complaining that their <strong>DEVICE IS NOT WORKING / MALFUNCTIONING</strong> and urgently requires technical support callback."
+        elif cb_type == "sales":
+            badge_text = "Sales & Commercial Opportunity"
+            theme_color = "#059669"  # Emerald Green
+            subject_prefix = "💼 Sales Inquiry Callback"
+            lead_desc = "A customer has inquired about <strong>PURCHASING DEVICES / BULK ORDERS / QUOTATION / PRICING</strong> and requested a callback from the Sales team."
         else:
             badge_text = "General Callback Queue"
             theme_color = "#4f46e5"  # Indigo

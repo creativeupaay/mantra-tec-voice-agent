@@ -143,6 +143,15 @@ def _infer_callback_type(
     ]):
         return "device_issue"
 
+    # 4. Sales / Bulk Purchase / Quotation / Pricing
+    if any(k in text for k in [
+        "sales", "buy", "purchase", "kharidna", "kharidne", "bulk", "wholesale",
+        "quotation", "quote", "rfq", "price", "pricing", "rate", "cost",
+        "kitne ka", "price kya", "distributor", "dealership", "order place",
+        "order dena"
+    ]):
+        return "sales"
+
     return "general"
 
 
@@ -245,6 +254,7 @@ class PostCallExtraction(BaseModel):
             "- 'delivery': Caller inquired about new device order status, courier dispatch, tracking, or delivery updates.\n"
             "- 'repair': Caller sent their device to Mantra for repair/service/RMA and is asking for status or return.\n"
             "- 'device_issue': Caller currently has the device and is complaining that it is malfunctioning, defective, or not working.\n"
+            "- 'sales': Caller inquired about purchasing new devices, bulk orders, wholesale, dealership, quotations, or pricing.\n"
             "- 'general': Any other callback (such as RD service subscription renewal, helpline unreachable callback, general query).\n"
             "If callback_required is False, must be None."
         ),
@@ -327,6 +337,7 @@ async def run_post_call_pipeline(
                         "     * 'delivery': Call is regarding new device order status, delivery enquiry, courier dispatch, or tracking.\n"
                         "     * 'repair': Caller sent their device to Mantra for repair/service/RMA and is asking for status update or returned shipment.\n"
                         "     * 'device_issue': Caller currently has the device and is complaining that it is malfunctioning, defective, or not working.\n"
+                        "     * 'sales': Caller is asking to purchase new devices, bulk order pricing, quotations, or dealership/distributor inquiries.\n"
                         "     * 'general': Any other callback (such as RD service subscription renewal, helpline unreachable callback, general query).\n"
                         "   - If callback_required is false, set callback_type = null.\n\n"
                         "Extract the customer's contact phone number mentioned or confirmed during the conversation into contact_phone_number. "
@@ -465,7 +476,7 @@ async def run_post_call_pipeline(
     callback_category_val = None
     if callback_needed:
         callback_category_val = getattr(extraction, "callback_type", None)
-        if not callback_category_val or callback_category_val.lower() not in ("delivery", "repair", "device_issue", "general"):
+        if not callback_category_val or callback_category_val.lower() not in ("delivery", "repair", "device_issue", "sales", "general"):
             callback_category_val = _infer_callback_type(
                 transcript=full_transcript_lower,
                 summary=lower_summary,

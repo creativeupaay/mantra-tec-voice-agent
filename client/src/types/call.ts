@@ -2,7 +2,7 @@ export type CallStatus = 'live' | 'resolved' | 'escalated' | 'missed' | 'callbac
 
 export type CallCategory = 'support' | 'sales' | 'booking' | 'inquiry' | 'feedback' | 'complaint' | 'technical' | 'billing'
 
-export type CallbackCategory = 'delivery' | 'repair' | 'device_issue' | 'general'
+export type CallbackCategory = 'delivery' | 'repair' | 'device_issue' | 'sales' | 'general'
 
 export interface ICall {
   _id: string
