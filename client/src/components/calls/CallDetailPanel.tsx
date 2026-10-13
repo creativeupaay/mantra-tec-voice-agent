@@ -22,6 +22,7 @@ import {
   Flag,
   User,
   AudioWaveform,
+  Mail,
 } from 'lucide-react'
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
@@ -88,11 +89,13 @@ function getBulkOrderDetails(call: ICall): BulkDetailItem[] {
     },
     {
       label: 'Email',
-      value: findValue([
-        /Email Address:\s*([^\n\r]+)/i,
-        /Email:\s*([^\n\r]+)/i,
-        /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i,
-      ]),
+      value:
+        call.caller_email ||
+        findValue([
+          /Email Address:\s*([^\n\r]+)/i,
+          /Email:\s*([^\n\r]+)/i,
+          /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i,
+        ]),
     },
     {
       label: 'Phone Number',
@@ -279,9 +282,19 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-text-muted font-mono">
-            <Phone size={12} className="text-text-muted" />
-            <span>{selectedCall.phone_number || 'Unknown number'}</span>
+          <div className="flex items-center gap-3 text-xs text-text-muted font-mono flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Phone size={12} className="text-text-muted" />
+              <span>{selectedCall.phone_number || 'Unknown number'}</span>
+            </div>
+            {selectedCall.caller_email && (
+              <div className="flex items-center gap-1.5">
+                <Mail size={12} className="text-text-muted" />
+                <span className="truncate max-w-[220px]" title={selectedCall.caller_email}>
+                  {selectedCall.caller_email}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

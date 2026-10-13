@@ -142,8 +142,9 @@ const CallTable: FC<CallTableProps> = ({
                       <p className="text-xs font-semibold text-text-primary truncate leading-snug">
                         {call.caller_name || 'Anonymous Caller'}
                       </p>
-                      <p className="text-[11px] text-text-muted font-mono leading-none mt-0.5">
+                      <p className="text-[11px] text-text-muted font-mono leading-none mt-0.5 truncate" title={call.caller_email ? `${call.phone_number || ''} • ${call.caller_email}` : call.phone_number}>
                         {call.phone_number || 'No number'}
+                        {call.caller_email ? ` • ${call.caller_email}` : ''}
                       </p>
                     </div>
                   </div>

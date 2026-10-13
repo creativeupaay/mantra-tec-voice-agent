@@ -11,6 +11,7 @@ async def send_escalation_email(
     call_id: str,
     caller_name: Optional[str] = None,
     phone_number: Optional[str] = None,
+    caller_email: Optional[str] = None,
     call_category: Optional[str] = None,
     call_summary: Optional[str] = None,
     transcript: Optional[str] = None,
@@ -68,6 +69,7 @@ async def send_escalation_email(
                 <td style="padding: 10px; font-weight: bold; color: #666666; width: 35%;">Caller:</td>
                 <td style="padding: 10px; color: #111111;">{caller_name or 'N/A'} ({phone_number or 'Unknown'})</td>
               </tr>
+              {f'<tr style="border-bottom: 1px solid #eeeeee;"><td style="padding: 10px; font-weight: bold; color: #666666;">Customer Email:</td><td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">{caller_email}</td></tr>' if caller_email else ''}
               <tr style="border-bottom: 1px solid #eeeeee;">
                 <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
                 <td style="padding: 10px; color: #111111; text-transform: capitalize;">{call_category or 'General Inquiry'}</td>
@@ -128,6 +130,7 @@ async def send_callback_email(
     call_id: str,
     caller_name: Optional[str] = None,
     phone_number: Optional[str] = None,
+    caller_email: Optional[str] = None,
     call_category: Optional[str] = None,
     callback_type: Optional[str] = "general",
     call_summary: Optional[str] = None,
@@ -236,6 +239,7 @@ async def send_callback_email(
                 <td style="padding: 10px; font-weight: bold; color: #666666;">Phone to Call:</td>
                 <td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">{phone_number or 'Unknown'}</td>
               </tr>
+              {f'<tr style="border-bottom: 1px solid #eeeeee;"><td style="padding: 10px; font-weight: bold; color: #666666;">Customer Email:</td><td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">{caller_email}</td></tr>' if caller_email else ('<tr style="border-bottom: 1px solid #eeeeee;"><td style="padding: 10px; font-weight: bold; color: #666666;">Customer Email:</td><td style="padding: 10px; color: #888888; font-style: italic;">Not provided by caller</td></tr>' if cb_type == "sales" else "")}
               <tr style="border-bottom: 1px solid #eeeeee;">
                 <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
                 <td style="padding: 10px; color: #111111; text-transform: capitalize;">{call_category or cb_type}</td>

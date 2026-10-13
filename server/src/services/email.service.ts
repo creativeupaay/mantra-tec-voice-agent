@@ -5,6 +5,7 @@ export interface CallEscalationData {
   _id?: string
   call_id?: string
   caller_name?: string | null
+  caller_email?: string
   phone_number?: string
   call_category?: string
   call_summary?: string
@@ -67,6 +68,12 @@ export async function sendEscalationEmailNotification(callData: CallEscalationDa
               <td style="padding: 10px; font-weight: bold; color: #666666; width: 35%;">Caller:</td>
               <td style="padding: 10px; color: #111111;">${callData.caller_name || 'N/A'} (${callData.phone_number || 'Unknown'})</td>
             </tr>
+            ${callData.caller_email ? `
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Customer Email:</td>
+              <td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">${callData.caller_email}</td>
+            </tr>
+            ` : ''}
             <tr style="border-bottom: 1px solid #eeeeee;">
               <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
               <td style="padding: 10px; color: #111111; text-transform: capitalize;">${callData.call_category || 'General Inquiry'}</td>
@@ -297,6 +304,17 @@ export async function sendCallbackEmailNotification(
               <td style="padding: 10px; font-weight: bold; color: #666666;">Phone to Call:</td>
               <td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">${callData.phone_number || 'Unknown'}</td>
             </tr>
+            ${(callData as any).caller_email ? `
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Customer Email:</td>
+              <td style="padding: 10px; color: #111111; font-weight: bold; font-family: monospace;">${(callData as any).caller_email}</td>
+            </tr>
+            ` : (category === 'sales' ? `
+            <tr style="border-bottom: 1px solid #eeeeee;">
+              <td style="padding: 10px; font-weight: bold; color: #666666;">Customer Email:</td>
+              <td style="padding: 10px; color: #888888; font-style: italic;">Not provided by caller</td>
+            </tr>
+            ` : '')}
             <tr style="border-bottom: 1px solid #eeeeee;">
               <td style="padding: 10px; font-weight: bold; color: #666666;">Category:</td>
               <td style="padding: 10px; color: #111111; text-transform: capitalize;">${callData.call_category || category}</td>
@@ -418,10 +436,11 @@ export async function sendTestCallbackEmail(
       sampleCall = {
         call_id: 'test-sales-sample-404',
         caller_name: 'Vikram Singhania (Sample Sales Query)',
+        caller_email: 'vikram.singhania@enterprise-corp.com',
         phone_number: '+919876543214',
         call_category: 'sales',
-        call_summary: 'Customer called inquiring about bulk purchase of 100 units of Mantra Iris & Fingerprint scanner devices for enterprise attendance. Requested formal quotation and callback from sales executive.',
-        transcript: 'user: Mujhe 100 biometric devices chahiye hamari company ke liye. Bulk discount aur quotation chahiye.\nassistant: Ji Vikram ji, main sales department ko aapki requirement forward kar rahi hoon. Hamare sales manager aapse jald hi call karke quotation share karenge.',
+        call_summary: 'Customer called inquiring about bulk purchase of 100 units of Mantra Iris & Fingerprint scanner devices for enterprise attendance. Provided email ID for quotation and requested callback from sales executive.',
+        transcript: 'user: Mujhe 100 biometric devices chahiye hamari company ke liye. Bulk discount aur quotation chahiye.\nassistant: Ji Vikram ji, main sales team se callback arrange karwa deti hoon taaki hamare sales manager quotation share karein. Formal quotation ke liye kya aap apna email ID note karwa sakte hain?\nuser: Haan ji, vikram dot singhania at enterprise dash corp dot com.\nassistant: Ji vikram.singhania@enterprise-corp.com, maine note kar liya. Hamari sales team aapse jald hi call karke quotation share karegi.',
         timestamp: new Date().toISOString()
       }
       break

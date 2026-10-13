@@ -17,6 +17,7 @@ const callSchema = new Schema(
   {
     call_id: { type: String, required: true, unique: true }, // Plivo call UUID
     caller_name: { type: String }, // Resolved from CRM / phone lookup
+    caller_email: { type: String }, // Customer email address
     phone_number: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
     duration: { type: Number }, // seconds; null/absent = in progress
@@ -69,6 +70,7 @@ export interface ICall {
   _id: mongoose.Types.ObjectId | string;
   call_id: string;
   caller_name?: string;
+  caller_email?: string;
   phone_number: string;
   timestamp: Date;
   duration?: number;

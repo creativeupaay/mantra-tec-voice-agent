@@ -78,11 +78,11 @@ def _resolve_call_outcome(
 
 
 SHARED_FORWARDING_NUMBERS = {
-    "07969268119", "07948501661", "07969268000",
-    "+917969268119", "+917948501661", "+917969268000",
-    "7969268119", "7948501661", "7969268000",
-    "69268119", "48501661", "69268000",
-    "079-69268-000", "079-69268-119", "079-4850-1661",
+    "07969268119", "07948501661", "07969268000", "07949068000",
+    "+917969268119", "+917948501661", "+917969268000", "+917949068000",
+    "7969268119", "7948501661", "7969268000", "7949068000",
+    "69268119", "48501661", "69268000", "49068000",
+    "079-69268-000", "079-49068-000", "079-69268-119", "079-4850-1661",
 }
 
 
@@ -108,13 +108,50 @@ def _extract_fallback_phone_from_transcript(transcript: str) -> Optional[str]:
     return None
 
 
+def _extract_fallback_email_from_transcript(transcript: str) -> Optional[str]:
+    """Extract customer email from transcript lines when LLM misses or omits it."""
+    if not transcript:
+        return None
+    SYSTEM_EMAILS = {
+        "sales@mantratec.com", "support@mantratec.com", "delivery@mantratec.com",
+        "repair@mantratec.com", "servico@mantratec.com", "callback@mantratec.com",
+        "techsupport@mantratec.com", "noreply@creativeupaay.in"
+    }
+    # Direct standard email regex
+    matches = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", transcript)
+    valid = [m.lower() for m in matches if m.lower() not in SYSTEM_EMAILS]
+    if valid:
+        return valid[-1]
+
+    # Spoken email pattern like "rahul dot sharma at gmail dot com"
+    pattern = r"([a-zA-Z0-9]+(?:\s*(?:dot|\.)\s*[a-zA-Z0-9]+)*)\s*(?:at\s+the\s+rate(?:\s+of)?|at\s+rate|at|@)\s*([a-zA-Z0-9]+(?:\s*(?:dot|\.)\s*[a-zA-Z0-9]+)+)"
+    candidates = []
+    for m in re.finditer(pattern, transcript, re.IGNORECASE):
+        norm = normalize_spoken_email(m.group(0))
+        if norm and "@" in norm and norm.lower() not in SYSTEM_EMAILS:
+            candidates.append(norm.lower())
+    if candidates:
+        return candidates[-1]
+    return None
+
+
 def _infer_callback_type(
     transcript: str, summary: str, intent: str, category: str
 ) -> str:
     """Infer the categorized callback route if LLM omitted callback_type."""
     text = f"{transcript} {summary} {intent} {category}".lower()
 
-    # 1. Device Sent for Repair / RMA / Service Update
+    # 1. Sales / Bulk Purchase / Quotation / Pricing / Enterprise Solutions (Primary callback route)
+    if any(k in text for k in [
+        "sales", "buy", "purchase", "kharidna", "kharidne", "bulk", "wholesale",
+        "quotation", "quote", "rfq", "price", "pricing", "rate", "cost",
+        "kitne ka", "price kya", "distributor", "dealership", "order place",
+        "order dena", "attendance", "face recognition", "face machine",
+        "access control", "aebas", "mbas", "sdk", "mxface", "tender", "gem"
+    ]):
+        return "sales"
+
+    # 2. Device Sent for Repair / RMA / Service Update (Legacy)
     if any(k in text for k in [
         "repair", "repairing", "rma", "service center", "servicing",
         "sent for repair", "bheja tha", "repair status", "device repair",
@@ -123,7 +160,7 @@ def _infer_callback_type(
     ]):
         return "repair"
 
-    # 2. New Device Delivery / Order / Courier Tracking
+    # 3. New Device Delivery / Order / Courier Tracking (Legacy)
     if any(k in text for k in [
         "delivery", "courier", "dispatch", "dispatched", "tracking",
         "docket", "shipped", "shipping", "order status", "naya device kab",
@@ -133,7 +170,7 @@ def _infer_callback_type(
     ]):
         return "delivery"
 
-    # 3. Device Not Working / Malfunction / Technical Complaint
+    # 4. Device Not Working / Malfunction / Technical Complaint (Legacy)
     if any(k in text for k in [
         "not working", "chal nahi raha", "kaam nahi kar raha", "malfunction",
         "defective", "sensor error", "light nahi", "capture nahi", "kharab",
@@ -142,15 +179,6 @@ def _infer_callback_type(
         "driver error", "red light", "tampered", "issue aa raha"
     ]):
         return "device_issue"
-
-    # 4. Sales / Bulk Purchase / Quotation / Pricing
-    if any(k in text for k in [
-        "sales", "buy", "purchase", "kharidna", "kharidne", "bulk", "wholesale",
-        "quotation", "quote", "rfq", "price", "pricing", "rate", "cost",
-        "kitne ka", "price kya", "distributor", "dealership", "order place",
-        "order dena"
-    ]):
-        return "sales"
 
     return "general"
 
@@ -174,8 +202,8 @@ class PostCallExtraction(BaseModel):
         default=False,
         description=(
             "True ONLY if a human support ticket explicitly needs to be created. "
-            "CRITICAL: If the agent provided the support helpline number (079-69268-000) or directed the customer "
-            "to call support, DO NOT set requires_ticket to True! Providing the support number resolves the call "
+            "CRITICAL: If the agent provided the support helpline numbers (079-49068-000 / 079-69268-000) or directed the customer "
+            "to call support or email support@mantratec.com, DO NOT set requires_ticket to True! Providing support contact details resolves the call "
             "and does NOT require a ticket. Also, if a callback was arranged, set callback_required instead."
         ),
     )
@@ -228,34 +256,34 @@ class PostCallExtraction(BaseModel):
         default=False,
         description=(
             "True if the agent provided, dictated, or guided the caller to the support helpline number "
-            "(079-69268-000 / ending in triple zero). In this case the call is NOT an escalation."
+            "(079-69268-000 / ending in triple zero) or guided them to email support@mantratec.com. In this case the call is NOT an escalation."
         ),
     )
     support_unresponsive_callback: bool = Field(
         default=False,
         description=(
-            "True if the caller reported that the support helpline was not picking up / not answering / unresponsive / busy, "
-            "AND the agent arranged a callback for them from support. This IS an escalation."
+            "True ONLY if the caller reported that the support helpline was not picking up / busy, "
+            "AND the agent explicitly arranged a callback for them from support. "
+            "If the agent redirected them to support@mantratec.com or declined callback (explaining this is the sales line), set to False."
         ),
     )
     callback_required: bool = Field(
         default=False,
         description=(
-            "True if a callback is required or was promised to the customer. "
-            "Set to True if the customer had an order or delivery issue and a callback was arranged, "
-            "or if the customer needed device subscription / RD service / recharge / renewal and a callback was arranged, "
-            "or if the customer reported support wasn't picking up and a callback was arranged."
+            "True if a callback is required or was promised to the customer (STRICTLY for Sales inquiries). "
+            "Callbacks are NOT arranged for support, repair status, or delivery (callers are redirected to the helpline or support@mantratec.com). "
+            "Set to False if caller called for support/delivery/repair and agent redirected them to helpline or email."
         ),
     )
     callback_type: Optional[str] = Field(
         default=None,
         description=(
             "If callback_required is True, determine the specific callback route category:\n"
-            "- 'delivery': Caller inquired about new device order status, courier dispatch, tracking, or delivery updates.\n"
-            "- 'repair': Caller sent their device to Mantra for repair/service/RMA and is asking for status or return.\n"
-            "- 'device_issue': Caller currently has the device and is complaining that it is malfunctioning, defective, or not working.\n"
             "- 'sales': Caller inquired about purchasing new devices, bulk orders, wholesale, dealership, quotations, or pricing.\n"
-            "- 'general': Any other callback (such as RD service subscription renewal, helpline unreachable callback, general query).\n"
+            "- 'delivery': Legacy / delivery inquiry callback if explicitly promised.\n"
+            "- 'repair': Legacy / repair callback if explicitly promised.\n"
+            "- 'device_issue': Legacy / device issue callback if explicitly promised.\n"
+            "- 'general': Any other callback.\n"
             "If callback_required is False, must be None."
         ),
     )
@@ -319,30 +347,25 @@ async def run_post_call_pipeline(
                         "You are a post-call analyst for Mantra Tech. Analyze the following transcript "
                         "and extract a detailed summary, the primary intent, and categorize the call.\n\n"
                         "CRITICAL RULES FOR SUPPORT CALLS & ESCALATION:\n"
-                        "1. GIVING SUPPORT NUMBER IS NOT AN ESCALATION:\n"
+                        "1. GIVING SUPPORT NUMBER OR SUPPORT EMAIL IS STANDARD RESOLVED ROUTING (NOT AN ESCALATION):\n"
                         "   - If the agent provided, dictated, or guided the caller to the support helpline number "
-                        "     (079-69268-000 / ending in triple zero), set support_number_given = true. "
-                        "   - DO NOT set requires_ticket to true! Giving the caller the support helpline number is "
-                        "     standard resolved routing, NOT an escalation and NOT a ticket.\n"
-                        "2. SUPPORT UNRESPONSIVE & CALLBACK ARRANGED (ONLY SUPPORT ESCALATION):\n"
-                        "   - If the caller reported that they tried calling the support helpline but support is NOT picking up / "
-                        "     not answering / unresponsive / line busy, AND the agent arranged a callback for them, "
-                        "     set support_unresponsive_callback = true and callback_required = true. "
-                        "   - This specific case IS an escalation because support was unreachable and a callback was promised.\n"
-                        "3. OTHER CALLBACKS (Delivery, Repair, Device Issues, Renewal):\n"
-                        "   - If a callback was arranged for an order/delivery issue, device repair status, device not working complaint, or renewal, "
-                        "     set callback_required = true (support_unresponsive_callback remains false).\n"
-                        "4. CALLBACK CATEGORIZATION & ROUTING (CRITICAL FOR NOTIFICATION EMAILS):\n"
-                        "   - If callback_required is true, identify and set callback_type:\n"
-                        "     * 'delivery': Call is regarding new device order status, delivery enquiry, courier dispatch, or tracking.\n"
-                        "     * 'repair': Caller sent their device to Mantra for repair/service/RMA and is asking for status update or returned shipment.\n"
-                        "     * 'device_issue': Caller currently has the device and is complaining that it is malfunctioning, defective, or not working.\n"
-                        "     * 'sales': Caller is asking to purchase new devices, bulk order pricing, quotations, or dealership/distributor inquiries.\n"
-                        "     * 'general': Any other callback (such as RD service subscription renewal, helpline unreachable callback, general query).\n"
+                        "     (079-69268-000 / ending in triple zero) or guided them to email support@mantratec.com, "
+                        "     set support_number_given = true. "
+                        "   - DO NOT set requires_ticket to true or callback_required to true! Giving the caller the support helpline number "
+                        "     or support email is standard resolved routing, NOT an escalation and NOT a ticket.\n"
+                        "2. NO SUPPORT / REPAIR / DELIVERY CALLBACKS (SALES ONLY):\n"
+                        "   - The agent does NOT arrange callbacks for technical support, repair status, delivery, or device issues. "
+                        "   - If the caller reported that support is busy / not answering and the agent advised them to email support@mantratec.com or try again, "
+                        "     set support_unresponsive_callback = false and callback_required = false.\n"
+                        "3. CALLBACKS ARE STRICTLY FOR SALES:\n"
+                        "   - If a callback was requested and arranged for purchasing devices, bulk orders, wholesale, quotations, or pricing, "
+                        "     set callback_required = true and callback_type = 'sales'.\n"
                         "   - If callback_required is false, set callback_type = null.\n\n"
                         "Extract the customer's contact phone number mentioned or confirmed during the conversation into contact_phone_number. "
                         "If the customer corrected or repeated digits (or if a 10-digit number was confirmed by the agent), extract the accurate digits. "
                         "DO NOT use forwarding trunk numbers (such as 07969268119, 07948501661, 079-69268-000).\n"
+                        "Extract the customer's personal or company email address mentioned or confirmed during the conversation into email. "
+                        "DO NOT extract Mantra Tech's internal email (such as sales@mantratec.com or support@mantratec.com) — only the caller's own email.\n"
                         "Flag if the agent lacked knowledge or detected sensitive/disallowed content.\n\n"
                         "CRITICAL RULE FOR AI CALL SUMMARY:\n"
                         "If the conversation is identified as a Bulk Order, Wholesale Enquiry, Enterprise Purchase, "
@@ -457,6 +480,13 @@ async def run_post_call_pipeline(
 
     if not callback_needed and has_transcript:
         cb_terms = [
+            "sales team se callback",
+            "sales team se call back",
+            "sales callback arrange",
+            "sales call back arrange",
+            "sales team aapse contact karegi",
+            "sales team contact karegi",
+            "quotation share karne ke liye",
             "call back arrange",
             "callback arrange",
             "arrange a call back",
@@ -464,12 +494,24 @@ async def run_post_call_pipeline(
             "call back karwati",
             "callback karwati",
             "call back karwa",
-            "directly support se call back",
-            "support team se call back",
-            "support se call back",
             "callback karwa",
         ]
-        if any(term in full_transcript_lower or term in lower_summary for term in cb_terms):
+        # Guard against false positives when callback was explicitly declined/refused
+        negative_callback_indicators = [
+            "callback arrange nahi", "call back arrange nahi",
+            "callback nahi kar", "call back nahi kar",
+            "callback nahi ho", "call back nahi ho",
+            "callback nahi hoga", "call back nahi hoga",
+            "callback nahi hota", "call back nahi hota",
+            "cannot arrange a callback", "cannot arrange callback",
+            "unable to arrange a callback", "unable to arrange callback",
+            "we don't arrange callback", "we do not arrange callback",
+            "callback option nahi", "call back option nahi",
+            "sales ka number hai support k lie", "sales ka number hai",
+            "maaf kijiega", "maaf kijiye",
+        ]
+        is_callback_declined = any(neg in full_transcript_lower for neg in negative_callback_indicators)
+        if not is_callback_declined and any(term in full_transcript_lower or term in lower_summary for term in cb_terms):
             callback_needed = True
             extraction.callback_required = True
 
@@ -504,11 +546,14 @@ async def run_post_call_pipeline(
         is_support_unresponsive and callback_needed
     )
 
-    # 3. Did the agent provide the support helpline number?
+    # 3. Did the agent provide the support helpline number or support email?
     support_number_terms = [
+        "07949068000", "079-49068-000", "079 490",
         "07969268000", "079-69268-000", "079 692", "triple zero", "triple 0", "last me triple zero",
         "last mein triple zero", "support number", "support helpline", "support me call", "support mein call",
         "support team ko call", "dedicated support team", "support contact number", "support phone number",
+        "support@mantratec.com", "support at mantra", "support mail", "support pe mail", "support par mail",
+        "support email", "mail kar dijiye", "mail kar do",
     ]
     gave_support_number = (
         bool(getattr(extraction, "support_number_given", False))
@@ -543,9 +588,9 @@ async def run_post_call_pipeline(
 
     # ── Resolve effective customer phone number ──────────────────────────────
     SHARED_TRUNK_SUFFIXES = {
-        "07969268119", "07948501661", "07969268000",
-        "7969268119", "7948501661", "7969268000",
-        "69268119", "48501661", "69268000"
+        "07969268119", "07948501661", "07969268000", "07949068000",
+        "7969268119", "7948501661", "7969268000", "7949068000",
+        "69268119", "48501661", "69268000", "49068000"
     }
     final_phone = state.phone_number
 
@@ -581,6 +626,21 @@ async def run_post_call_pipeline(
     else:
         final_phone = "unknown"
 
+    # ── Resolve customer email address ───────────────────────────────────────
+    SYSTEM_EMAILS = {
+        "sales@mantratec.com", "support@mantratec.com", "delivery@mantratec.com",
+        "repair@mantratec.com", "servico@mantratec.com", "callback@mantratec.com",
+        "techsupport@mantratec.com", "noreply@creativeupaay.in"
+    }
+    raw_extracted_email = getattr(extraction, "email", None)
+    final_email = None
+    if raw_extracted_email:
+        clean_norm_email = normalize_spoken_email(str(raw_extracted_email))
+        if clean_norm_email and clean_norm_email.lower() not in SYSTEM_EMAILS and "@" in clean_norm_email:
+            final_email = clean_norm_email.lower()
+    if not final_email and transcript_text:
+        final_email = _extract_fallback_email_from_transcript(transcript_text)
+
     try:
         await call_service.finalize_call(
             call_id=state.call_id,
@@ -594,13 +654,14 @@ async def run_post_call_pipeline(
             status=call_status,
             caller_name=caller_name,
             phone_number=final_phone,
+            caller_email=final_email,
             is_red_flagged=bool(extraction.is_red_flagged),
             red_flag_reason=extraction.red_flag_reason,
             guardrail_triggered=extraction.guardrail_triggered,
         )
         logger.info(
             f"[post-call] Finalized call {state.call_id} "
-            f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome}, phone={final_phone}, callback_category={callback_category_val})"
+            f"(status={call_status.value}, duration={duration_seconds}s, outcome={call_outcome}, phone={final_phone}, email={final_email}, callback_category={callback_category_val})"
         )
 
         if call_status == CallStatus.ESCALATED:
@@ -614,6 +675,7 @@ async def run_post_call_pipeline(
                     call_id=state.call_id,
                     caller_name=caller_name,
                     phone_number=phone_display,
+                    caller_email=final_email,
                     call_category=category_display,
                     call_summary=extraction.summary,
                     transcript=transcript_text or None,
@@ -630,6 +692,7 @@ async def run_post_call_pipeline(
                     call_id=state.call_id,
                     caller_name=caller_name,
                     phone_number=phone_display,
+                    caller_email=final_email,
                     call_category=category_display,
                     callback_type=callback_category_val,
                     call_summary=extraction.summary,

@@ -35,6 +35,7 @@ class Call(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
     call_id: str              # Plivo call UUID — unique
     caller_name: Optional[str] = None  # Resolved from CRM / phone lookup
+    caller_email: Optional[str] = None
     phone_number: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     duration: Optional[int] = None        # seconds
@@ -63,12 +64,14 @@ class Call(BaseModel):
 class CallCreate(BaseModel):
     call_id: str
     caller_name: Optional[str] = None
+    caller_email: Optional[str] = None
     phone_number: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
 class CallUpdate(BaseModel):
     caller_name: Optional[str] = None
+    caller_email: Optional[str] = None
     phone_number: Optional[str] = None
     duration: Optional[int] = None
     status: Optional[CallStatus] = None

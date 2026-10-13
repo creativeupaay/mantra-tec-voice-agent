@@ -8,6 +8,7 @@ export interface ICall {
   _id: string
   call_id: string
   caller_name?: string
+  caller_email?: string
   phone_number: string
   duration?: number
   status: CallStatus

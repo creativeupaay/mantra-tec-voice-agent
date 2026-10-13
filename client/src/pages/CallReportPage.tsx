@@ -77,6 +77,9 @@ const CallReportPage: FC = () => {
             <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Caller</p>
             <p className="text-lg font-medium">{data.caller_name ?? 'Unknown'}</p>
             <p className="text-sm font-mono text-gray-700">{data.phone_number}</p>
+            {data.caller_email && (
+              <p className="text-xs font-mono text-gray-500 mt-0.5">{data.caller_email}</p>
+            )}
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Status</p>

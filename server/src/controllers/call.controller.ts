@@ -157,6 +157,7 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
       queryConditions.push({
         $or: [
           { caller_name: searchRegex },
+          { caller_email: searchRegex },
           { phone_number: searchRegex },
           { call_id: searchRegex },
           { detected_intent: searchRegex },
