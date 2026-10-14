@@ -366,6 +366,7 @@ async def run_post_call_pipeline(
                         "DO NOT use forwarding trunk numbers (such as 07969268119, 07948501661, 079-69268-000).\n"
                         "Extract the customer's personal or company email address mentioned or confirmed during the conversation into email. "
                         "DO NOT extract Mantra Tech's internal email (such as sales@mantratec.com or support@mantratec.com) — only the caller's own email.\n"
+                        "Extract the customer's organization or company name into company, and their city or location into city.\n"
                         "Flag if the agent lacked knowledge or detected sensitive/disallowed content.\n\n"
                         "CRITICAL RULE FOR AI CALL SUMMARY:\n"
                         "If the conversation is identified as a Bulk Order, Wholesale Enquiry, Enterprise Purchase, "
