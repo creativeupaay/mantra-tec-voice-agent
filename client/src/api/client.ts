@@ -405,4 +405,66 @@ export const settingsApi = {
     apiClient.post<{ success: boolean; message: string }>('/settings/test-email', data),
 };
 
+// Feedback API Functions
+import {
+  IFeedback,
+  IFeedbackListResponse,
+  IFeedbackResponse,
+  FeedbackStatus,
+  ICreateFeedbackInput,
+} from "../types/feedback";
+
+export const feedbackApi = {
+  getAll: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+    call_id?: string;
+  }): Promise<IFeedbackListResponse> => {
+    const response = await apiClient.get<IFeedbackListResponse>("/feedbacks", {
+      params,
+    });
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<IFeedbackResponse> => {
+    const response = await apiClient.get<IFeedbackResponse>(`/feedbacks/${id}`);
+    return response.data;
+  },
+
+  create: async (data: ICreateFeedbackInput): Promise<IFeedbackResponse> => {
+    const response = await apiClient.post<IFeedbackResponse>("/feedbacks", data);
+    return response.data;
+  },
+
+  updateStatus: async (
+    id: string,
+    status: FeedbackStatus,
+    resolution_notes?: string
+  ): Promise<IFeedbackResponse> => {
+    const response = await apiClient.patch<IFeedbackResponse>(
+      `/feedbacks/${id}/status`,
+      { status, resolution_notes }
+    );
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const response = await apiClient.delete<{
+      success: boolean;
+      message: string;
+    }>(`/feedbacks/${id}`);
+    return response.data;
+  },
+
+  getByCallId: async (callId: string): Promise<IFeedbackListResponse> => {
+    const response = await apiClient.get<IFeedbackListResponse>("/feedbacks", {
+      params: { call_id: callId, limit: 50 },
+    });
+    return response.data;
+  },
+};
+
 export default apiClient;
+

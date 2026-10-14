@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import SettingsPage from './pages/SettingsPage'
 import CallsPage from './pages/CallsPage'
+import FeedbacksPage from './pages/FeedbacksPage'
 import CallReportPage from './pages/CallReportPage'
 import UsagePage from './pages/UsagePage'
 import ProfilePage from './pages/ProfilePage'
@@ -28,6 +29,7 @@ function App() {
       }>
         <Route index element={<HomePage />} />
         <Route path="calls" element={<CallsPage />} />
+        <Route path="feedbacks" element={<FeedbacksPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="usage" element={
           <ProtectedRoute allowedRoles={['super_admin']}><UsagePage /></ProtectedRoute>

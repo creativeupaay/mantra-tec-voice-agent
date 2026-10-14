@@ -1,4 +1,4 @@
-import { FC, useState } from 'react'
+import { FC, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Printer,
@@ -23,11 +23,17 @@ import {
   User,
   AudioWaveform,
   Mail,
+  MessageSquareText,
+  Send,
+  Trash2,
+  ArrowUpRight,
 } from 'lucide-react'
 import StatusDot from '../StatusDot'
 import { ICall, CallStatus } from '../../types/call'
 import { formatDuration, formatTime } from '../../utils/format'
 import AudioPlayer from './AudioPlayer'
+import { feedbackApi } from '../../api/client'
+import { IFeedback, FeedbackStatus } from '../../types/feedback'
 
 interface CallDetailPanelProps {
   selectedCall: ICall
@@ -200,6 +206,89 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
 }) => {
   const [copiedSummary, setCopiedSummary] = useState(false)
   const [showRawTranscript, setShowRawTranscript] = useState(false)
+
+  // Call-specific Feedbacks state
+  const [callFeedbacks, setCallFeedbacks] = useState<IFeedback[]>([])
+  const [loadingFeedbacks, setLoadingFeedbacks] = useState(false)
+  const [feedbackContent, setFeedbackContent] = useState('')
+  const [feedbackStatus, setFeedbackStatus] = useState<FeedbackStatus>('pending')
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null)
+
+  const callIdentifier = selectedCall.call_id || String(selectedCall._id || '')
+
+  useEffect(() => {
+    let isMounted = true
+    const fetchCallFeedbacks = async () => {
+      if (!callIdentifier) return
+      try {
+        setLoadingFeedbacks(true)
+        const res = await feedbackApi.getByCallId(callIdentifier)
+        if (isMounted && res.success && res.data) {
+          setCallFeedbacks(res.data)
+        }
+      } catch (err) {
+        console.error('Failed to load call feedbacks', err)
+      } finally {
+        if (isMounted) setLoadingFeedbacks(false)
+      }
+    }
+
+    fetchCallFeedbacks()
+    return () => {
+      isMounted = false
+    }
+  }, [callIdentifier])
+
+  const handleAddCallFeedback = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!feedbackContent.trim()) return
+
+    try {
+      setIsSubmittingFeedback(true)
+      const res = await feedbackApi.create({
+        content: feedbackContent.trim(),
+        call_id: callIdentifier,
+        status: feedbackStatus,
+        category: 'Call Review',
+      })
+
+      if (res.success && res.data) {
+        setCallFeedbacks((prev) => [res.data, ...prev])
+        setFeedbackContent('')
+        setFeedbackStatus('pending')
+        setFeedbackToast('Feedback logged')
+        setTimeout(() => setFeedbackToast(null), 2500)
+      }
+    } catch (err) {
+      console.error('Failed to submit call feedback', err)
+    } finally {
+      setIsSubmittingFeedback(false)
+    }
+  }
+
+  const handleUpdateCallFeedbackStatus = async (feedbackId: string, newStatus: FeedbackStatus) => {
+    const original = [...callFeedbacks]
+    setCallFeedbacks((prev) =>
+      prev.map((f) => (f._id === feedbackId ? { ...f, status: newStatus } : f))
+    )
+    try {
+      await feedbackApi.updateStatus(feedbackId, newStatus)
+    } catch (err) {
+      console.error('Failed to update call feedback status', err)
+      setCallFeedbacks(original)
+    }
+  }
+
+  const handleDeleteCallFeedback = async (feedbackId: string) => {
+    if (!window.confirm('Delete this feedback entry?')) return
+    try {
+      await feedbackApi.delete(feedbackId)
+      setCallFeedbacks((prev) => prev.filter((f) => f._id !== feedbackId))
+    } catch (err) {
+      console.error('Failed to delete call feedback', err)
+    }
+  }
 
   const targetId = selectedCall._id || selectedCall.call_id
   const isEscalated = selectedCall.status === 'escalated'
@@ -545,6 +634,157 @@ export const CallDetailPanel: FC<CallDetailPanelProps> = ({
             )}
           </div>
         )}
+
+        {/* Call Feedbacks & Review Notes Section */}
+        <div className="bg-surface-page/70 border border-border rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-primary flex items-center gap-1.5">
+              <MessageSquareText size={13} className="text-accent" />
+              <span>Call Feedbacks &amp; Review Notes</span>
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-md bg-surface-card border border-border text-text-muted">
+                {callFeedbacks.length}
+              </span>
+            </h4>
+            <Link
+              to="/feedbacks"
+              className="text-[11px] font-semibold text-text-secondary hover:text-text-primary flex items-center gap-1 transition-colors"
+              title="Open global Feedbacks dashboard"
+            >
+              <span>Feedbacks Tab</span>
+              <ArrowUpRight size={11} />
+            </Link>
+          </div>
+
+          {/* Quick Add Feedback Form */}
+          <form
+            onSubmit={handleAddCallFeedback}
+            className="bg-surface-card border border-border/80 rounded-xl p-3 space-y-2.5 shadow-2xs"
+          >
+            <textarea
+              rows={2}
+              value={feedbackContent}
+              onChange={(e) => setFeedbackContent(e.target.value)}
+              placeholder="Add review note or feedback for this call..."
+              className="w-full text-xs text-text-primary placeholder:text-text-muted bg-surface-page border border-border rounded-lg p-2.5 focus:outline-none focus:border-text-primary focus:bg-surface-card transition-colors resize-none"
+            />
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              {/* Status Selector */}
+              <div className="flex items-center gap-1">
+                {(['pending', 'inprogress', 'resolved'] as FeedbackStatus[]).map((st) => {
+                  const isSelected = feedbackStatus === st
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setFeedbackStatus(st)}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md border capitalize transition-all cursor-pointer ${
+                        isSelected
+                          ? st === 'pending'
+                            ? 'bg-amber-500/10 text-amber-700 border-amber-500/30'
+                            : st === 'inprogress'
+                              ? 'bg-blue-500/10 text-blue-700 border-blue-500/30'
+                              : 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
+                          : 'bg-surface-page text-text-muted border-border hover:text-text-primary'
+                      }`}
+                    >
+                      {st === 'inprogress' ? 'In Progress' : st}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {feedbackToast && (
+                  <span className="text-[11px] font-semibold text-emerald-600 animate-in fade-in">
+                    {feedbackToast}
+                  </span>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSubmittingFeedback || !feedbackContent.trim()}
+                  className="px-3 py-1 bg-text-primary hover:bg-black text-surface-card text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                >
+                  {isSubmittingFeedback ? (
+                    <div className="w-3 h-3 rounded-full border-2 border-surface-card border-t-transparent animate-spin" />
+                  ) : (
+                    <Send size={11} strokeWidth={2.2} />
+                  )}
+                  <span>Log Feedback</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Feedback Items for this Call */}
+          {loadingFeedbacks ? (
+            <div className="p-3 text-center text-xs text-text-muted animate-pulse">
+              Loading feedbacks...
+            </div>
+          ) : callFeedbacks.length === 0 ? (
+            <div className="p-3 text-center text-[11px] text-text-muted bg-surface-card border border-dashed border-border/80 rounded-xl">
+              No feedback logged for this call yet. Use the box above to add review notes.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {callFeedbacks.map((f) => {
+                const badgeStyle =
+                  f.status === 'resolved'
+                    ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                    : f.status === 'inprogress'
+                      ? 'bg-blue-500/10 text-blue-700 border-blue-500/20'
+                      : 'bg-amber-500/10 text-amber-700 border-amber-500/20'
+
+                return (
+                  <div
+                    key={f._id}
+                    className="bg-surface-card border border-border/80 rounded-xl p-3 text-xs space-y-2 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-bold text-[11px] text-text-primary truncate">
+                          {f.user_name || 'Admin'}
+                        </span>
+                        <span className="text-text-muted text-[10px]">•</span>
+                        <span className="text-[10px] text-text-muted font-mono">
+                          {formatTime(f.createdAt).date} {formatTime(f.createdAt).time}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={f.status}
+                          onChange={(e) =>
+                            handleUpdateCallFeedbackStatus(
+                              f._id,
+                              e.target.value as FeedbackStatus
+                            )
+                          }
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded border capitalize cursor-pointer focus:outline-none ${badgeStyle}`}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="inprogress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                        </select>
+
+                        <button
+                          onClick={() => handleDeleteCallFeedback(f._id)}
+                          className="p-1 text-text-muted hover:text-status-escalated transition-colors cursor-pointer"
+                          title="Delete feedback"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-text-primary leading-relaxed whitespace-pre-wrap font-sans">
+                      {f.content}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Technical Overview & Classification Grid */}
         <div className="bg-surface-page/70 border border-border rounded-2xl p-4 space-y-3">

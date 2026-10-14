@@ -11,12 +11,14 @@ import {
   X,
   AudioWaveform,
   User,
+  MessageSquareText,
 } from 'lucide-react'
 import { NotificationDropdown } from '../components/NotificationDropdown'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home, exact: true },
   { to: '/calls', label: 'Calls', icon: Phone },
+  { to: '/feedbacks', label: 'Feedbacks', icon: MessageSquareText },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

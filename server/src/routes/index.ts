@@ -6,6 +6,7 @@ import analyticsRoutes from './v1/analytics.routes.js'
 import callRoutes from './v1/call.routes.js'
 import notificationRoutes from './v1/notification.routes.js'
 import settingsRoutes from './v1/settings.routes.js'
+import feedbackRoutes from './v1/feedback.routes.js'
 
 const router = Router()
 
@@ -16,5 +17,6 @@ router.use('/analytics', analyticsRoutes)
 router.use('/calls', callRoutes)
 router.use('/notifications', notificationRoutes)
 router.use('/settings', settingsRoutes)
+router.use('/feedbacks', feedbackRoutes)
 
 export { router as apiRouter }
