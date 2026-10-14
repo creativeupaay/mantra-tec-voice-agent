@@ -124,6 +124,9 @@ class Settings:
     silence_timeout_confirm: float  # Wait seconds after check before disconnecting (e.g. 6s)
     max_call_duration_seconds: float  # Max call duration before auto-wrapping up (e.g. 300s = 5m)
 
+    # ── Telephony Audio Processing ───────────────────────────────────────────
+    telephony_audio_gain: float  # Multiplier for incoming PSTN audio (e.g. 1.8 = ~+5.1 dB boost)
+
     # ── App ──────────────────────────────────────────────────────────────────
     log_level: str
 
@@ -224,6 +227,8 @@ def _load() -> Settings:
         silence_timeout_initial=float(os.getenv("SILENCE_TIMEOUT_INITIAL_SECONDS", "20.0")),
         silence_timeout_confirm=float(os.getenv("SILENCE_TIMEOUT_CONFIRM_SECONDS", "15.0")),
         max_call_duration_seconds=float(os.getenv("MAX_CALL_DURATION_SECONDS", "300.0")),
+        # Telephony Audio Processing
+        telephony_audio_gain=float(os.getenv("TELEPHONY_AUDIO_GAIN", "1.8")),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )

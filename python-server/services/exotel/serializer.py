@@ -28,6 +28,7 @@ class MantraExotelSerializer(FrameSerializer):
     class InputParams(FrameSerializer.InputParams):
         exotel_sample_rate: int = 8000
         sample_rate: int | None = None
+        audio_gain: float = 1.8
 
     def __init__(
         self, stream_sid: str, call_sid: str | None = None, params: InputParams | None = None
@@ -97,6 +98,15 @@ class MantraExotelSerializer(FrameSerializer):
             )
             if deserialized_data is None or len(deserialized_data) == 0:
                 return None
+
+            # Apply software audio gain boost for low-audibility telephony callers
+            gain = getattr(self._params, "audio_gain", 1.8)
+            if gain and gain != 1.0:
+                try:
+                    import audioop
+                    deserialized_data = audioop.mul(deserialized_data, 2, gain)
+                except Exception as e:
+                    logger.trace(f"Failed to apply audio gain: {e}")
 
             audio_frame = InputAudioRawFrame(
                 audio=deserialized_data,

@@ -203,7 +203,7 @@ class PostCallExtraction(BaseModel):
         description=(
             "True ONLY if a human support ticket explicitly needs to be created. "
             "CRITICAL: If the agent provided the support helpline numbers (079-49068-000 / 079-69268-000) or directed the customer "
-            "to call support or email support@mantratec.com, DO NOT set requires_ticket to True! Providing support contact details resolves the call "
+            "to call support or email servico@mantratec.com, DO NOT set requires_ticket to True! Providing support contact details resolves the call "
             "and does NOT require a ticket. Also, if a callback was arranged, set callback_required instead."
         ),
     )
@@ -256,7 +256,7 @@ class PostCallExtraction(BaseModel):
         default=False,
         description=(
             "True if the agent provided, dictated, or guided the caller to the support helpline number "
-            "(079-69268-000 / ending in triple zero) or guided them to email support@mantratec.com. In this case the call is NOT an escalation."
+            "(079-69268-000 / ending in triple zero) or guided them to email servico@mantratec.com. In this case the call is NOT an escalation."
         ),
     )
     support_unresponsive_callback: bool = Field(
@@ -264,14 +264,14 @@ class PostCallExtraction(BaseModel):
         description=(
             "True ONLY if the caller reported that the support helpline was not picking up / busy, "
             "AND the agent explicitly arranged a callback for them from support. "
-            "If the agent redirected them to support@mantratec.com or declined callback (explaining this is the sales line), set to False."
+            "If the agent redirected them to servico@mantratec.com or declined callback (explaining this is the sales line), set to False."
         ),
     )
     callback_required: bool = Field(
         default=False,
         description=(
             "True if a callback is required or was promised to the customer (STRICTLY for Sales inquiries). "
-            "Callbacks are NOT arranged for support, repair status, or delivery (callers are redirected to the helpline or support@mantratec.com). "
+            "Callbacks are NOT arranged for support, repair status, or delivery (callers are redirected to the helpline or servico@mantratec.com). "
             "Set to False if caller called for support/delivery/repair and agent redirected them to helpline or email."
         ),
     )
@@ -349,13 +349,13 @@ async def run_post_call_pipeline(
                         "CRITICAL RULES FOR SUPPORT CALLS & ESCALATION:\n"
                         "1. GIVING SUPPORT NUMBER OR SUPPORT EMAIL IS STANDARD RESOLVED ROUTING (NOT AN ESCALATION):\n"
                         "   - If the agent provided, dictated, or guided the caller to the support helpline number "
-                        "     (079-69268-000 / ending in triple zero) or guided them to email support@mantratec.com, "
+                        "     (079-69268-000 / ending in triple zero) or guided them to email servico@mantratec.com, "
                         "     set support_number_given = true. "
                         "   - DO NOT set requires_ticket to true or callback_required to true! Giving the caller the support helpline number "
                         "     or support email is standard resolved routing, NOT an escalation and NOT a ticket.\n"
                         "2. NO SUPPORT / REPAIR / DELIVERY CALLBACKS (SALES ONLY):\n"
                         "   - The agent does NOT arrange callbacks for technical support, repair status, delivery, or device issues. "
-                        "   - If the caller reported that support is busy / not answering and the agent advised them to email support@mantratec.com or try again, "
+                        "   - If the caller reported that support is busy / not answering and the agent advised them to email servico@mantratec.com or try again, "
                         "     set support_unresponsive_callback = false and callback_required = false.\n"
                         "3. CALLBACKS ARE STRICTLY FOR SALES:\n"
                         "   - If a callback was requested and arranged for purchasing devices, bulk orders, wholesale, quotations, or pricing, "
@@ -365,7 +365,7 @@ async def run_post_call_pipeline(
                         "If the customer corrected or repeated digits (or if a 10-digit number was confirmed by the agent), extract the accurate digits. "
                         "DO NOT use forwarding trunk numbers (such as 07969268119, 07948501661, 079-69268-000).\n"
                         "Extract the customer's personal or company email address mentioned or confirmed during the conversation into email. "
-                        "DO NOT extract Mantra Tech's internal email (such as sales@mantratec.com or support@mantratec.com) — only the caller's own email.\n"
+                        "DO NOT extract Mantra Tech's internal email (such as sales@mantratec.com, servico@mantratec.com, or support@mantratec.com) — only the caller's own email.\n"
                         "Extract the customer's organization or company name into company, and their city or location into city.\n"
                         "Flag if the agent lacked knowledge or detected sensitive/disallowed content.\n\n"
                         "CRITICAL RULE FOR AI CALL SUMMARY:\n"
@@ -554,6 +554,8 @@ async def run_post_call_pipeline(
         "last mein triple zero", "support number", "support helpline", "support me call", "support mein call",
         "support team ko call", "dedicated support team", "support contact number", "support phone number",
         "support@mantratec.com", "support at mantra", "support mail", "support pe mail", "support par mail",
+        "servico@mantratec.com", "servico at mantra", "servico mail", "servico pe mail", "servico par mail",
+        "servico",
         "support email", "mail kar dijiye", "mail kar do",
     ]
     gave_support_number = (
