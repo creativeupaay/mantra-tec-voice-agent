@@ -26,7 +26,14 @@ export const updateFeedbackStatusSchema = z.object({
 export const queryFeedbackSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
-  status: z.enum(['all', 'pending', 'inprogress', 'resolved']).default('all'),
+  status: z
+    .preprocess(
+      (val) => (!val || val === '' ? 'all' : val),
+      z.enum(['all', 'pending', 'inprogress', 'resolved'], {
+        message: 'Status must be one of: all, pending, inprogress, resolved',
+      })
+    )
+    .default('all'),
   search: z.string().trim().optional(),
   call_id: z.string().trim().optional(),
 })
@@ -64,7 +71,13 @@ export const validateQuery = (schema: ZodSchema) => {
       })
       return
     }
-    req.query = result.data as any
+    Object.defineProperty(req, 'query', {
+      value: { ...req.query, ...(result.data as Record<string, any>) },
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    })
     next()
   }
 }
+

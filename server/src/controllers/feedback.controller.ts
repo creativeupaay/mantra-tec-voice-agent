@@ -109,7 +109,7 @@ export const getFeedbacks = async (
 
     // Search filter across content, user_name, user_email, call_id, resolution_notes
     if (search) {
-      const searchRegex = new RegExp(search, 'i')
+      const searchRegex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
       queryConditions.push({
         $or: [
           { content: searchRegex },
