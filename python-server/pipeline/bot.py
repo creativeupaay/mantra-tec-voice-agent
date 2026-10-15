@@ -503,6 +503,12 @@ async def run_bot(
         from google.genai.types import ThinkingConfig, StartSensitivity, EndSensitivity
         from pipecat.services.google.gemini_live.llm import GeminiVADParams
 
+        start_sens = None
+        if settings.gemini_vad_start_sensitivity == "high":
+            start_sens = StartSensitivity.START_SENSITIVITY_HIGH
+        elif settings.gemini_vad_start_sensitivity == "low":
+            start_sens = StartSensitivity.START_SENSITIVITY_LOW
+
         llm = GeminiLiveLLMService(
             model=settings.gemini_model,
             api_key=settings.gemini_api_key,
@@ -516,10 +522,10 @@ async def run_bot(
                 max_tokens=1024,
                 thinking=ThinkingConfig(thinking_budget=0),
                 vad=GeminiVADParams(
-                    start_sensitivity=StartSensitivity.START_SENSITIVITY_HIGH,
-                    end_sensitivity=EndSensitivity.END_SENSITIVITY_LOW,
-                    prefix_padding_ms=300,
-                    silence_duration_ms=750,
+                    start_sensitivity=start_sens,
+                    end_sensitivity=None,
+                    prefix_padding_ms=settings.gemini_vad_prefix_padding_ms,
+                    silence_duration_ms=settings.gemini_vad_silence_duration_ms,
                 ),
             ),
         )

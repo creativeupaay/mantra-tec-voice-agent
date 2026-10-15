@@ -185,6 +185,7 @@ async def exotel_websocket_endpoint(
             stream_sid=call_data["stream_id"],
             params=MantraExotelSerializer.InputParams(
                 audio_gain=settings.telephony_audio_gain,
+                noise_gate_rms=settings.telephony_noise_gate_rms,
             ),
         )
 

@@ -66,6 +66,9 @@ class Settings:
     gemini_model: str
     gemini_voice_name: str
     gemini_language: str
+    gemini_vad_start_sensitivity: str  # "default" | "high" | "low"
+    gemini_vad_prefix_padding_ms: int  # e.g. 100
+    gemini_vad_silence_duration_ms: int # e.g. 700
 
     # ── TTS provider selection: "deepgram" | "elevenlabs" | "cartesia" ──────
     tts_provider: str
@@ -125,7 +128,8 @@ class Settings:
     max_call_duration_seconds: float  # Max call duration before auto-wrapping up (e.g. 300s = 5m)
 
     # ── Telephony Audio Processing ───────────────────────────────────────────
-    telephony_audio_gain: float  # Multiplier for incoming PSTN audio (e.g. 1.8 = ~+5.1 dB boost)
+    telephony_audio_gain: float  # Multiplier for incoming PSTN audio (1.0 = normal)
+    telephony_noise_gate_rms: int  # RMS noise floor cutoff below which gain is not applied (default: 250)
 
     # ── App ──────────────────────────────────────────────────────────────────
     log_level: str
@@ -182,6 +186,9 @@ def _load() -> Settings:
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-flash-live-preview"),
         gemini_voice_name=os.getenv("GEMINI_VOICE_NAME", "Erinome"),
         gemini_language=os.getenv("GEMINI_LANGUAGE", "hi-IN"),
+        gemini_vad_start_sensitivity=os.getenv("GEMINI_VAD_START_SENSITIVITY", "default").lower(),
+        gemini_vad_prefix_padding_ms=int(os.getenv("GEMINI_VAD_PREFIX_PADDING_MS", "100")),
+        gemini_vad_silence_duration_ms=int(os.getenv("GEMINI_VAD_SILENCE_DURATION_MS", "700")),
         # TTS
         tts_provider=os.getenv("TTS_PROVIDER", "deepgram").lower(),
         # MongoDB
@@ -228,7 +235,8 @@ def _load() -> Settings:
         silence_timeout_confirm=float(os.getenv("SILENCE_TIMEOUT_CONFIRM_SECONDS", "15.0")),
         max_call_duration_seconds=float(os.getenv("MAX_CALL_DURATION_SECONDS", "300.0")),
         # Telephony Audio Processing
-        telephony_audio_gain=float(os.getenv("TELEPHONY_AUDIO_GAIN", "1.8")),
+        telephony_audio_gain=float(os.getenv("TELEPHONY_AUDIO_GAIN", "1.0")),
+        telephony_noise_gate_rms=int(os.getenv("TELEPHONY_NOISE_GATE_RMS", "250")),
         # App
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )
