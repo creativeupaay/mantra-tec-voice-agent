@@ -28,6 +28,8 @@ export interface ICall {
   call_outcome?: string
   detected_intent?: string
   timestamp: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ICallListResponse {

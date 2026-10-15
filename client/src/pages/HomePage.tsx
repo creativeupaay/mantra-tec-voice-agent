@@ -28,7 +28,7 @@ import {
 } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
 import { analyticsApi, callApi } from '../api/client'
-import { ICall, CallStatus } from '../types/call'
+import { ICall, ICallListResponse, CallStatus } from '../types/call'
 import { parseToDate } from '../utils/format'
 import CallTable from '../components/calls/CallTable'
 import CallDetailPanel from '../components/calls/CallDetailPanel'
@@ -141,7 +141,7 @@ const HomePage: FC = () => {
           ? analyticsApi.getDashboard().catch(() => ({ data: { data: null, success: false } }))
           : Promise.resolve({ data: { data: null, success: false } }),
         analyticsApi.getCallAnalytics().catch(() => ({ data: { data: null, success: false } })),
-        callApi.getAll({ limit: 1000 }).catch(() => ({ success: true, data: [] as any[] })),
+        callApi.getAll({ limit: 1000 }).catch(() => ({ success: false, data: [] } as ICallListResponse)),
       ])
 
       // 1. Process all calls list
@@ -152,7 +152,13 @@ const HomePage: FC = () => {
         setServerTotalCalls(allCallsRes.pagination.total)
       }
       if (allCallsRes?.counts) {
-        setServerCounts(allCallsRes.counts)
+        setServerCounts({
+          escalated: allCallsRes.counts.escalated || 0,
+          resolved: allCallsRes.counts.resolved || 0,
+          callback_required: allCallsRes.counts.callback_required || 0,
+          reviewed: allCallsRes.counts.reviewed || 0,
+          unreviewed: allCallsRes.counts.unreviewed || 0,
+        })
       }
 
       // 2. Process Platform Analytics
@@ -193,67 +199,98 @@ const HomePage: FC = () => {
     return () => window.removeEventListener('call-status-updated', handleStatusUpdate)
   }, [isSuperAdmin])
 
-  // ── DYNAMIC MONTH OPTIONS ──────────────────────────────────────────
-  const monthOptions = useMemo(() => {
-    const options = [{ value: 'all', label: 'All Time' }]
+  // ── DYNAMIC 15TH-TO-15TH BILLING CYCLE OPTIONS ──────────────────────
+  const formatCycleLabel = (start: Date, end: Date, isCurrent: boolean) => {
+    const startDay = start.getDate()
+    const startMonth = start.toLocaleDateString('en-GB', { month: 'short' })
+    const endDay = end.getDate()
+    const endMonth = end.toLocaleDateString('en-GB', { month: 'short' })
+    const startYear = start.getFullYear()
+    const endYear = end.getFullYear()
+
+    const rangeStr =
+      startYear === endYear
+        ? `${startDay} ${startMonth} – ${endDay} ${endMonth} ${endYear}`
+        : `${startDay} ${startMonth} ${startYear} – ${endDay} ${endMonth} ${endYear}`
+
+    return isCurrent ? `${rangeStr} (Current Cycle)` : rangeStr
+  }
+
+  const cycleOptions = useMemo(() => {
+    const options: {
+      value: string
+      label: string
+      startDate?: Date
+      endDate?: Date
+      isCurrent?: boolean
+    }[] = [{ value: 'all', label: 'All Time' }]
+
     const now = new Date()
+    const baseMonth = now.getDate() >= 15 ? now.getMonth() : now.getMonth() - 1
+    const baseYear = now.getFullYear()
 
     for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      const value = i === 0 ? 'current' : i === 1 ? 'previous' : `month-${d.getFullYear()}-${d.getMonth()}`
-      options.push({ value, label })
+      const start = new Date(baseYear, baseMonth - i, 15, 0, 0, 0, 0)
+      const end = new Date(baseYear, baseMonth - i + 1, 15, 0, 0, 0, 0)
+      const isCurrent = i === 0
+      const value = isCurrent ? 'current' : `cycle-${start.getFullYear()}-${start.getMonth() + 1}`
+      const label = formatCycleLabel(start, end, isCurrent)
+      options.push({ value, label, startDate: start, endDate: end, isCurrent })
     }
 
-    return [
-      ...options,
-      { value: '3months', label: 'Last 3 Months' },
-      { value: '6months', label: 'Last 6 Months' },
-      { value: '12months', label: 'Last 12 Months' },
-    ]
+    return options
   }, [])
 
-  const selectedMonthLabel = useMemo(() => {
-    const found = monthOptions.find(o => o.value === selectedMonthRange)
-    return found ? found.label : 'All Time'
-  }, [monthOptions, selectedMonthRange])
+  const selectedCycle = useMemo(() => {
+    return cycleOptions.find(o => o.value === selectedMonthRange)
+  }, [cycleOptions, selectedMonthRange])
 
-  // ── FILTERED CALLS BY SELECTED MONTH RANGE ─────────────────────────
+  const currentCycle = useMemo(() => {
+    return cycleOptions.find(o => o.isCurrent) || null
+  }, [cycleOptions])
+
+  const selectedMonthLabel = useMemo(() => {
+    const found = cycleOptions.find(o => o.value === selectedMonthRange)
+    return found ? found.label : 'All Time'
+  }, [cycleOptions, selectedMonthRange])
+
+  // Calls strictly within the active billing cycle (for the quota card)
+  const currentCycleCalls = useMemo(() => {
+    if (!callsList || callsList.length === 0) return []
+    if (!currentCycle?.startDate || !currentCycle?.endDate) return callsList
+    const startMs = currentCycle.startDate.getTime()
+    const endMs = currentCycle.endDate.getTime()
+
+    return callsList.filter(c => {
+      const timestamp = c.timestamp || c.createdAt
+      if (!timestamp) return false
+      const callDate = parseToDate(timestamp)
+      if (!callDate || isNaN(callDate.getTime())) return false
+      const timeMs = callDate.getTime()
+      return timeMs >= startMs && timeMs < endMs
+    })
+  }, [callsList, currentCycle])
+
+  // ── FILTERED CALLS BY SELECTED RANGE ───────────────────────────────
   const filteredCalls = useMemo(() => {
     if (!callsList || callsList.length === 0) return []
     if (selectedMonthRange === 'all') return callsList
 
-    const now = new Date()
+    if (selectedCycle?.startDate && selectedCycle?.endDate) {
+      const startMs = selectedCycle.startDate.getTime()
+      const endMs = selectedCycle.endDate.getTime()
+      return callsList.filter(c => {
+        const timestamp = c.timestamp || c.createdAt
+        if (!timestamp) return false
+        const callDate = parseToDate(timestamp)
+        if (!callDate || isNaN(callDate.getTime())) return false
+        const timeMs = callDate.getTime()
+        return timeMs >= startMs && timeMs < endMs
+      })
+    }
 
-    return callsList.filter(c => {
-      const timestamp = c.timestamp || c.createdAt
-      if (!timestamp) return true
-      const callDate = parseToDate(timestamp)
-      if (!callDate || isNaN(callDate.getTime())) return true
-
-      if (selectedMonthRange === 'current') {
-        return callDate.getFullYear() === now.getFullYear() && callDate.getMonth() === now.getMonth()
-      } else if (selectedMonthRange === 'previous') {
-        const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        return callDate.getFullYear() === prevMonthDate.getFullYear() && callDate.getMonth() === prevMonthDate.getMonth()
-      } else if (selectedMonthRange.startsWith('month-')) {
-        const parts = selectedMonthRange.split('-')
-        const targetYear = parseInt(parts[1], 10)
-        const targetMonth = parseInt(parts[2], 10)
-        return callDate.getFullYear() === targetYear && callDate.getMonth() === targetMonth
-      } else if (selectedMonthRange === '3months') {
-        const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1)
-        return callDate >= startDate
-      } else if (selectedMonthRange === '6months') {
-        const startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-        return callDate >= startDate
-      } else if (selectedMonthRange === '12months') {
-        const startDate = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1)
-        return callDate >= startDate
-      }
-      return true
-    })
-  }, [callsList, selectedMonthRange])
+    return callsList
+  }, [callsList, selectedMonthRange, selectedCycle])
 
   // ── ACCURATE DATABASE METRICS ───────────────────────────────────────
   // When 'all', use the true DB counts from server; when specific month, derive from filtered set
@@ -387,11 +424,53 @@ const HomePage: FC = () => {
   }
 
   // Quota & duration metrics
-  const totalDurationSeconds = useMemo(() => filteredCalls.reduce((sum, c) => sum + (c.duration || 0), 0), [filteredCalls])
   const minutesAllocated = 4000
-  const minutesUsed = useMemo(() => Math.round(totalDurationSeconds / 60), [totalDurationSeconds])
+
+  // Quota Card displays Active Cycle usage when 'all' is chosen, or the chosen cycle's usage
+  const quotaCalls = useMemo(() => {
+    if (isAllTime) {
+      return currentCycleCalls
+    }
+    return filteredCalls
+  }, [isAllTime, currentCycleCalls, filteredCalls])
+
+  const totalDurationSeconds = useMemo(
+    () => filteredCalls.reduce((sum, c) => sum + (c.duration || 0), 0),
+    [filteredCalls]
+  )
+
+  const quotaDurationSeconds = useMemo(
+    () => quotaCalls.reduce((sum, c) => sum + (c.duration || 0), 0),
+    [quotaCalls]
+  )
+
+  const minutesUsed = useMemo(() => Math.round(quotaDurationSeconds / 60), [quotaDurationSeconds])
   const minutesRemaining = useMemo(() => Math.max(0, minutesAllocated - minutesUsed), [minutesUsed])
-  const usagePercent = useMemo(() => Math.min(100, parseFloat(((minutesUsed / minutesAllocated) * 100).toFixed(1))), [minutesUsed])
+  const usagePercent = useMemo(
+    () => Math.min(100, parseFloat(((minutesUsed / minutesAllocated) * 100).toFixed(1))),
+    [minutesUsed]
+  )
+
+  const quotaCycleLabel = useMemo(() => {
+    if (isAllTime) {
+      if (!currentCycle?.startDate || !currentCycle?.endDate) return 'Current Cycle'
+      const s = currentCycle.startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      const e = currentCycle.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      return `${s} – ${e}`
+    }
+    if (selectedCycle?.startDate && selectedCycle?.endDate) {
+      const s = selectedCycle.startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      const e = selectedCycle.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      return `${s} – ${e}`
+    }
+    return 'Billing Cycle'
+  }, [isAllTime, currentCycle, selectedCycle])
+
+  const renewalDateStr = useMemo(() => {
+    const targetEnd = isAllTime ? currentCycle?.endDate : selectedCycle?.endDate
+    if (!targetEnd) return '15th'
+    return targetEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  }, [isAllTime, currentCycle, selectedCycle])
 
   const resolutionRate = useMemo(() => {
     if (totalCallsCount === 0) return 0
@@ -426,12 +505,36 @@ const HomePage: FC = () => {
     filteredCalls.forEach(c => {
       const timestamp = c.timestamp || c.createdAt
       if (!timestamp) return
-      const d = new Date(timestamp)
-      if (!isNaN(d.getTime())) {
+      const d = parseToDate(timestamp)
+      if (d && !isNaN(d.getTime())) {
         const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         volumeMap[label] = (volumeMap[label] || 0) + 1
       }
     })
+
+    // If a specific billing cycle is selected, construct chronological days from startDate to endDate
+    if (selectedCycle?.startDate && selectedCycle?.endDate) {
+      const entries: { date: string; dayNumber: string; count: number }[] = []
+      const cur = new Date(selectedCycle.startDate)
+      // For current cycle, show up to current day; for closed cycles, show full cycle
+      const endLimit = selectedCycle.isCurrent
+        ? new Date(Math.min(selectedCycle.endDate.getTime(), Date.now() + 86400000))
+        : selectedCycle.endDate
+
+      while (cur < endLimit) {
+        const label = cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        entries.push({
+          date: label,
+          dayNumber: `${cur.getDate()}`,
+          count: volumeMap[label] || 0,
+        })
+        cur.setDate(cur.getDate() + 1)
+      }
+      return entries.length > 0
+        ? entries
+        : callVolume.map(v => ({ ...v, dayNumber: v.date.split(' ')[1] || v.date }))
+    }
+
     const entries = Object.entries(volumeMap).map(([date, count]) => ({
       date,
       dayNumber: date.split(' ')[1] || date,
@@ -440,7 +543,7 @@ const HomePage: FC = () => {
     return entries.length > 0
       ? entries
       : callVolume.map(v => ({ ...v, dayNumber: v.date.split(' ')[1] || v.date }))
-  }, [filteredCalls, callVolume, selectedMonthRange])
+  }, [filteredCalls, callVolume, selectedMonthRange, selectedCycle])
 
   // Intent breakdown
   const intentBreakdownData = useMemo(() => {
@@ -492,14 +595,14 @@ const HomePage: FC = () => {
         </div>
 
         <div className="flex items-center space-x-2.5">
-          {/* Month Selector Pill */}
+          {/* Billing Cycle Selector Pill */}
           <div className="relative shrink-0">
             <select
               value={selectedMonthRange}
               onChange={e => setSelectedMonthRange(e.target.value)}
               className="appearance-none pl-3.5 pr-8 py-1.5 bg-surface-card border border-border hover:border-border-strong rounded-xl text-xs font-semibold text-text-primary focus:outline-none focus:ring-1 focus:ring-text-primary/20 cursor-pointer transition-all shadow-2xs"
             >
-              {monthOptions.map(opt => (
+              {cycleOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -530,18 +633,28 @@ const HomePage: FC = () => {
                 </div>
                 <span className="text-xs font-semibold text-text-secondary">Minutes Quota</span>
               </div>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-accent-bg text-accent border border-accent/20">
-                {usagePercent}% USED
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-surface-page text-text-muted border border-border">
+                  {isAllTime ? 'Current Cycle' : selectedCycle?.isCurrent ? 'Current' : 'Past Cycle'}
+                </span>
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-accent-bg text-accent border border-accent/20">
+                  {usagePercent}% USED
+                </span>
+              </div>
             </div>
 
             <div className="mt-1">
-              <p className="text-2xl font-bold font-mono tabular-nums text-text-primary leading-tight">
-                {minutesUsed.toLocaleString()}{' '}
-                <span className="text-xs font-sans font-normal text-text-muted">
-                  / {minutesAllocated.toLocaleString()}m
+              <div className="flex items-baseline justify-between">
+                <p className="text-2xl font-bold font-mono tabular-nums text-text-primary leading-tight">
+                  {minutesUsed.toLocaleString()}{' '}
+                  <span className="text-xs font-sans font-normal text-text-muted">
+                    / {minutesAllocated.toLocaleString()}m
+                  </span>
+                </p>
+                <span className="text-[10px] text-text-muted font-medium">
+                  {quotaCycleLabel}
                 </span>
-              </p>
+              </div>
             </div>
 
             <div className="w-full bg-surface-page rounded-full h-1.5 overflow-hidden my-2.5 border border-border/70">
@@ -553,9 +666,16 @@ const HomePage: FC = () => {
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
-            <span>Remaining</span>
-            <span className="font-mono font-semibold text-text-primary">
-              {minutesRemaining.toLocaleString()} mins
+            <span>
+              Remaining:{' '}
+              <span className="font-mono font-semibold text-text-primary">
+                {minutesRemaining.toLocaleString()} mins
+              </span>
+            </span>
+            <span>
+              {isAllTime || selectedCycle?.isCurrent
+                ? `Renews ${renewalDateStr}`
+                : `Closed ${renewalDateStr}`}
             </span>
           </div>
         </div>
