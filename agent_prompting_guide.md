@@ -98,7 +98,7 @@ Use this to audit a standard voice agent prompt and its surrounding implementati
 - [ ] In-scope tasks are explicit.
 - [ ] Out-of-scope requests have a useful fallback instead of a dead-end refusal.
 - [ ] The agent does not invent facts, policies, availability, commitments, or completed actions.
-- [ ] Handoff, escalation, emergency, repeated-confusion, and human-request triggers are explicit where relevant.
+- [ ] Handoff, escalation, emergency, repeated-confusion, and human-request triggers are explicit where relevant; ambiguous representative/customer care requests confirm caller intent (e.g. sales vs support) before routing or collecting data.
 - [ ] Domain-specific safeguards are tailored by qualified owners; generic text is not treated as compliance certification.
 
 ### Tools and exact data
