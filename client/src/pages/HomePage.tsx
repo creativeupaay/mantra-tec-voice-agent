@@ -89,6 +89,9 @@ const HomePage: FC = () => {
     reviewedCount: number
     unreviewedCount: number
     avgDurationSeconds: number
+    currentCycleDurationSeconds?: number
+    currentCycleMinutesUsed?: number
+    currentCycleTotalCalls?: number
   } | null>(null)
 
   // Real backend server counts from calls endpoint
@@ -141,7 +144,7 @@ const HomePage: FC = () => {
           ? analyticsApi.getDashboard().catch(() => ({ data: { data: null, success: false } }))
           : Promise.resolve({ data: { data: null, success: false } }),
         analyticsApi.getCallAnalytics().catch(() => ({ data: { data: null, success: false } })),
-        callApi.getAll({ limit: 1000 }).catch(() => ({ success: false, data: [] } as ICallListResponse)),
+        callApi.getAll({ limit: 100 }).catch(() => ({ success: false, data: [] } as ICallListResponse)),
       ])
 
       // 1. Process all calls list
@@ -444,7 +447,12 @@ const HomePage: FC = () => {
     [quotaCalls]
   )
 
-  const minutesUsed = useMemo(() => Math.round(quotaDurationSeconds / 60), [quotaDurationSeconds])
+  const minutesUsed = useMemo(() => {
+    if (isAllTime && serverKpis?.currentCycleMinutesUsed !== undefined) {
+      return serverKpis.currentCycleMinutesUsed
+    }
+    return Math.round(quotaDurationSeconds / 60)
+  }, [isAllTime, serverKpis, quotaDurationSeconds])
   const minutesRemaining = useMemo(() => Math.max(0, minutesAllocated - minutesUsed), [minutesUsed])
   const usagePercent = useMemo(
     () => Math.min(100, parseFloat(((minutesUsed / minutesAllocated) * 100).toFixed(1))),

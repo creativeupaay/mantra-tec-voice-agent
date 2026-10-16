@@ -70,9 +70,19 @@ export const getCallAnalytics = async (
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoIso = thirtyDaysAgo.toISOString().replace('Z', '');
+
+    // Active billing cycle (15th to 15th) window
+    const now = new Date();
+    const baseMonth = now.getDate() >= 15 ? now.getMonth() : now.getMonth() - 1;
+    const baseYear = now.getFullYear();
+    const cycleStart = new Date(baseYear, baseMonth, 15, 0, 0, 0, 0);
+    const cycleEnd = new Date(baseYear, baseMonth + 1, 15, 0, 0, 0, 0);
+    const cycleStartIso = cycleStart.toISOString().replace('Z', '');
+    const cycleEndIso = cycleEnd.toISOString().replace('Z', '');
 
     // ── 1. KPIs ───────────────────────────────────────────────────────────────
-    const [totalCalls, statusCounts, durationResult, redFlagCount, reviewedCount] =
+    const [totalCalls, statusCounts, durationResult, redFlagCount, reviewedCount, cycleStats] =
       await Promise.all([
         Call.countDocuments(),
 
@@ -88,6 +98,22 @@ export const getCallAnalytics = async (
         }),
 
         Call.countDocuments({ is_reviewed: true }),
+
+        Call.aggregate([
+          {
+            $match: {
+              timestamp: { $gte: cycleStartIso, $lt: cycleEndIso },
+              duration: { $exists: true, $ne: null },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalDurationSeconds: { $sum: '$duration' },
+              callCount: { $sum: 1 },
+            },
+          },
+        ]),
       ]);
 
     // Map status counts to named fields
@@ -95,6 +121,9 @@ export const getCallAnalytics = async (
     statusCounts.forEach((s: any) => {
       if (s._id) statusMap[s._id] = s.count;
     });
+
+    const currentCycleDurationSeconds = cycleStats[0]?.totalDurationSeconds || 0;
+    const currentCycleMinutesUsed = Math.round(currentCycleDurationSeconds / 60);
 
     const kpis = {
       totalCalls,
@@ -106,10 +135,22 @@ export const getCallAnalytics = async (
       reviewedCount,
       unreviewedCount: Math.max(0, totalCalls - reviewedCount),
       avgDurationSeconds: Math.round(durationResult[0]?.avg || 0),
+      currentCycleDurationSeconds,
+      currentCycleMinutesUsed,
+      currentCycleTotalCalls: cycleStats[0]?.callCount || 0,
     };
 
-    // ── 2. Call volume — last 30 days (day buckets) ────────────────────────
+    // ── 2. Call volume — last 30 days (filter FIRST with index) ────────────
     const volumeRaw = await Call.aggregate([
+      {
+        $match: {
+          $or: [
+            { timestamp: { $gte: thirtyDaysAgoIso } },
+            { timestamp: { $gte: thirtyDaysAgo } },
+            { createdAt: { $gte: thirtyDaysAgo } },
+          ],
+        },
+      },
       {
         $addFields: {
           parsedDate: {
@@ -121,7 +162,6 @@ export const getCallAnalytics = async (
           },
         },
       },
-      { $match: { parsedDate: { $gte: thirtyDaysAgo } } },
       {
         $group: {
           _id: {
@@ -202,7 +242,11 @@ export const getCallAnalytics = async (
     // ── 5. Recent Red Flags ────────────────────────────────────────────────
     const recentRedFlags = await Call.find({
       $or: [{ is_red_flag: true }, { is_red_flagged: true }],
-    }).sort({ createdAt: -1 }).limit(5).lean()
+    })
+      .select('-transcript')
+      .sort({ timestamp: -1, createdAt: -1, _id: -1 })
+      .limit(5)
+      .lean()
 
     res.json({
       success: true,

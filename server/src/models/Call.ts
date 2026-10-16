@@ -64,6 +64,8 @@ const callSchema = new Schema(
 );
 
 // Indexes for fast filtering and query performance
+callSchema.index({ timestamp: -1 });
+callSchema.index({ status: 1, timestamp: -1 });
 callSchema.index({ is_reviewed: 1, timestamp: -1 });
 
 export interface ICall {

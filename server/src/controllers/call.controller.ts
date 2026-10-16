@@ -193,10 +193,33 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
       }
     }
 
+    // Apply Date Range Preset filter directly at DB level
+    const { startMs, endMs } = getDatePresetRange(datePreset, dateFrom, dateTo)
+    if (startMs !== null || endMs !== null) {
+      const dateCondStr: any = {}
+      const dateCondObj: any = {}
+      if (startMs !== null) {
+        dateCondStr.$gte = new Date(startMs).toISOString().replace('Z', '')
+        dateCondObj.$gte = new Date(startMs)
+      }
+      if (endMs !== null) {
+        dateCondStr.$lte = new Date(endMs).toISOString()
+        dateCondObj.$lte = new Date(endMs)
+      }
+      queryConditions.push({
+        $or: [
+          { timestamp: dateCondStr },
+          { timestamp: dateCondObj },
+          { createdAt: dateCondObj },
+        ],
+      })
+    }
+
     const filter = queryConditions.length > 0 ? { $and: queryConditions } : {}
 
-    // Tab counts for status header & review status
-    const [escalatedCount, resolvedCount, callbackCount, reviewedCount, unreviewedCount] = await Promise.all([
+    // Tab counts and total count for pagination directly from MongoDB in parallel
+    const [totalCalls, escalatedCount, resolvedCount, callbackCount, reviewedCount, unreviewedCount] = await Promise.all([
+      Call.countDocuments(filter),
       Call.countDocuments({ status: 'escalated' }),
       Call.countDocuments({ status: 'resolved' }),
       Call.countDocuments({ status: 'callback_required' }),
@@ -204,30 +227,25 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
       Call.countDocuments({ $or: [{ is_reviewed: false }, { is_reviewed: { $exists: false } }] }),
     ])
 
-    // Query Mongo documents
-    const rawCalls = await Call.find(filter).lean()
-    let normalized = rawCalls.map(c => normalizeCall(c as Record<string, any>))
-
-    // Apply Date Range Preset filter (robust against string or Date formats)
-    const { startMs, endMs } = getDatePresetRange(datePreset, dateFrom, dateTo)
-    if (startMs !== null || endMs !== null) {
-      normalized = normalized.filter(call => {
-        const time = getCallTime(call)
-        const matchStart = startMs === null || time >= startMs
-        const matchEnd = endMs === null || time <= endMs
-        return matchStart && matchEnd
-      })
-    }
-
-    // Sort strictly by newest call FIRST
-    normalized.sort((a, b) => getCallTime(b) - getCallTime(a))
-
-    // Calculate pagination over filtered dataset
-    const totalCalls = normalized.length
+    // Calculate pagination parameters
     const totalPages = Math.max(1, Math.ceil(totalCalls / limit))
     const currentPage = Math.min(page, totalPages)
-    const startIndex = (currentPage - 1) * limit
-    const pageCalls = normalized.slice(startIndex, startIndex + limit)
+    const skip = (currentPage - 1) * limit
+
+    // Real DB-level pagination & optimization:
+    // If limit > 50 (e.g. bulk fetch or dashboard), exclude heavy text fields (-transcript -call_summary)
+    // If limit <= 50 (table rows), include all fields so opening drawer has transcript immediately
+    const query = Call.find(filter)
+      .sort({ timestamp: -1, createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+
+    if (limit > 50) {
+      query.select('-transcript -call_summary')
+    }
+
+    const rawCalls = await query.lean()
+    const pageCalls = rawCalls.map(c => normalizeCall(c as Record<string, any>))
 
     res.json({
       success: true,
