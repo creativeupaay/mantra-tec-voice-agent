@@ -27,7 +27,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { useAuth } from '../hooks/useAuth'
-import { analyticsApi, callApi } from '../api/client'
+import { analyticsApi, callApi, ICallAnalytics } from '../api/client'
 import { ICall, ICallListResponse, CallStatus } from '../types/call'
 import { parseToDate } from '../utils/format'
 import CallTable from '../components/calls/CallTable'
@@ -79,20 +79,7 @@ const HomePage: FC = () => {
   const [selectedMonthRange, setSelectedMonthRange] = useState<string>('all')
 
   // Real backend server KPIs
-  const [serverKpis, setServerKpis] = useState<{
-    totalCalls: number
-    resolvedCount: number
-    escalatedCount: number
-    missedCount: number
-    liveCount: number
-    redFlagCount: number
-    reviewedCount: number
-    unreviewedCount: number
-    avgDurationSeconds: number
-    currentCycleDurationSeconds?: number
-    currentCycleMinutesUsed?: number
-    currentCycleTotalCalls?: number
-  } | null>(null)
+  const [serverKpis, setServerKpis] = useState<ICallAnalytics['kpis'] | null>(null)
 
   // Real backend server counts from calls endpoint
   const [serverCounts, setServerCounts] = useState<{
@@ -132,75 +119,6 @@ const HomePage: FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalTitle, setModalTitle] = useState('')
   const [modalContent, setModalContent] = useState('')
-
-  // ── Unified Data Fetching ───────────────────────────────────────────
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const [platformRes, analyticsRes, allCallsRes] = await Promise.all([
-        isSuperAdmin
-          ? analyticsApi.getDashboard().catch(() => ({ data: { data: null, success: false } }))
-          : Promise.resolve({ data: { data: null, success: false } }),
-        analyticsApi.getCallAnalytics().catch(() => ({ data: { data: null, success: false } })),
-        callApi.getAll({ limit: 100 }).catch(() => ({ success: false, data: [] } as ICallListResponse)),
-      ])
-
-      // 1. Process all calls list
-      if (allCallsRes?.success && Array.isArray(allCallsRes.data)) {
-        setCallsList(allCallsRes.data)
-      }
-      if (allCallsRes?.pagination?.total !== undefined) {
-        setServerTotalCalls(allCallsRes.pagination.total)
-      }
-      if (allCallsRes?.counts) {
-        setServerCounts({
-          escalated: allCallsRes.counts.escalated || 0,
-          resolved: allCallsRes.counts.resolved || 0,
-          callback_required: allCallsRes.counts.callback_required || 0,
-          reviewed: allCallsRes.counts.reviewed || 0,
-          unreviewed: allCallsRes.counts.unreviewed || 0,
-        })
-      }
-
-      // 2. Process Platform Analytics
-      if (isSuperAdmin && platformRes?.data?.success && platformRes.data.data) {
-        const pa = platformRes.data.data
-        setPlatformStats({
-          totalUsers: pa.totalUsers || 0,
-          totalSessions: pa.totalSessions || 0,
-          totalCreditsUsed: pa.totalCreditsUsed || 0,
-          monthlyStats: pa.monthlyStats || [],
-        })
-      }
-
-      // 3. Process Call Analytics for charts & true database KPIs
-      if (analyticsRes?.data?.success && analyticsRes.data.data) {
-        const ca = analyticsRes.data.data
-        setCallVolume(ca.callVolume || [])
-        setIntentBreakdown(ca.intentBreakdown || [])
-        if (ca.kpis) {
-          setServerKpis(ca.kpis)
-        }
-      }
-    } catch (err: any) {
-      console.error('Dashboard fetch error:', err)
-      setError(err.response?.data?.message || 'Failed to load dashboard data')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchDashboardData()
-
-    const handleStatusUpdate = () => {
-      fetchDashboardData()
-    }
-    window.addEventListener('call-status-updated', handleStatusUpdate)
-    return () => window.removeEventListener('call-status-updated', handleStatusUpdate)
-  }, [isSuperAdmin])
 
   // ── DYNAMIC 15TH-TO-15TH BILLING CYCLE OPTIONS ──────────────────────
   const formatCycleLabel = (start: Date, end: Date, isCurrent: boolean) => {
@@ -257,107 +175,121 @@ const HomePage: FC = () => {
     return found ? found.label : 'All Time'
   }, [cycleOptions, selectedMonthRange])
 
-  // Calls strictly within the active billing cycle (for the quota card)
-  const currentCycleCalls = useMemo(() => {
-    if (!callsList || callsList.length === 0) return []
-    if (!currentCycle?.startDate || !currentCycle?.endDate) return callsList
-    const startMs = currentCycle.startDate.getTime()
-    const endMs = currentCycle.endDate.getTime()
+  // ── Unified Data Fetching ───────────────────────────────────────────
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
 
-    return callsList.filter(c => {
-      const timestamp = c.timestamp || c.createdAt
-      if (!timestamp) return false
-      const callDate = parseToDate(timestamp)
-      if (!callDate || isNaN(callDate.getTime())) return false
-      const timeMs = callDate.getTime()
-      return timeMs >= startMs && timeMs < endMs
-    })
-  }, [callsList, currentCycle])
+      const cycleParams =
+        selectedCycle?.startDate && selectedCycle?.endDate && selectedMonthRange !== 'all'
+          ? {
+              startDate: selectedCycle.startDate.toISOString(),
+              endDate: selectedCycle.endDate.toISOString(),
+            }
+          : undefined
 
-  // ── FILTERED CALLS BY SELECTED RANGE ───────────────────────────────
-  const filteredCalls = useMemo(() => {
-    if (!callsList || callsList.length === 0) return []
-    if (selectedMonthRange === 'all') return callsList
+      const [platformRes, analyticsRes, allCallsRes] = await Promise.all([
+        isSuperAdmin
+          ? analyticsApi.getDashboard().catch(() => ({ data: { data: null, success: false } }))
+          : Promise.resolve({ data: { data: null, success: false } }),
+        analyticsApi.getCallAnalytics(cycleParams).catch(() => ({ data: { data: null, success: false } })),
+        callApi.getAll({ ...(cycleParams || {}), limit: 10 }).catch(() => ({ success: false, data: [] } as ICallListResponse)),
+      ])
 
-    if (selectedCycle?.startDate && selectedCycle?.endDate) {
-      const startMs = selectedCycle.startDate.getTime()
-      const endMs = selectedCycle.endDate.getTime()
-      return callsList.filter(c => {
-        const timestamp = c.timestamp || c.createdAt
-        if (!timestamp) return false
-        const callDate = parseToDate(timestamp)
-        if (!callDate || isNaN(callDate.getTime())) return false
-        const timeMs = callDate.getTime()
-        return timeMs >= startMs && timeMs < endMs
-      })
+      // 1. Process all calls list
+      if (allCallsRes?.success && Array.isArray(allCallsRes.data)) {
+        setCallsList(allCallsRes.data)
+      }
+      if (allCallsRes?.pagination?.total !== undefined) {
+        setServerTotalCalls(allCallsRes.pagination.total)
+      }
+      if (allCallsRes?.counts) {
+        setServerCounts({
+          escalated: allCallsRes.counts.escalated || 0,
+          resolved: allCallsRes.counts.resolved || 0,
+          callback_required: allCallsRes.counts.callback_required || 0,
+          reviewed: allCallsRes.counts.reviewed || 0,
+          unreviewed: allCallsRes.counts.unreviewed || 0,
+        })
+      }
+
+      // 2. Process Platform Analytics
+      if (isSuperAdmin && platformRes?.data?.success && platformRes.data.data) {
+        const pa = platformRes.data.data
+        setPlatformStats({
+          totalUsers: pa.totalUsers || 0,
+          totalSessions: pa.totalSessions || 0,
+          totalCreditsUsed: pa.totalCreditsUsed || 0,
+          monthlyStats: pa.monthlyStats || [],
+        })
+      }
+
+      // 3. Process Call Analytics for charts & true database KPIs
+      if (analyticsRes?.data?.success && analyticsRes.data.data) {
+        const ca = analyticsRes.data.data
+        setCallVolume(ca.callVolume || [])
+        setIntentBreakdown(ca.intentBreakdown || [])
+        if (ca.kpis) {
+          setServerKpis(ca.kpis)
+        }
+      }
+    } catch (err: any) {
+      console.error('Dashboard fetch error:', err)
+      setError(err.response?.data?.message || 'Failed to load dashboard data')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    return callsList
-  }, [callsList, selectedMonthRange, selectedCycle])
+  useEffect(() => {
+    fetchDashboardData()
+
+    const handleStatusUpdate = () => {
+      fetchDashboardData()
+    }
+    window.addEventListener('call-status-updated', handleStatusUpdate)
+    return () => window.removeEventListener('call-status-updated', handleStatusUpdate)
+  }, [isSuperAdmin, selectedMonthRange])
 
   // ── ACCURATE DATABASE METRICS ───────────────────────────────────────
-  // When 'all', use the true DB counts from server; when specific month, derive from filtered set
   const isAllTime = selectedMonthRange === 'all'
 
   const totalCallsCount = useMemo(() => {
-    if (isAllTime) {
-      return serverKpis?.totalCalls || serverTotalCalls || callsList.length
-    }
-    return filteredCalls.length
-  }, [isAllTime, serverKpis, serverTotalCalls, callsList.length, filteredCalls.length])
+    return serverKpis?.totalCalls ?? 0
+  }, [serverKpis])
 
   const resolvedCount = useMemo(() => {
-    if (isAllTime && (serverKpis?.resolvedCount !== undefined || serverCounts?.resolved !== undefined)) {
-      return serverKpis?.resolvedCount ?? serverCounts?.resolved ?? 0
-    }
-    return filteredCalls.filter(c => c.status === 'resolved').length
-  }, [isAllTime, serverKpis, serverCounts, filteredCalls])
+    return serverKpis?.resolvedCount ?? 0
+  }, [serverKpis])
 
   const escalatedCount = useMemo(() => {
-    if (isAllTime && (serverKpis?.escalatedCount !== undefined || serverCounts?.escalated !== undefined)) {
-      return serverKpis?.escalatedCount ?? serverCounts?.escalated ?? 0
-    }
-    return filteredCalls.filter(c => c.status === 'escalated').length
-  }, [isAllTime, serverKpis, serverCounts, filteredCalls])
+    return serverKpis?.escalatedCount ?? 0
+  }, [serverKpis])
 
   const callbackRequiredCount = useMemo(() => {
-    if (isAllTime && serverCounts?.callback_required !== undefined) {
-      return serverCounts.callback_required
-    }
-    return filteredCalls.filter(c => c.status === 'callback_required').length
-  }, [isAllTime, serverCounts, filteredCalls])
+    return serverKpis?.callbackRequiredCount ?? serverCounts?.callback_required ?? 0
+  }, [serverKpis, serverCounts])
 
   const missedCount = useMemo(() => {
-    if (isAllTime && serverKpis?.missedCount !== undefined) {
-      return serverKpis.missedCount
-    }
-    return filteredCalls.filter(c => c.status === 'missed').length
-  }, [isAllTime, serverKpis, filteredCalls])
+    return serverKpis?.missedCount ?? 0
+  }, [serverKpis])
 
   const liveCount = useMemo(() => {
-    if (isAllTime && serverKpis?.liveCount !== undefined) {
-      return serverKpis.liveCount
-    }
-    return filteredCalls.filter(c => c.status === 'live' || !c.status).length
-  }, [isAllTime, serverKpis, filteredCalls])
+    return serverKpis?.liveCount ?? 0
+  }, [serverKpis])
 
   const redFlagCount = useMemo(() => {
-    if (isAllTime && serverKpis?.redFlagCount !== undefined) {
-      return serverKpis.redFlagCount
-    }
-    return filteredCalls.filter(c => Boolean(c.is_red_flag || c.is_red_flagged)).length
-  }, [isAllTime, serverKpis, filteredCalls])
+    return serverKpis?.redFlagCount ?? 0
+  }, [serverKpis])
 
   const reviewedCount = useMemo(() => {
-    if (isAllTime && (serverKpis?.reviewedCount !== undefined || serverCounts?.reviewed !== undefined)) {
-      return serverKpis?.reviewedCount ?? serverCounts?.reviewed ?? 0
-    }
-    return filteredCalls.filter(c => Boolean(c.is_reviewed)).length
-  }, [isAllTime, serverKpis, serverCounts, filteredCalls])
+    return serverKpis?.reviewedCount ?? 0
+  }, [serverKpis])
 
   const recentCallsToDisplay = useMemo(() => {
-    return filteredCalls.slice(0, 8)
-  }, [filteredCalls])
+    return callsList.slice(0, 8)
+  }, [callsList])
 
   const handleToggleReviewed = async (call: ICall) => {
     const targetId = call._id || call.call_id
@@ -429,30 +361,13 @@ const HomePage: FC = () => {
   // Quota & duration metrics
   const minutesAllocated = 4000
 
-  // Quota Card displays Active Cycle usage when 'all' is chosen, or the chosen cycle's usage
-  const quotaCalls = useMemo(() => {
-    if (isAllTime) {
-      return currentCycleCalls
-    }
-    return filteredCalls
-  }, [isAllTime, currentCycleCalls, filteredCalls])
-
-  const totalDurationSeconds = useMemo(
-    () => filteredCalls.reduce((sum, c) => sum + (c.duration || 0), 0),
-    [filteredCalls]
-  )
-
-  const quotaDurationSeconds = useMemo(
-    () => quotaCalls.reduce((sum, c) => sum + (c.duration || 0), 0),
-    [quotaCalls]
-  )
-
   const minutesUsed = useMemo(() => {
-    if (isAllTime && serverKpis?.currentCycleMinutesUsed !== undefined) {
-      return serverKpis.currentCycleMinutesUsed
+    if (isAllTime || selectedCycle?.isCurrent) {
+      return serverKpis?.currentCycleMinutesUsed ?? 0
     }
-    return Math.round(quotaDurationSeconds / 60)
-  }, [isAllTime, serverKpis, quotaDurationSeconds])
+    return serverKpis?.cycleMinutesUsed ?? 0
+  }, [isAllTime, selectedCycle?.isCurrent, serverKpis])
+
   const minutesRemaining = useMemo(() => Math.max(0, minutesAllocated - minutesUsed), [minutesUsed])
   const usagePercent = useMemo(
     () => Math.min(100, parseFloat(((minutesUsed / minutesAllocated) * 100).toFixed(1))),
@@ -460,7 +375,7 @@ const HomePage: FC = () => {
   )
 
   const quotaCycleLabel = useMemo(() => {
-    if (isAllTime) {
+    if (isAllTime || selectedCycle?.isCurrent) {
       if (!currentCycle?.startDate || !currentCycle?.endDate) return 'Current Cycle'
       const s = currentCycle.startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
       const e = currentCycle.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -475,7 +390,7 @@ const HomePage: FC = () => {
   }, [isAllTime, currentCycle, selectedCycle])
 
   const renewalDateStr = useMemo(() => {
-    const targetEnd = isAllTime ? currentCycle?.endDate : selectedCycle?.endDate
+    const targetEnd = (isAllTime || selectedCycle?.isCurrent) ? currentCycle?.endDate : selectedCycle?.endDate
     if (!targetEnd) return '15th'
     return targetEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   }, [isAllTime, currentCycle, selectedCycle])
@@ -486,13 +401,9 @@ const HomePage: FC = () => {
   }, [resolvedCount, totalCallsCount])
 
   const avgDurationMinutes = useMemo(() => {
-    const avgSec = isAllTime && serverKpis?.avgDurationSeconds
-      ? serverKpis.avgDurationSeconds
-      : totalCallsCount > 0
-        ? Math.round(totalDurationSeconds / totalCallsCount)
-        : 0
+    const avgSec = serverKpis?.avgDurationSeconds ?? 0
     return (avgSec / 60).toFixed(1)
-  }, [isAllTime, serverKpis, totalCallsCount, totalDurationSeconds])
+  }, [serverKpis])
 
   // Donut chart status breakdown
   const statusBreakdownData = useMemo(() => [
@@ -505,66 +416,13 @@ const HomePage: FC = () => {
 
   // Dynamic Call Volume per day
   const callVolumeData = useMemo(() => {
-    if (callVolume.length > 0 && selectedMonthRange === 'all') {
-      return callVolume.map(v => ({ ...v, dayNumber: v.date.split(' ')[1] || v.date }))
-    }
-
-    const volumeMap: Record<string, number> = {}
-    filteredCalls.forEach(c => {
-      const timestamp = c.timestamp || c.createdAt
-      if (!timestamp) return
-      const d = parseToDate(timestamp)
-      if (d && !isNaN(d.getTime())) {
-        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        volumeMap[label] = (volumeMap[label] || 0) + 1
-      }
-    })
-
-    // If a specific billing cycle is selected, construct chronological days from startDate to endDate
-    if (selectedCycle?.startDate && selectedCycle?.endDate) {
-      const entries: { date: string; dayNumber: string; count: number }[] = []
-      const cur = new Date(selectedCycle.startDate)
-      // For current cycle, show up to current day; for closed cycles, show full cycle
-      const endLimit = selectedCycle.isCurrent
-        ? new Date(Math.min(selectedCycle.endDate.getTime(), Date.now() + 86400000))
-        : selectedCycle.endDate
-
-      while (cur < endLimit) {
-        const label = cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        entries.push({
-          date: label,
-          dayNumber: `${cur.getDate()}`,
-          count: volumeMap[label] || 0,
-        })
-        cur.setDate(cur.getDate() + 1)
-      }
-      return entries.length > 0
-        ? entries
-        : callVolume.map(v => ({ ...v, dayNumber: v.date.split(' ')[1] || v.date }))
-    }
-
-    const entries = Object.entries(volumeMap).map(([date, count]) => ({
-      date,
-      dayNumber: date.split(' ')[1] || date,
-      count,
-    }))
-    return entries.length > 0
-      ? entries
-      : callVolume.map(v => ({ ...v, dayNumber: v.date.split(' ')[1] || v.date }))
-  }, [filteredCalls, callVolume, selectedMonthRange, selectedCycle])
+    return callVolume.map(v => ({ ...v, dayNumber: v.date.split(' ')[1] || v.date }))
+  }, [callVolume])
 
   // Intent breakdown
   const intentBreakdownData = useMemo(() => {
-    if (filteredCalls.length === 0) return intentBreakdown
-    const intentMap: Record<string, number> = {}
-    filteredCalls.forEach(c => {
-      const raw = c.detected_intent || c.call_category || 'General Query'
-      const formatted = raw.charAt(0).toUpperCase() + raw.slice(1).replace(/_/g, ' ')
-      intentMap[formatted] = (intentMap[formatted] || 0) + 1
-    })
-    const entries = Object.entries(intentMap).map(([intent, count]) => ({ intent, count }))
-    return entries.length > 0 ? entries : intentBreakdown
-  }, [filteredCalls, intentBreakdown])
+    return intentBreakdown
+  }, [intentBreakdown])
 
   if (loading) {
     return (
@@ -643,7 +501,7 @@ const HomePage: FC = () => {
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-surface-page text-text-muted border border-border">
-                  {isAllTime ? 'Current Cycle' : selectedCycle?.isCurrent ? 'Current' : 'Past Cycle'}
+                  {isAllTime || selectedCycle?.isCurrent ? 'Current Cycle' : 'Past Cycle'}
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-accent-bg text-accent border border-accent/20">
                   {usagePercent}% USED

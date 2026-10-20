@@ -260,10 +260,35 @@ export const creditApi = {
   },
 };
 
+export interface ICallAnalytics {
+  kpis: {
+    totalCalls: number;
+    resolvedCount: number;
+    escalatedCount: number;
+    missedCount: number;
+    liveCount: number;
+    callbackRequiredCount?: number;
+    redFlagCount: number;
+    reviewedCount?: number;
+    unreviewedCount?: number;
+    avgDurationSeconds: number;
+    totalDurationSeconds?: number;
+    cycleMinutesUsed?: number;
+    currentCycleDurationSeconds?: number;
+    currentCycleMinutesUsed?: number;
+    currentCycleTotalCalls?: number;
+  };
+  callVolume: { date: string; count: number }[];
+  statusBreakdown: { name: string; value: number }[];
+  intentBreakdown: { intent: string; count: number }[];
+  recentRedFlags: any[];
+}
+
 // Analytics API Functions
 export const analyticsApi = {
   getDashboard: () => apiClient.get<{ success: boolean; data: any }>('/analytics/analytics'),
-  getCallAnalytics: () => apiClient.get<{ success: boolean; data: any }>('/analytics/call-analytics'),
+  getCallAnalytics: (params?: { startDate?: string; endDate?: string; cycle?: string }) =>
+    apiClient.get<{ success: boolean; data: ICallAnalytics }>('/analytics/call-analytics', { params }),
   getCreditBalance: (userId?: string) => {
     const url = userId ? `/analytics/credit-balance/${userId}` : "/analytics/credit-balance";
     return apiClient.get<ICreditBalanceResponse>(url);
@@ -357,6 +382,9 @@ export const callApi = {
   },
 
   getRecordingBlob: (id: string) =>
+    apiClient.get<Blob>(`/calls/${id}/recording`, { responseType: "blob" }),
+
+  getRecording: (id: string) =>
     apiClient.get<Blob>(`/calls/${id}/recording`, { responseType: "blob" }),
 
   getRecordingStreamUrl: getCallRecordingStreamUrl,

@@ -68,53 +68,114 @@ export const getCallAnalytics = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoIso = thirtyDaysAgo.toISOString().replace('Z', '');
+    let filterStartDate: Date | null = null;
+    let filterEndDate: Date | null = null;
+
+    if (typeof req.query.startDate === 'string' && req.query.startDate.trim()) {
+      const d = new Date(req.query.startDate.trim());
+      if (!isNaN(d.getTime())) filterStartDate = d;
+    }
+    if (typeof req.query.endDate === 'string' && req.query.endDate.trim()) {
+      const d = new Date(req.query.endDate.trim());
+      if (!isNaN(d.getTime())) filterEndDate = d;
+    }
+
+    const isRangeFiltered = filterStartDate !== null || filterEndDate !== null;
+
+    const rangeMatch: any = {};
+    if (isRangeFiltered) {
+      const dateCondStr: any = {};
+      const dateCondObj: any = {};
+      if (filterStartDate) {
+        dateCondStr.$gte = filterStartDate.toISOString().replace('Z', '');
+        dateCondObj.$gte = filterStartDate;
+      }
+      if (filterEndDate) {
+        dateCondStr.$lt = filterEndDate.toISOString().replace('Z', '');
+        dateCondObj.$lt = filterEndDate;
+      }
+      rangeMatch.$or = [
+        { timestamp: dateCondStr },
+        { timestamp: dateCondObj },
+        { createdAt: dateCondObj },
+      ];
+    }
 
     // Active billing cycle (15th to 15th) window
     const now = new Date();
     const baseMonth = now.getDate() >= 15 ? now.getMonth() : now.getMonth() - 1;
     const baseYear = now.getFullYear();
-    const cycleStart = new Date(baseYear, baseMonth, 15, 0, 0, 0, 0);
-    const cycleEnd = new Date(baseYear, baseMonth + 1, 15, 0, 0, 0, 0);
-    const cycleStartIso = cycleStart.toISOString().replace('Z', '');
-    const cycleEndIso = cycleEnd.toISOString().replace('Z', '');
+    const activeCycleStart = new Date(baseYear, baseMonth, 15, 0, 0, 0, 0);
+    const activeCycleEnd = new Date(baseYear, baseMonth + 1, 15, 0, 0, 0, 0);
+    const activeCycleStartIso = activeCycleStart.toISOString().replace('Z', '');
+    const activeCycleEndIso = activeCycleEnd.toISOString().replace('Z', '');
+
+    const activeCycleMatch = {
+      $or: [
+        { timestamp: { $gte: activeCycleStartIso, $lt: activeCycleEndIso } },
+        { timestamp: { $gte: activeCycleStart, $lt: activeCycleEnd } },
+        { createdAt: { $gte: activeCycleStart, $lt: activeCycleEnd } },
+      ],
+    };
 
     // ── 1. KPIs ───────────────────────────────────────────────────────────────
-    const [totalCalls, statusCounts, durationResult, redFlagCount, reviewedCount, cycleStats] =
-      await Promise.all([
-        Call.countDocuments(),
+    const [
+      totalCalls,
+      statusCounts,
+      durationResult,
+      redFlagCount,
+      reviewedCount,
+      activeCycleStats,
+    ] = await Promise.all([
+      Call.countDocuments(rangeMatch),
 
-        Call.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Call.aggregate([
+        ...(isRangeFiltered ? [{ $match: rangeMatch }] : []),
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
 
-        Call.aggregate([
-          { $match: { duration: { $exists: true, $ne: null } } },
-          { $group: { _id: null, avg: { $avg: "$duration" } } },
-        ]),
-
-        Call.countDocuments({
-          $or: [{ is_red_flag: true }, { is_red_flagged: true }],
-        }),
-
-        Call.countDocuments({ is_reviewed: true }),
-
-        Call.aggregate([
-          {
-            $match: {
-              timestamp: { $gte: cycleStartIso, $lt: cycleEndIso },
-              duration: { $exists: true, $ne: null },
-            },
+      Call.aggregate([
+        {
+          $match: {
+            ...(isRangeFiltered ? rangeMatch : {}),
+            duration: { $exists: true, $ne: null },
           },
-          {
-            $group: {
-              _id: null,
-              totalDurationSeconds: { $sum: '$duration' },
-              callCount: { $sum: 1 },
-            },
+        },
+        {
+          $group: {
+            _id: null,
+            avg: { $avg: "$duration" },
+            totalDurationSeconds: { $sum: "$duration" },
           },
-        ]),
-      ]);
+        },
+      ]),
+
+      Call.countDocuments({
+        ...rangeMatch,
+        $or: [{ is_red_flag: true }, { is_red_flagged: true }],
+      }),
+
+      Call.countDocuments({
+        ...rangeMatch,
+        is_reviewed: true,
+      }),
+
+      Call.aggregate([
+        {
+          $match: {
+            ...activeCycleMatch,
+            duration: { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalDurationSeconds: { $sum: '$duration' },
+            callCount: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
 
     // Map status counts to named fields
     const statusMap: Record<string, number> = {};
@@ -122,35 +183,48 @@ export const getCallAnalytics = async (
       if (s._id) statusMap[s._id] = s.count;
     });
 
-    const currentCycleDurationSeconds = cycleStats[0]?.totalDurationSeconds || 0;
+    const currentCycleDurationSeconds = activeCycleStats[0]?.totalDurationSeconds || 0;
     const currentCycleMinutesUsed = Math.round(currentCycleDurationSeconds / 60);
+    const currentCycleTotalCalls = activeCycleStats[0]?.callCount || 0;
+
+    const totalDurationSeconds = durationResult[0]?.totalDurationSeconds || 0;
+    const cycleMinutesUsed = Math.round(totalDurationSeconds / 60);
 
     const kpis = {
       totalCalls,
       resolvedCount: statusMap["resolved"] || 0,
       escalatedCount: statusMap["escalated"] || 0,
       missedCount: statusMap["missed"] || 0,
-      liveCount: statusMap["live"] || (totalCalls - (statusMap["resolved"] || 0) - (statusMap["escalated"] || 0) - (statusMap["missed"] || 0)),
+      callbackRequiredCount: statusMap["callback_required"] || 0,
+      liveCount: statusMap["live"] || Math.max(0, totalCalls - (statusMap["resolved"] || 0) - (statusMap["escalated"] || 0) - (statusMap["missed"] || 0) - (statusMap["callback_required"] || 0)),
       redFlagCount,
       reviewedCount,
       unreviewedCount: Math.max(0, totalCalls - reviewedCount),
       avgDurationSeconds: Math.round(durationResult[0]?.avg || 0),
+      totalDurationSeconds,
+      cycleMinutesUsed,
       currentCycleDurationSeconds,
       currentCycleMinutesUsed,
-      currentCycleTotalCalls: cycleStats[0]?.callCount || 0,
+      currentCycleTotalCalls,
     };
 
-    // ── 2. Call volume — last 30 days (filter FIRST with index) ────────────
+    // ── 2. Call volume ────────────────────────────────────────────────────────
+    let volumeMatch = rangeMatch;
+    if (!isRangeFiltered) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoIso = thirtyDaysAgo.toISOString().replace('Z', '');
+      volumeMatch = {
+        $or: [
+          { timestamp: { $gte: thirtyDaysAgoIso } },
+          { timestamp: { $gte: thirtyDaysAgo } },
+          { createdAt: { $gte: thirtyDaysAgo } },
+        ],
+      };
+    }
+
     const volumeRaw = await Call.aggregate([
-      {
-        $match: {
-          $or: [
-            { timestamp: { $gte: thirtyDaysAgoIso } },
-            { timestamp: { $gte: thirtyDaysAgo } },
-            { createdAt: { $gte: thirtyDaysAgo } },
-          ],
-        },
-      },
+      { $match: volumeMatch },
       {
         $addFields: {
           parsedDate: {
@@ -175,26 +249,42 @@ export const getCallAnalytics = async (
       { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
     ]);
 
-    // Fill in all 30 days (including zeros)
+    // Fill in days
     const volumeMap: Record<string, number> = {};
     volumeRaw.forEach((d: any) => {
-      const date = new Date(d._id.year, d._id.month - 1, d._id.day);
-      const label = date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-      volumeMap[label] = d.count;
+      if (d._id?.year && d._id?.month && d._id?.day) {
+        const date = new Date(d._id.year, d._id.month - 1, d._id.day);
+        const label = date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        volumeMap[label] = d.count;
+      }
     });
 
-    const callVolume = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const label = d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-      callVolume.push({ date: label, count: volumeMap[label] || 0 });
+    const callVolume: { date: string; count: number }[] = [];
+    if (filterStartDate && filterEndDate) {
+      const isCurrentCycle = filterEndDate.getTime() > now.getTime() && filterStartDate.getTime() <= now.getTime();
+      const endLimit = isCurrentCycle ? now : filterEndDate;
+      const cur = new Date(filterStartDate);
+      while (cur <= endLimit) {
+        const label = cur.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        callVolume.push({ date: label, count: volumeMap[label] || 0 });
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const label = d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        callVolume.push({ date: label, count: volumeMap[label] || 0 });
+      }
     }
 
     // ── 3. Status breakdown (for donut chart) ─────────────────────────────
@@ -204,49 +294,51 @@ export const getCallAnalytics = async (
 
     // ── 4. Intent breakdown ────────────────────────────────────────────────
     const allCallsWithIntent = await Call.find({
+      ...(isRangeFiltered ? rangeMatch : {}),
       $or: [
         { detected_intent: { $exists: true, $nin: [null, ''] } },
         { call_category: { $exists: true, $nin: [null, ''] } },
-      ]
-    } as any).select('detected_intent call_category').lean()
+      ],
+    } as any).select('detected_intent call_category').lean();
 
     const normalizeIntent = (raw?: string, category?: string): string => {
       if (category && category !== 'inquiry') {
-        return category.charAt(0).toUpperCase() + category.slice(1)
+        return category.charAt(0).toUpperCase() + category.slice(1);
       }
-      if (!raw || raw.toLowerCase() === 'unknown') return 'General Query'
-      const lower = raw.toLowerCase()
-      if (lower.includes('sale') || lower.includes('buy') || lower.includes('pricing') || lower.includes('purchase')) return 'Sales'
-      if (lower.includes('support') || lower.includes('help') || lower.includes('issue') || lower.includes('bug')) return 'Support'
-      if (lower.includes('book') || lower.includes('demo') || lower.includes('consultation')) return 'Booking'
-      if (lower.includes('complaint') || lower.includes('complain')) return 'Complaint'
-      if (lower.includes('tech')) return 'Technical'
-      if (lower.includes('bill')) return 'Billing'
-      if (lower.includes('inquir') || lower.includes('query')) return 'Product Inquiry'
+      if (!raw || raw.toLowerCase() === 'unknown') return 'General Query';
+      const lower = raw.toLowerCase();
+      if (lower.includes('sale') || lower.includes('buy') || lower.includes('pricing') || lower.includes('purchase')) return 'Sales';
+      if (lower.includes('support') || lower.includes('help') || lower.includes('issue') || lower.includes('bug')) return 'Support';
+      if (lower.includes('book') || lower.includes('demo') || lower.includes('consultation')) return 'Booking';
+      if (lower.includes('complaint') || lower.includes('complain')) return 'Complaint';
+      if (lower.includes('tech')) return 'Technical';
+      if (lower.includes('bill')) return 'Billing';
+      if (lower.includes('inquir') || lower.includes('query')) return 'Product Inquiry';
 
-      const clean = raw.replace(/_/g, ' ').trim()
-      return clean.length > 20 ? clean.slice(0, 17) + '...' : clean.charAt(0).toUpperCase() + clean.slice(1)
-    }
+      const clean = raw.replace(/_/g, ' ').trim();
+      return clean.length > 20 ? clean.slice(0, 17) + '...' : clean.charAt(0).toUpperCase() + clean.slice(1);
+    };
 
-    const intentMap: Record<string, number> = {}
+    const intentMap: Record<string, number> = {};
     allCallsWithIntent.forEach((c: any) => {
-      const intentName = normalizeIntent(c.detected_intent, c.call_category)
-      intentMap[intentName] = (intentMap[intentName] || 0) + 1
-    })
+      const intentName = normalizeIntent(c.detected_intent, c.call_category);
+      intentMap[intentName] = (intentMap[intentName] || 0) + 1;
+    });
 
     const intentBreakdown = Object.entries(intentMap).map(([intent, count]) => ({
       intent,
       count,
-    }))
+    }));
 
     // ── 5. Recent Red Flags ────────────────────────────────────────────────
     const recentRedFlags = await Call.find({
+      ...(isRangeFiltered ? rangeMatch : {}),
       $or: [{ is_red_flag: true }, { is_red_flagged: true }],
     })
       .select('-transcript')
       .sort({ timestamp: -1, createdAt: -1, _id: -1 })
       .limit(5)
-      .lean()
+      .lean();
 
     res.json({
       success: true,

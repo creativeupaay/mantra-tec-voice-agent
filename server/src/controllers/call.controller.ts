@@ -60,7 +60,27 @@ function getCallTime(call: Record<string, any>): number {
   return 0
 }
 
-function getDatePresetRange(preset: string, dateFrom?: string, dateTo?: string): { startMs: number | null; endMs: number | null } {
+function getDatePresetRange(
+  preset: string,
+  dateFrom?: string,
+  dateTo?: string,
+  startDate?: string,
+  endDate?: string,
+): { startMs: number | null; endMs: number | null; isExclusiveEnd?: boolean } {
+  if (startDate || endDate) {
+    let startMs: number | null = null
+    let endMs: number | null = null
+    if (startDate) {
+      const d = new Date(startDate)
+      if (!isNaN(d.getTime())) startMs = d.getTime()
+    }
+    if (endDate) {
+      const d = new Date(endDate)
+      if (!isNaN(d.getTime())) endMs = d.getTime()
+    }
+    return { startMs, endMs, isExclusiveEnd: true }
+  }
+
   if (!preset || preset === 'all') return { startMs: null, endMs: null }
 
   const now = new Date()
@@ -120,6 +140,8 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
     const datePreset = typeof req.query.datePreset === 'string' ? req.query.datePreset.trim() : 'all'
     const dateFrom = typeof req.query.dateFrom === 'string' ? req.query.dateFrom.trim() : ''
     const dateTo = typeof req.query.dateTo === 'string' ? req.query.dateTo.trim() : ''
+    const startDateParam = typeof req.query.startDate === 'string' ? req.query.startDate.trim() : ''
+    const endDateParam = typeof req.query.endDate === 'string' ? req.query.endDate.trim() : ''
     const callIdParam = typeof req.query.callId === 'string' ? req.query.callId.trim() : ''
 
     // 1. If explicit callId is passed, return single direct match
@@ -205,7 +227,7 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
     }
 
     // Apply Date Range Preset filter directly at DB level
-    const { startMs, endMs } = getDatePresetRange(datePreset, dateFrom, dateTo)
+    const { startMs, endMs, isExclusiveEnd } = getDatePresetRange(datePreset, dateFrom, dateTo, startDateParam, endDateParam)
     if (startMs !== null || endMs !== null) {
       const dateCondStr: any = {}
       const dateCondObj: any = {}
@@ -214,8 +236,9 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
         dateCondObj.$gte = new Date(startMs)
       }
       if (endMs !== null) {
-        dateCondStr.$lte = new Date(endMs).toISOString()
-        dateCondObj.$lte = new Date(endMs)
+        const op = isExclusiveEnd ? '$lt' : '$lte'
+        dateCondStr[op] = new Date(endMs).toISOString().replace('Z', '')
+        dateCondObj[op] = new Date(endMs)
       }
       queryConditions.push({
         $or: [
@@ -228,14 +251,18 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
 
     const filter = queryConditions.length > 0 ? { $and: queryConditions } : {}
 
+    // Base conditions for status counts: keep date, search, intent filters but ignore status/review selection
+    const baseConditions = queryConditions.filter(c => !c.status && !c.is_reviewed && !c.$or?.some((x: any) => x.is_red_flag || x.is_reviewed))
+    const baseFilter = baseConditions.length > 0 ? { $and: baseConditions } : {}
+
     // Tab counts and total count for pagination directly from MongoDB in parallel
     const [totalCalls, escalatedCount, resolvedCount, callbackCount, reviewedCount, unreviewedCount] = await Promise.all([
       Call.countDocuments(filter),
-      Call.countDocuments({ status: 'escalated' }),
-      Call.countDocuments({ status: 'resolved' }),
-      Call.countDocuments({ status: 'callback_required' }),
-      Call.countDocuments({ is_reviewed: true }),
-      Call.countDocuments({ $or: [{ is_reviewed: false }, { is_reviewed: { $exists: false } }] }),
+      Call.countDocuments({ ...baseFilter, status: 'escalated' }),
+      Call.countDocuments({ ...baseFilter, status: 'resolved' }),
+      Call.countDocuments({ ...baseFilter, status: 'callback_required' }),
+      Call.countDocuments({ ...baseFilter, is_reviewed: true }),
+      Call.countDocuments({ ...baseFilter, $or: [{ is_reviewed: false }, { is_reviewed: { $exists: false } }] }),
     ])
 
     // Calculate pagination parameters

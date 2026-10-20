@@ -19,7 +19,7 @@ const callSchema = new Schema(
     caller_name: { type: String }, // Resolved from CRM / phone lookup
     caller_email: { type: String }, // Customer email address
     phone_number: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
+    timestamp: { type: Schema.Types.Mixed, default: Date.now },
     duration: { type: Number }, // seconds; null/absent = in progress
     status: {
       type: String,
@@ -74,7 +74,7 @@ export interface ICall {
   caller_name?: string;
   caller_email?: string;
   phone_number: string;
-  timestamp: Date;
+  timestamp: Date | string;
   duration?: number;
   status: CallStatus;
   is_red_flag: boolean;
