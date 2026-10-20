@@ -14,6 +14,7 @@ import {
   sendEscalationEmailNotification,
   sendCallbackEmailNotification,
 } from '../services/email.service.js'
+import { STANDARDIZED_INTENTS } from '../config/intents.js'
 
 /** Normalize call docs so the client always receives complete UI fields. */
 function normalizeCall(call: Record<string, any>) {
@@ -636,3 +637,36 @@ export const batchUpdateCallReviewed = async (req: Request, res: Response, next:
     next(error)
   }
 }
+
+/**
+ * Return standardized intent categories with live call counts from MongoDB.
+ */
+export const getCallIntents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const countsAgg = await Call.aggregate<{ _id: string; count: number }>([
+      { $match: { detected_intent: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$detected_intent', count: { $sum: 1 } } },
+    ])
+
+    const countMap = new Map<string, number>()
+    for (const item of countsAgg) {
+      if (item._id) {
+        countMap.set(item._id, item.count)
+      }
+    }
+
+    const data = STANDARDIZED_INTENTS.map(item => ({
+      id: item.id,
+      label: item.label,
+      count: countMap.get(item.id) || 0,
+    }))
+
+    res.json({
+      success: true,
+      data,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+

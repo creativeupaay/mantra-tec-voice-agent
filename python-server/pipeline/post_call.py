@@ -1,7 +1,17 @@
-"""Post-call pipeline for LLM extraction and long-term memory updates."""
-
 import re
-from typing import List, Optional
+from typing import List, Literal, Optional
+
+StandardizedIntent = Literal[
+    "Sales & Purchase",
+    "Technical Support",
+    "Repair & RMA",
+    "RD Service & Recharge",
+    "Order & Delivery",
+    "Customer Care & Escalation",
+    "General Inquiry",
+    "Misdirected / Wrong Number",
+    "Incomplete / Dropped Call",
+]
 
 from google import genai
 from google.genai import types
@@ -189,8 +199,14 @@ class PostCallExtraction(BaseModel):
     summary: str = Field(
         ..., description="A detailed summary of the conversation and decisions made."
     )
-    intent: str = Field(
-        ..., description="The primary reason for the call (e.g., Support, Sales, Booking, Inquiry)."
+    intent: StandardizedIntent = Field(
+        default="General Inquiry",
+        description=(
+            "The primary standardized category for the call. MUST strictly be one of: "
+            "'Sales & Purchase', 'Technical Support', 'Repair & RMA', 'RD Service & Recharge', "
+            "'Order & Delivery', 'Customer Care & Escalation', 'General Inquiry', "
+            "'Misdirected / Wrong Number', 'Incomplete / Dropped Call'."
+        ),
     )
     call_category: CallCategory = Field(
         default=CallCategory.INQUIRY, description="Categorization of the call."
@@ -310,7 +326,7 @@ async def run_post_call_pipeline(
                 duration=max(0, int(duration_seconds or 0)),
                 transcript=None,
                 summary="Call ended without audio or transcript recorded.",
-                intent="None",
+                intent="Incomplete / Dropped Call",
                 call_category=CallCategory.INQUIRY,
                 outcome="no_transcript",
                 status=call_status,
@@ -346,6 +362,17 @@ async def run_post_call_pipeline(
                     system_instruction=(
                         "You are a post-call analyst for Mantra Tech. Analyze the following transcript "
                         "and extract a detailed summary, the primary intent, and categorize the call.\n\n"
+                        "STANDARDIZED INTENT CATEGORIES:\n"
+                        "You MUST classify 'intent' strictly into one of the following 9 exact standardized categories:\n"
+                        "1. 'Sales & Purchase': Device purchases (MFS100, MFS110, Servico), bulk/wholesale orders, quotations, pricing, attendance machines, dealership inquiries.\n"
+                        "2. 'Technical Support': Device not working, light not turning on, sensor failure, driver installation, device errors, connectivity, lock/unlock.\n"
+                        "3. 'Repair & RMA': Device sent for repair, RMA status, warranty return/replacement.\n"
+                        "4. 'RD Service & Recharge': RD service renewal, subscription expiration, recharge payment issue, whitelisting/validity.\n"
+                        "5. 'Order & Delivery': Order dispatch status, courier/AWB tracking, shipment delay.\n"
+                        "6. 'Customer Care & Escalation': Support helpline number request, executive callback request, complaints/escalations.\n"
+                        "7. 'General Inquiry': Company office address, working hours, general questions.\n"
+                        "8. 'Misdirected / Wrong Number': Calling for Myntra fashion/e-commerce, wrong numbers, misdials.\n"
+                        "9. 'Incomplete / Dropped Call': Dropped calls, silence, blanks, accidental dial.\n\n"
                         "CRITICAL RULES FOR SUPPORT CALLS & ESCALATION:\n"
                         "1. GIVING SUPPORT NUMBER OR SUPPORT EMAIL IS STANDARD RESOLVED ROUTING (NOT AN ESCALATION):\n"
                         "   - If the agent provided, dictated, or guided the caller to the support helpline number "
@@ -428,7 +455,7 @@ async def run_post_call_pipeline(
             # Graceful fallback if LLM fails
             extraction = PostCallExtraction(
                 summary="Post-call LLM extraction failed.",
-                intent="Unknown",
+                intent="General Inquiry",
                 call_category=CallCategory.INQUIRY,
                 long_term_notes=[],
                 requires_ticket=False,
@@ -439,7 +466,7 @@ async def run_post_call_pipeline(
     else:
         extraction = PostCallExtraction(
             summary="No transcript available for this call.",
-            intent="Unknown",
+            intent="Incomplete / Dropped Call",
             call_category=CallCategory.INQUIRY,
             long_term_notes=[],
             requires_ticket=False,

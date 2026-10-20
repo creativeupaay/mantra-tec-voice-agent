@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import Modal from '../components/Modal'
 import { callApi } from '../api/client'
-import { ICall, CallStatus } from '../types/call'
+import { ICall, CallStatus, IIntentCategory } from '../types/call'
 import CallFilters, { DateFilterPreset } from '../components/calls/CallFilters'
 import CallTable from '../components/calls/CallTable'
 import CallDetailPanel from '../components/calls/CallDetailPanel'
@@ -30,6 +30,7 @@ const CallsPage: FC = () => {
     (urlTab as any) || 'all'
   )
   const [intentFilter, setIntentFilter] = useState('all')
+  const [intentCategories, setIntentCategories] = useState<IIntentCategory[]>([])
   const [reviewFilter, setReviewFilter] = useState<'all' | 'unreviewed' | 'reviewed'>('all')
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -60,6 +61,22 @@ const CallsPage: FC = () => {
       setToast(null)
     }, 4500)
   }
+
+  // Fetch standardized intent categories from backend
+  const fetchIntents = async () => {
+    try {
+      const res = await callApi.getIntents()
+      if (res && res.success && Array.isArray(res.data)) {
+        setIntentCategories(res.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch standardized intent categories:', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchIntents()
+  }, [])
 
   // Debounce search input for 300ms before sending backend search request
   useEffect(() => {
@@ -276,15 +293,6 @@ const CallsPage: FC = () => {
     setIsModalOpen(true)
   }
 
-  const intentOptions = useMemo(() => {
-    const intents = new Set<string>()
-    calls.forEach(call => {
-      const intent = (call.detected_intent ?? '').trim()
-      if (intent) intents.add(intent)
-    })
-    return Array.from(intents).sort((a, b) => a.localeCompare(b))
-  }, [calls])
-
   const startIndex = (page - 1) * rowsPerPage
   const endIndex = Math.min(totalCalls, startIndex + calls.length)
 
@@ -344,7 +352,7 @@ const CallsPage: FC = () => {
         setActiveFilter={setActiveFilter}
         intentFilter={intentFilter}
         setIntentFilter={setIntentFilter}
-        intentOptions={intentOptions}
+        intentCategories={intentCategories}
         reviewFilter={reviewFilter}
         setReviewFilter={setReviewFilter}
         datePreset={datePreset}

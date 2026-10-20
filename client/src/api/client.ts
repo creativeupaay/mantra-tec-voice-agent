@@ -11,6 +11,7 @@ import {
 import {
   ICallListResponse,
   ICallResponse,
+  IIntentsResponse,
   CallStatus,
 } from "../types/call";
 
@@ -308,6 +309,11 @@ export const notificationApi = {
 export const callApi = {
   getAll: async (params?: Record<string, any>): Promise<ICallListResponse> => {
     const response = await apiClient.get<ICallListResponse>("/calls", { params });
+    return response.data;
+  },
+
+  getIntents: async (): Promise<IIntentsResponse> => {
+    const response = await apiClient.get<IIntentsResponse>("/calls/intents");
     return response.data;
   },
 

@@ -56,3 +56,16 @@ export interface ICallResponse {
   success: boolean
   data: ICall
 }
+
+export interface IIntentCategory {
+  id: string
+  label: string
+  count?: number
+}
+
+export interface IIntentsResponse {
+  success: boolean
+  data: IIntentCategory[]
+}
+
+

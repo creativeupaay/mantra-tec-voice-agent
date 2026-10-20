@@ -12,7 +12,7 @@ import {
   PhoneOff,
   Filter,
 } from 'lucide-react'
-import { CallStatus } from '../../types/call'
+import { CallStatus, IIntentCategory } from '../../types/call'
 
 export type DateFilterPreset =
   | 'all'
@@ -29,7 +29,7 @@ interface CallFiltersProps {
   setActiveFilter: (val: 'all' | CallStatus | 'flagged') => void
   intentFilter: string
   setIntentFilter: (val: string) => void
-  intentOptions: string[]
+  intentCategories?: IIntentCategory[]
   reviewFilter: 'all' | 'unreviewed' | 'reviewed'
   setReviewFilter: (val: 'all' | 'unreviewed' | 'reviewed') => void
   datePreset: DateFilterPreset
@@ -64,7 +64,7 @@ const CallFilters: FC<CallFiltersProps> = ({
   setActiveFilter,
   intentFilter,
   setIntentFilter,
-  intentOptions,
+  intentCategories = [],
   reviewFilter,
   setReviewFilter,
   datePreset,
@@ -143,17 +143,17 @@ const CallFilters: FC<CallFiltersProps> = ({
         </div>
 
         {/* Intent Dropdown */}
-        <div className="relative shrink-0 sm:w-44">
+        <div className="relative shrink-0 sm:w-52">
           <select
             value={intentFilter}
             onChange={e => setIntentFilter(e.target.value)}
             className={selectClass}
             aria-label="Filter by intent"
           >
-            <option value="all">All Intents</option>
-            {intentOptions.map(intent => (
-              <option key={intent} value={intent}>
-                {intent}
+            <option value="all">All Categories</option>
+            {intentCategories.map(cat => (
+              <option key={cat.id} value={cat.id}>
+                {cat.label} {cat.count !== undefined ? `(${cat.count})` : ''}
               </option>
             ))}
           </select>

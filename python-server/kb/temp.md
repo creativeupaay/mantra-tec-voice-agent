@@ -158,7 +158,7 @@ Mantra's product range spans fingerprint sensors, iris sensors, face recognition
 ### 4.1 Fingerprint Sensors / Scanners
 | Product | Description |
 |---|---|
-| **MFS110** | UIDAI-certified L1 fingerprint scanner with FAP10 optical sensor for secure authentication. |
+| **MFS110** | UIDAI-certified L1 fingerprint scanner with FAP10 optical sensor for secure authentication. Retail single unit price: ₹2,499 all-inclusive on Servico (base ₹2,118 + 18% GST). Includes 1-yr warranty & 1-yr RD service. |
 | **MARC10** | Ultra-slim capacitive fingerprint module for mobile and handheld integration. |
 | **MARC11** | L1-certified capacitive fingerprint scanner for secure digital identity. |
 | **MELO20** | Rugged FAP20 optical fingerprint scanner with IP65 protection and latent finger detection. |

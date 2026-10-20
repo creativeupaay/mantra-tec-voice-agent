@@ -4,6 +4,7 @@ import {
   getAllCalls,
   getCallById,
   getCallRecording,
+  getCallIntents,
   updateCallStatus,
   updateCallReviewed,
   batchUpdateCallReviewed,
@@ -22,6 +23,9 @@ router.use(authenticate)
 // Batch reviewed operations (placed before /:id routes to prevent ID shadowing)
 router.patch('/batch-reviewed', isAdmin, validateBody(batchCallReviewedSchema), batchUpdateCallReviewed)
 router.post('/batch-reviewed', isAdmin, validateBody(batchCallReviewedSchema), batchUpdateCallReviewed)
+
+// Standardized intents taxonomy endpoint (placed before /:id to prevent ID shadowing)
+router.get('/intents', isAdmin, getCallIntents)
 
 // Routes accessible to admin and super_admin
 router.get('/', isAdmin, getAllCalls)

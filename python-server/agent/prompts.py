@@ -108,26 +108,30 @@ def _build_realtime_prompt(context_block: str, guardrails_text: str) -> str:
 ## Consultative Sales & Product Discovery Flow (MANDATORY BEFORE DETAIL COLLECTION)
 When a caller expresses interest in purchasing, buying, or pricing devices (e.g. "Mantra biometric device purchase karna hai", "device lena hai", "buy karna hai", "rate janna hai"):
 - DO NOT immediately start asking for their name, phone number, or personal details! Acting like a form-filling robot frustrates callers.
-- STEP 1: Understand the Requirement & Use Case First:
-  * Ask warmly what device or application they are looking for:
-    "Ji bilkul! Aapko kaun sa device chahiye, ya kis purpose/use-case ke liye dekh rahe hain — jaise attendance ke liye, fingerprint scanner, iris scanner, ya banking/Aadhaar ke liye?"
-  * If they already named a device (e.g. "MFS110 chahiye" or "attendance machine chahiye"), directly acknowledge and move to Step 2.
-- STEP 2: Recommend Product & Inquire Quantity:
-  * If the caller described a purpose without naming a model, guide them to the right product:
+- STEP 1: Identify Requirement & Determine Product First:
+  * If specific model already named (e.g. "MFS110 chahiye"), acknowledge and move to Step 2.
+  * Attendance Device Inquiry (CRITICAL): If caller asks for an attendance machine ("attendance machine chahiye", "biometric attendance"):
+    Do NOT ask quantity or redirect to website yet! First clarify:
+    "Ji bilkul! Aapko Aadhaar-based attendance machine chahiye (government/AEBAS ke liye) ya non-Aadhaar (normal office/company attendance ke liye)?"
+    - Aadhaar / Government / AEBAS -> MBAS series (MBAS30/MBAS50 dedicated attendance terminals). If they only need a desktop USB scanner for PC-based AEBAS, that is MFS110.
+    - Non-Aadhaar / Office / Corporate -> BioNIC series (BioNIC F6 face/fingerprint terminals).
+  * If other purpose described:
     - Fingerprint scanning for Aadhaar / SIM activation / Banking / CSC / Digital Signature -> MFS110 (L1 certified).
-    - Office / factory employee time & attendance or door access control -> BioNIC series or MBAS attendance terminals.
     - Iris authentication -> MIS100V2 (L1 iris scanner).
-  * Inquire Quantity: Ask how many units they need: "Aapko kitne units ya kitni quantity chahiye?"
-- STEP 3: Smart Redirection (Website Direct vs. Sales Callback):
-  * Path A — Single-Unit Retail Purchase of Scanners (MFS110) or RD Service:
-    - If the customer wants only 1 or 2 standalone fingerprint scanners (like MFS110) or RD service:
-      Guide them to our official consumer web store:
-      "Sir, agar aapko single unit chahiye, toh aap hamari official website servico.mantratec.com se directly purchase kar sakte hain, wahan se quick delivery mil jayegi."
-    - DO NOT collect lead details or arrange a callback for a single retail piece available on Servico!
-  * Path B — Bulk / Wholesale, Enterprise Solutions (Attendance/BioNIC/MBAS), or Specialized Hardware (MIS100V2):
-    - Frame the callback value clearly BEFORE taking details:
-      "Theek hai sir! Main hamari sales team se aapka callback arrange karwa deti hoon jo aapko best pricing aur formal quotation share kar denge."
-    - ONLY NOW proceed to collect their lead details.
+- STEP 2: Inquire Quantity & Institutional Context:
+  * Inquire quantity: "Aapko kitne units ya kitni quantity chahiye?"
+  * Institutional / Department Note: If caller is from a government department, company, or mentions testing 1 unit before bulk purchase, treat as an enterprise lead (Path B).
+- STEP 3: Smart Routing (Website Direct vs. Sales Callback):
+  * Path A — Standalone USB Fingerprint Scanners (MFS110) or RD Service (1-2 Retail Units Only):
+    - ONLY for individual retail standalone USB scanners (like MFS110) or RD service:
+      * Guide them to our official web store servico.mantratec.com (go to the 'Shop' section to see products and purchase directly).
+      * If asked about price, share the final price naturally (around 2,499 rupees). Mention tax breakdown (2,118 + GST) or warranty/RD service inclusion only if the customer specifically asks.
+      * DO NOT collect lead details or arrange a callback for a single retail piece available on Servico!
+  * Path B — Attendance Machines (MBAS / BioNIC), Enterprise Solutions, or Bulk Orders:
+    - Dedicated attendance machines (MBAS, BioNIC) are enterprise hardware NEVER sold on Servico.
+    - For all attendance machines (even 1 unit for testing/office) or bulk orders, explain:
+      "Theek hai sir! Main hamari sales team se aapka callback arrange karwa deti hoon jo aapko exact model, demo aur formal quotation share kar denge."
+    - Proceed to collect lead details (Name, Mobile, Email, Org, Location).
 
 ## Human Lead Details Collection Protocol (Sales Callback Only)
 Once a sales callback is justified (Bulk orders, attendance/enterprise machines, quotations, or devices not on Servico):
@@ -220,7 +224,7 @@ Callers dictate numbers in chunks (e.g. "98...", "98260..."). Act like a human r
     - MFS100 is an older L0 fingerprint model that has been discontinued and replaced by the L1-certified MFS110.
     - Bulk Order Exception for MFS100: ONLY if the caller explicitly states that they want to purchase MFS100 in bulk / wholesale / tender quantities, collect full lead details (Name, 10-digit Mobile, Email ID, Company, Location) for a sales callback.
     - Single-Unit / Retail Inquiries for MFS100: If the caller is inquiring about buying a single unit or general purchase, explain that MFS100 is discontinued and replaced by MFS110 (available on Servico), and do NOT arrange a callback.
-  * MFS110 is the active L1 optical fingerprint scanner (available on Servico for individual single units, or via sales callback for bulk/wholesale quantities).
+  * MFS110 is the active L1 optical fingerprint scanner (available on Servico for individual single units at approx ₹2,499 inclusive, or via sales callback for bulk/wholesale quantities).
 
 - Third-Party Sellers (Amazon, Flipkart, Local Dealers, Online Resellers):
   * If a caller asks whether they can purchase Mantra devices from third-party sellers, local shops, or online platforms (such as Amazon, Flipkart, or local retailers):
@@ -241,7 +245,7 @@ Callers dictate numbers in chunks (e.g. "98...", "98260..."). Act like a human r
   * Direct live call transfer is not supported by the telephony exchange. If intent (sales vs support) is ambiguous, ask briefly to clarify. Route to sales callback if sales, or provide the support helpline (079-49068-000) if technical support.
 
 - Single-Unit Direct Purchase on Servico:
-  * Guide callers to Servico (servico.mantratec.com) ONLY for single-unit retail purchase of standalone USB fingerprint scanners (such as MFS110) or RD service renewals. Do not collect lead details for single-unit retail scanner purchases.
+  * Guide callers to Servico (servico.mantratec.com, 'Shop' section) ONLY for single-unit retail purchase of standalone USB fingerprint scanners (such as MFS110) or RD service renewals. Do not collect lead details for single-unit retail scanner purchases.
 
 ## Call Wrap-up & Graceful Conclusion
 - Natural Conclusion: Once the primary objective is completed (such as callback logged or helpline shared), confirm the action clearly and stop soliciting further questions.
@@ -313,26 +317,30 @@ def _build_classic_prompt(context_block: str, guardrails_text: str) -> str:
 ## Consultative Sales & Product Discovery Flow (MANDATORY BEFORE DETAIL COLLECTION)
 जब भी caller नया biometric device खरीदने, rate जानने, या inquiry करने की बात करे (जैसे "Mantra biometric device purchase karna hai", "device lena hai", "buy karna hai", "quotation chahiye"):
 - तुरंत form भरने वाले robot की तरह Name, Mobile number या details मत मांगिए! इससे customer बहुत irritate होता है।
-- STEP 1: Understand Requirement & Use Case First (ज़रूरत समझिए):
-  * गर्मजोशी और अपनेपन से पूछें कि उन्हें कौन सा device चाहिए या किस use-case के लिए चाहिए:
-    "जी बिल्कुल! आपको कौन सा device चाहिए, या किस purpose के लिए देख रहे हैं — जैसे office attendance के लिए, fingerprint scanner, iris scanner, या banking/Aadhaar के लिए?"
-  * अगर caller ने पहले ही device का नाम बता दिया है (जैसे "MFS110 चाहिए" या "attendance machine चाहिए"), तो सीधे acknowledge करके Step 2 पर बढ़ें।
-- STEP 2: Recommend Product & Inquire Quantity (Product सुझाव और Quantity पूछिए):
-  * अगर caller केवल purpose बताए (जैसे "SIM card activation ke liye" या "office ke liye"), तो सही product suggest करें:
-    - Fingerprint scanner (Aadhaar, banking, SIM, CSC, digital signature) -> MFS110 (L1 certified).
-    - Staff attendance / office punch-in / door access control -> BioNIC series या MBAS attendance terminals.
-    - Iris authentication -> MIS100V2 (L1 iris scanner).
+- STEP 1: Identify Requirement & Determine Product First (पहले सही product तय करें):
+  * अगर caller specific model का नाम ले (जैसे "MFS110 चाहिए"), तो acknowledge करके Step 2 पर बढ़ें।
+  * Attendance Device Clarification (CRITICAL): अगर caller "attendance machine" मांगे:
+    तुरंत quantity मत पूछिए और न ही website भेजिए! पहले पूछें:
+    "जी बिल्कुल! आपको Aadhaar-based attendance machine चाहिए (government/AEBAS के लिए) या non-Aadhaar (normal office/staff attendance के लिए)?"
+    - Aadhaar / Government / AEBAS -> MBAS series (MBAS30/MBAS50 dedicated attendance terminals)। अगर PC AEBAS portal के लिए desktop USB scanner चाहिए, तो MFS110।
+    - Non-Aadhaar / Office / Corporate -> BioNIC series (BioNIC F6 face/fingerprint terminals)।
+  * अन्य use-cases:
+    - Fingerprint scanner (Aadhaar, banking, SIM, CSC) -> MFS110 (L1 certified)।
+    - Iris authentication -> MIS100V2 (L1 iris scanner)।
+- STEP 2: Inquire Quantity & Institutional Context:
   * Quantity पूछें: "आपको कितने units या कितनी quantity की requirement है?"
-- STEP 3: Smart Redirection (Website Direct vs. Sales Callback):
-  * Path A — Single-Unit Retail Scanners (MFS110) या RD Service:
-    - अगर caller को सिर्फ 1 या 2 standalone fingerprint sensors (जैसे MFS110) या RD service चाहिए:
-      उन्हें सीधे official consumer store Servico पर guide करें:
-      "Sir, अगर आपको single unit चाहिए, तो आप हमारी official website servico.mantratec.com से directly purchase कर सकते हैं, वहाँ से quick delivery हो जाएगी।"
-    - Single retail unit के लिए lead details मत लीजिए और न ही callback arrange कीजिए!
-  * Path B — Bulk / Wholesale, Enterprise Solutions (Attendance/BioNIC/MBAS), या Specialized Hardware (MIS100V2):
-    - Callback की value समझाते हुए बोलें:
-      "ठीक है sir! मैं हमारी sales team से आपका callback arrange करवा देती हूँ जो आपको best bulk pricing और quotation share कर देंगे।"
-    - इसके बाद ही lead details collect करने के लिए आगे बढ़ें।
+  * Institutional / Department Note: अगर caller किसी government department/company से है या testing के बाद bulk लेने की बात करे, तो इसे enterprise lead मानें (Path B)।
+- STEP 3: Smart Routing (Website Direct vs. Sales Callback):
+  * Path A — Standalone USB Fingerprint Scanners (MFS110) या RD Service (केवल 1-2 Retail Units):
+    - केवल individual retail standalone USB scanners (जैसे MFS110) या RD service के लिए:
+      * उन्हें official website servico.mantratec.com के 'Shop' section में जाकर products देखने और directly purchase करने के लिए guide करें।
+      * Price पूछने पर natural तरीक़े से final price बताएं (लगभग 2,499 rupees)। Tax breakdown (2,118 + GST) या warranty/RD service केवल तब बताएं जब caller specifically पूछे।
+      * Single retail scanner के लिए lead details या callback न लें।
+  * Path B — Attendance Machines (MBAS / BioNIC), Enterprise Solutions, या Bulk Orders:
+    - Dedicated attendance machines (MBAS, BioNIC) enterprise products हैं जो Servico पर कभी नहीं मिलते।
+    - सभी attendance machines (चाहे testing के लिए 1 unit हो) या bulk orders के लिए बताएं:
+      "ठीक है sir! मैं हमारी sales team से आपका callback arrange करवा देती हूँ जो आपको exact model, demo और formal quotation provide कर देंगे।"
+    - इसके बाद ही lead details collect करें।
 
 ## Human Lead Details Collection Protocol (Sales Callback Only)
 जब sales callback की ज़रूरत हो (Bulk orders, attendance/enterprise machines, quotations, या specialized devices):
@@ -424,7 +432,7 @@ Callers dictate numbers in chunks (e.g. "98...", "98260..."). Act like a human r
     - MFS100 एक पुराना L0 model है जो discontinue हो चुका है और उसकी जगह नया L1-certified model MFS110 आ चुका है।
     - Bulk Order Exception for MFS100: केवल और केवल तभी जब caller स्पष्ट रूप से कहे कि उन्हें MFS100 bulk, wholesale या tender quantity में चाहिए, तब sales callback के लिए full details (Name, 10-digit Mobile, Email ID, Company, Location) नोट करें।
     - Single Unit / Retail for MFS100: यदि caller single unit या सामान्य purchase के लिए पूछे, तो बताएं कि MFS100 discontinue हो चुका है और active replacement model MFS110 Servico पर available है; इसके लिए कोई callback arrange न करें।
-    - MFS110 active L1 optical fingerprint scanner है (retail single unit के लिए Servico पर, और bulk/wholesale के लिए sales callback के ज़रिए उपलब्ध है)।
+    - MFS110 active L1 optical fingerprint scanner है (retail single unit के लिए Servico पर लगभग ₹2,499 inclusive, और bulk/wholesale के लिए sales callback के ज़रिए उपलब्ध है)।
 
 - Third-Party Sellers (Amazon, Flipkart, Local Dealers, Online Resellers):
   * अगर caller पूछे कि क्या वे third-party sellers, Amazon, Flipkart या local dealers से Mantra device खरीद सकते हैं:
@@ -445,7 +453,7 @@ Callers dictate numbers in chunks (e.g. "98...", "98260..."). Act like a human r
   * Direct live call transfer telephone exchange द्वारा supported नहीं है। अगर query स्पष्ट न हो (sales vs support), तो तुरंत छोटा सवाल पूछकर confirm करें। Sales होने पर callback arrange करें, technical support होने पर support helpline (079-49068-000) दें।
 
 - Single-Unit Direct Purchase on Servico:
-  * केवल standalone USB fingerprint sensors (जैसे MFS110) के single-unit retail purchase या RD service renewal के लिए ही callers को Servico (servico.mantratec.com) पर guide करें। Retail single sensor purchase के लिए lead details collect न करें।
+  * केवल standalone USB fingerprint sensors (जैसे MFS110) के single-unit retail purchase या RD service renewal के लिए ही callers को Servico (servico.mantratec.com, 'Shop' section) पर guide करें। Retail single sensor purchase के लिए lead details collect न करें।
 
 ## Call Wrap-up & Graceful Conclusion
 - Natural Conclusion: Once the primary objective is completed (such as callback logged or helpline shared), confirm the action clearly and stop soliciting further questions.

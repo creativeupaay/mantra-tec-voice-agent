@@ -205,6 +205,12 @@ Windows 10 above, Linux, Android
 Default 1 year RD service subscription & 1 Year Warranty are included, Renewal will be chargeable. For verification of your subscription tenure and Official Renewal visit
 [servico.mantratecapp.com](https://servico.mantratecapp.com/)
 
+### Pricing & Purchase Information
+- Retail Single Unit Price: ₹2,499 (all-inclusive; base price ₹2,118 + 18% GST = ₹2,499.24).
+- Inclusions: Includes 1-year warranty, 1-year Aadhaar RD service subscription, and standard shipping.
+- Where to buy (Single Unit): Official consumer portal [servico.mantratecapp.com](https://servico.mantratecapp.com/).
+- Bulk / Wholesale Orders: Inquire via sales quotation / callback.
+
 Resources
 
 ## Everything You Need to Integrate

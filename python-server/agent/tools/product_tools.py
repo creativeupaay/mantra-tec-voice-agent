@@ -24,7 +24,7 @@ sol_defence_security | Defence Security & Surveillance | Mission-critical securi
 sol_port_marine_security | Port & Marine Security | Maritime surveillance + port security mgmt | maritime/ports/logistics | customer operates port/dock/marine facility | port size? vessel or personnel tracking? | —
 
 === PRODUCTS ===
-prod_mfs110 | L1 Fingerprint Scanner MFS110 | Fingerprint Sensors | UIDAI L1 optical scanner, FAP10 | Aadhaar auth needs L1 cert | avoid if only L0/basic needed | prod_marc11, prod_aadhaar_kit
+prod_mfs110 | L1 Fingerprint Scanner MFS110 | Fingerprint Sensors | UIDAI L1 optical scanner, FAP10. Retail single unit price: ₹2,499 final/inclusive on Servico under Shop section (base ₹2,118 + 18% GST). Includes 1-yr warranty & 1-yr RD service. | Aadhaar auth needs L1 cert | avoid if only L0/basic needed | prod_marc11, prod_aadhaar_kit
 prod_mis100v2 | MIS100 V2 Iris Scanner | IRIS Sensor | Single iris scanner, Aadhaar-certified | iris verification wanted | avoid if fingerprint sufficient | prod_matisx
 prod_morphs | MORPHS Slap Scanner | Biometric Enrollment | Ten-print 4-4-2 slap scanner | high-volume all-fingers capture, civil ID/law enforcement | avoid if single-finger capture enough | prod_moxa7e
 prod_matisx | MATISX Dual Iris Scanner | IRIS Sensor | High-speed dual iris, mass enrollment | large-scale enrollment w/ iris modality | avoid if low-volume single-user | prod_mis100v2, prod_morphs
@@ -100,8 +100,8 @@ async def handle(params: FunctionCallParams) -> None:
         system_prompt = (
             "You are a product search assistant for Mantra Tech.\n"
             f"Here is the product list:\n{PRODUCT_AND_SOLUTION_INFO}\n"
-            "Based on the user's query, extract and return ONLY the most relevant products and solutions (Include Name, Description, and Why it fits). "
-            "Keep your response extremely concise, just giving the facts. If nothing matches, say 'No exact match found, please escalate.'"
+            "Based on the user's query, extract and return ONLY the most relevant products and solutions (Include Name, Description, and Why it fits).\n"
+            "Keep your response extremely concise, just giving the facts. For pricing, state the final price cleanly (provide breakdown or warranty/RD service only if asked). If nothing matches, say 'No exact match found, please escalate.'"
         )
         
         # We use the async client (`client.aio`) for the one-shot generation
