@@ -181,7 +181,17 @@ export const getAllCalls = async (req: Request, res: Response, next: NextFunctio
     }
 
     if (intent && intent !== 'all') {
-      queryConditions.push({ detected_intent: intent })
+      const config = STANDARDIZED_INTENTS.find(c => c.id === intent)
+      if (config?.regexPattern) {
+        queryConditions.push({
+          $or: [
+            { detected_intent: intent },
+            { detected_intent: { $regex: config.regexPattern, $options: 'i' } },
+          ],
+        })
+      } else {
+        queryConditions.push({ detected_intent: intent })
+      }
     }
 
     if (reviewed && reviewed !== 'all') {
@@ -649,9 +659,29 @@ export const getCallIntents = async (req: Request, res: Response, next: NextFunc
     ])
 
     const countMap = new Map<string, number>()
+    const unmapped: { intent: string; count: number }[] = []
+
     for (const item of countsAgg) {
-      if (item._id) {
-        countMap.set(item._id, item.count)
+      if (!item._id) continue
+      const exactCategory = STANDARDIZED_INTENTS.find(c => c.id === item._id)
+      if (exactCategory) {
+        countMap.set(exactCategory.id, (countMap.get(exactCategory.id) || 0) + item.count)
+      } else {
+        unmapped.push({ intent: item._id, count: item.count })
+      }
+    }
+
+    for (const item of unmapped) {
+      let matched = false
+      for (const cat of STANDARDIZED_INTENTS) {
+        if (cat.regexPattern && new RegExp(cat.regexPattern, 'i').test(item.intent)) {
+          countMap.set(cat.id, (countMap.get(cat.id) || 0) + item.count)
+          matched = true
+          break
+        }
+      }
+      if (!matched) {
+        countMap.set('General Inquiry', (countMap.get('General Inquiry') || 0) + item.count)
       }
     }
 
