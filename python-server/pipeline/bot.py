@@ -369,33 +369,24 @@ class SilenceTimeoutMonitor:
                 logger.error(f"[bot] Error in SilenceTimeoutMonitor watchdog: {e}")
                 await asyncio.sleep(1.0)
 
+    # These notes reach the model as a user turn, so they are tagged as system events
+    # and describe intent only: the model phrases them in the language of the call.
+    _EVENT = "[System event, not spoken by the caller] "
+
     async def _trigger_check(self, stage: int = 1):
         self._is_prompting = True
         self.bot_is_speaking = True
         try:
-            is_hindi = self.state.preferred_language in ("hi", "hinglish")
             if stage == 1:
-                if is_hindi:
-                    prompt = (
-                        "Caller thodi der se chup hain. Bahut polite aur gentle Hinglish mein ek chhota sentence boliye: "
-                        "'Hello? Kya aap line par hain?'"
-                    )
-                else:
-                    prompt = (
-                        "The caller has been silent for a moment. In a polite, gentle tone, briefly check if they are on the line: "
-                        "'Hello, are you on the line?'"
-                    )
+                prompt = (
+                    f"{self._EVENT}The caller has been silent for a while. In one short, gentle "
+                    "sentence in the language of this call, check whether they are still on the line."
+                )
             else:
-                if is_hindi:
-                    prompt = (
-                        "Caller se abhi tak koi response nahi mila. Bahut polite tone mein puchiye: "
-                        "'Hello, aapki aawaz nahi aa rahi hai, kya aap line par hain?'"
-                    )
-                else:
-                    prompt = (
-                        "Still no response from caller. Ask politely: "
-                        "'Hello, I cannot hear you clearly, are you on the line?'"
-                    )
+                prompt = (
+                    f"{self._EVENT}Still no response. In one short, polite sentence in the language "
+                    "of this call, say you cannot hear them and ask whether they are on the line."
+                )
             await self.send_prompt_fn(prompt)
         finally:
             self._is_prompting = False
@@ -405,19 +396,11 @@ class SilenceTimeoutMonitor:
         self._is_prompting = True
         self.bot_is_speaking = True
         try:
-            is_hindi = self.state.preferred_language in ("hi", "hinglish")
-            if is_hindi:
-                prompt = (
-                    "Caller ki taraf se response na aane par, polite Hinglish mein boliye: "
-                    "'Aapki taraf se koi response na milne ke karan, main call disconnect kar rahi hoon. Mantra Tech mein call karne ke liye dhanyawad. Have a nice day!' "
-                    "Koi sawaal mat puchiye."
-                )
-            else:
-                prompt = (
-                    "No response received from caller after multiple checks. Say politely: "
-                    "'Since I haven't received a response, I will disconnect the call now. Thank you for calling Mantra Tech, have a great day!' "
-                    "Do not ask any questions."
-                )
+            prompt = (
+                f"{self._EVENT}No response after two checks. In the language of this call, say "
+                "politely that you are ending the call since there is no response, and thank them "
+                "for calling Mantra Tech. Do not ask any question."
+            )
             await self.send_prompt_fn(prompt)
             await self.disconnect_fn(delay=4.5)
         finally:
@@ -427,19 +410,12 @@ class SilenceTimeoutMonitor:
         self._is_prompting = True
         self.bot_is_speaking = True
         try:
-            is_hindi = self.state.preferred_language in ("hi", "hinglish")
-            if is_hindi:
-                prompt = (
-                    "Call ka samay poora ho gaya hai. Ek polite aur samman-janak sentence boliye: "
-                    "'Sir, aapki saari details note ho chuki hain aur hamari team aapse jald contact karegi. Mantra Tech mein call karne ke liye thank you. Have a great day!' "
-                    "CRITICAL: Koi naya sawaal mat puchiye aur call disconnect kijiye."
-                )
-            else:
-                prompt = (
-                    "The maximum call time limit has been reached. Speak one polite closing sentence: "
-                    "'Sir, all your details have been noted and our team will contact you shortly. Thank you for calling Mantra Tech, have a great day!' "
-                    "CRITICAL: Do NOT ask any questions."
-                )
+            prompt = (
+                f"{self._EVENT}The call time limit has been reached. In the language of this call, "
+                "close politely in one or two sentences. If you collected callback details, say the "
+                "sales team will contact them; otherwise do not claim anything was noted. Thank them "
+                "for calling Mantra Tech. Do not ask any question."
+            )
             await self.send_prompt_fn(prompt)
             await self.disconnect_fn(delay=4.5)
         finally:
@@ -500,7 +476,7 @@ async def run_bot(
             silence_monitor.on_user_speech(text)
 
     if gemini_mode:
-        from google.genai.types import ThinkingConfig, StartSensitivity, EndSensitivity
+        from google.genai.types import ThinkingConfig, ThinkingLevel, StartSensitivity, EndSensitivity
         from pipecat.services.google.gemini_live.llm import GeminiVADParams
 
         start_sens = None
@@ -520,7 +496,12 @@ async def run_bot(
                 language=settings.gemini_language,
                 temperature=0.7,
                 max_tokens=1024,
-                thinking=ThinkingConfig(thinking_budget=0),
+                # 3.1 Flash Live takes thinking_level (not thinking_budget); 3.8 Live does
+                # not accept a thinking config at all.
+                thinking=(
+                    None if "3.8" in settings.gemini_model
+                    else ThinkingConfig(thinking_level=ThinkingLevel.MINIMAL)
+                ),
                 vad=GeminiVADParams(
                     start_sensitivity=start_sens,
                     end_sensitivity=None,
@@ -761,21 +742,8 @@ async def run_bot(
         except Exception as e:
             logger.warning(f"[bot] Could not register call in DB: {e}")
 
-        # Natural human call pickup: simply say "Hello?" without corporate speech
-        if gemini_mode:
-            greeting_hint = (
-                "The call just connected. Just say a single, calm, natural word: 'Hello?' "
-                "CRITICAL: Do NOT introduce yourself or say 'main Priya'. "
-                "Do NOT give a scripted corporate speech. Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech mein call karne ke liye dhanyawad'. "
-                "Just say 'Hello?' and listen to the caller."
-            )
-        else:
-            greeting_hint = (
-                "The call just connected. Say just a single, natural word: 'Hello?' "
-                "CRITICAL: Do NOT introduce yourself or say 'main Priya'. "
-                "Do NOT say 'thank you for calling Mantra Tech' or 'Mantra Tech में call करने के लिए thank you'. "
-                "Just say 'Hello?' and wait for the caller."
-            )
+        # Opening rules live in the system prompt; this only triggers the first turn.
+        greeting_hint = "The call just connected. Say only 'Hello?' and wait for the caller."
 
         if gemini_mode:
             # Send the greeting as a user turn in the context.

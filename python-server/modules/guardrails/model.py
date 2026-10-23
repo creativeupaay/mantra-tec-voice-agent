@@ -92,20 +92,24 @@ def format_guardrails_prompt(guardrails: list[Guardrail]) -> str:
     if not guardrails:
         return ""
 
-    sections = ["## Guardrails (Apply These Rules)"]
+    sections = ["# Guardrails"]
 
     blocked = [g for g in guardrails if g.is_block and g.response]
     flagged = [g for g in guardrails if not g.is_block]
 
+    # Describe the intent; the model phrases it in the caller's language.
     if blocked:
-        sections.append("\n### Blocked Topics - DO NOT DISCUSS")
-        for g in blocked:
-            sections.append(f'- **{g.trigger.capitalize()}**: "{g.response}"')
+        topics = ", ".join(g.trigger for g in blocked)
+        sections.append(
+            f"- Never share or discuss: {topics}. Say politely that you cannot help with that."
+        )
 
     if flagged:
-        sections.append("\n### Sensitive Topics - Flag for Review")
-        for g in flagged:
-            sections.append(f"- '{g.trigger}' — detect and note in call_summary if mentioned")
+        topics = ", ".join(g.trigger for g in flagged)
+        sections.append(
+            f"- If the caller brings up {topics}: stay neutral, give no opinion, "
+            "and steer back to how you can help."
+        )
 
     return "\n".join(sections)
 

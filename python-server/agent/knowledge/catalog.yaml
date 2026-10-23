@@ -1,0 +1,583 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Mantra Tech product catalog — single source of truth for product facts.
+#
+# The voice agent reads this file through the `search_products` tool. Nothing in
+# here is placed in the system prompt, so adding or changing a product does NOT
+# make the prompt longer. Edit this file (not prompts.py) whenever the client
+# sends a product update: status, price, availability, Aadhaar / non-Aadhaar,
+# what to recommend instead, bulk exceptions.
+#
+# The file is re-read automatically when it changes (mtime check), but a Docker
+# deployment still needs a rebuild/restart to ship the new file.
+#
+# Fields (all optional except id + name):
+#   codes      How callers say the model name. Matched ignoring case, spaces, dashes.
+#   type       Short device description.
+#   aadhaar    true = Aadhaar/UIDAI certified, false = Non-Aadhaar, omit if unknown.
+#   status     active | support_ended | discontinued.  Omit if not confirmed by client.
+#   summary    One line on what it is.
+#   use_when   When it is the right recommendation.
+#   tags       Words used to match need-based queries ("non aadhaar fingerprint").
+#   sales      website | sales_team   (see sales_routes below). Omit when notes decide.
+#   price      Exactly what the agent may say about price. Omit = sales team quotes.
+#   availability  Anything specific about stock / listing / delivery.
+#   recommend  false = never suggest this device unless the caller names it.
+#   notes      Extra client rules for this device, one short line each.
+#   updated / source   When and from where the facts came (for audits).
+# ─────────────────────────────────────────────────────────────────────────────
+
+website: "servico.mantratec.com"
+website_spoken: "servico dot mantratec dot com, in the Shop section"
+
+sales_routes:
+  website: >-
+    Single or a few units: order on the website ({website}), no callback needed.
+    Bulk: offer a sales team callback.
+  sales_team: >-
+    Sales team only, any quantity: offer a sales team callback and collect details.
+
+status_text:
+  active: "Active and fully supported. Never say it is discontinued."
+  support_ended: "Support has ended for this model. Do not suggest it for new purchases."
+  discontinued: "Discontinued."
+  unconfirmed: "In the catalog. Not discontinued as far as we know; the sales team confirms stock."
+
+# Returned when the caller asks for something that is not in this file.
+not_found: >-
+  Not in the catalog. Do not guess its specs, price or status. Tell the caller the
+  sales team will guide them on this device, collect their details and arrange a
+  sales team callback.
+
+products:
+  # ── Client-confirmed devices (keep these accurate; they are asked about most) ──
+
+  - id: mfs110
+    name: "MFS110"
+    codes: ["MFS110", "MFS 110"]
+    type: "L1 optical fingerprint scanner (USB)"
+    aadhaar: true
+    status: active
+    summary: "UIDAI L1 certified fingerprint scanner for Aadhaar authentication (AePS, banking, CSC, SIM KYC, eKYC)."
+    use_when: "Aadhaar based fingerprint authentication"
+    tags: [fingerprint, scanner, usb, aadhaar, l1, banking, aeps, csc, sim, kyc, ekyc, rd]
+    sales: website
+    price: "2,499 rupees all inclusive per unit. Only if asked: 2,118 rupees plus 18% GST, includes 1 year warranty and 1 year RD service."
+    updated: 2026-10-16
+
+  - id: mfs500
+    name: "MFS500"
+    codes: ["MFS500", "MFS 500"]
+    type: "Optical fingerprint scanner (USB), works with Windows, Android and Linux"
+    aadhaar: false
+    status: active
+    summary: "Non-Aadhaar fingerprint scanner for identification and verification in normal (non-UIDAI) software."
+    use_when: "Fingerprint scanner for any Non-Aadhaar use"
+    tags: [fingerprint, scanner, usb, non_aadhaar, verification, identification, office, software, nist]
+    sales: website
+    price: "3,000 rupees plus 18% GST per unit (3,540 rupees including GST)."
+    updated: 2026-10-23
+    source: "Client update 2026-10-23"
+
+  - id: mis100v2
+    name: "MIS100 V2"
+    codes: ["MIS100V2", "MIS100 V2", "MIS 100 V2", "MIS100"]
+    type: "Single iris scanner (USB)"
+    aadhaar: true
+    status: active
+    summary: "UIDAI / STQC L1 certified single iris scanner for Aadhaar iris authentication."
+    use_when: "Iris based Aadhaar authentication"
+    tags: [iris, eye, scanner, usb, aadhaar, l1]
+    sales: website
+    availability: "Available on the website for single units."
+    updated: 2026-10-23
+    source: "Client update 2026-10-23"
+
+  - id: mfs100
+    name: "MFS100"
+    codes: ["MFS100", "MFS 100"]
+    type: "Older optical fingerprint scanner (USB)"
+    status: support_ended
+    recommend: false
+    summary: "Older model, earlier used for both Aadhaar and Non-Aadhaar. We no longer provide any support for it, including SDK support."
+    notes:
+      - "For Aadhaar use suggest MFS110. For Non-Aadhaar use suggest MFS500."
+      - "Exception: bulk orders for banking use can still get MFS100. Arrange a sales team callback for that."
+    updated: 2026-10-23
+    source: "Client update 2026-10-23"
+
+  - id: rd_service
+    name: "RD Service"
+    codes: ["RD Service", "RD renewal", "RD subscription"]
+    type: "RD service subscription / renewal for Mantra fingerprint and iris devices"
+    tags: [rd, renewal, subscription]
+    sales: website
+    notes:
+      - "Technical problems with RD service go to the support helpline, not sales."
+
+  # ── Attendance terminals (always via sales team, any quantity) ──
+
+  - id: mbas30
+    name: "MBAS30"
+    codes: ["MBAS30", "MBAS 30"]
+    type: "Aadhaar (AEBAS) fingerprint attendance terminal"
+    aadhaar: true
+    summary: "AEBAS fingerprint attendance terminal for government offices."
+    tags: [attendance, aebas, government, fingerprint, terminal, machine]
+    sales: sales_team
+
+  - id: mbas40
+    name: "MBAS40"
+    codes: ["MBAS40", "MBAS 40"]
+    type: "Aadhaar (AEBAS) fingerprint + face attendance terminal"
+    aadhaar: true
+    summary: "AEBAS attendance terminal with both fingerprint and face."
+    tags: [attendance, aebas, government, fingerprint, face, terminal, machine]
+    sales: sales_team
+
+  - id: mbas50
+    name: "MBAS50"
+    codes: ["MBAS50", "MBAS 50"]
+    type: "Aadhaar (AEBAS) face attendance terminal"
+    aadhaar: true
+    summary: "AEBAS face recognition attendance terminal for government offices."
+    tags: [attendance, aebas, government, face, terminal, machine]
+    sales: sales_team
+
+  - id: bionic_f6
+    name: "BioNIC F6"
+    codes: ["BioNIC F6", "Bionic F6"]
+    type: "Face recognition attendance terminal (Non-Aadhaar)"
+    aadhaar: false
+    summary: "Contactless face attendance terminal for offices, companies and factories."
+    tags: [attendance, office, company, face, terminal, machine, non_aadhaar]
+    sales: sales_team
+
+  - id: bionic_fp6
+    name: "BioNIC FP6"
+    codes: ["BioNIC FP6", "Bionic FP6"]
+    type: "Face + fingerprint attendance terminal (Non-Aadhaar)"
+    aadhaar: false
+    summary: "Office attendance terminal with face and fingerprint, one works as backup for the other."
+    tags: [attendance, office, company, face, fingerprint, terminal, machine, non_aadhaar]
+    sales: sales_team
+
+  # ── Rest of the catalog (from website; status not confirmed by client) ──
+
+  - id: business_security
+    name: "Business Security Systems"
+    type: "Solution"
+    summary: "Custom security+workforce tracking for any-size business"
+    use_when: "general biz security, multi-location retail/office"
+    sales: sales_team
+
+  - id: enterprise_security
+    name: "Enterprise Security Solutions"
+    type: "Solution"
+    summary: "Sector-wise proactive security/access for plants & large enterprises"
+    use_when: "large plant/enterprise needs more than basic access control"
+    sales: sales_team
+
+  - id: rfid_security
+    name: "RFID Security Solution"
+    type: "Solution"
+    summary: "RFID asset tracking + automated access control"
+    use_when: "tracking assets/inventory, automating card/tag access"
+    sales: sales_team
+
+  - id: face_attendance
+    name: "Face Recognition Attendance"
+    type: "Solution"
+    summary: "Contactless face-recog attendance"
+    use_when: "wants touchless/hygienic attendance, dislikes fingerprint contact"
+    sales: sales_team
+
+  - id: access_control
+    name: "Access Control System"
+    type: "Solution"
+    summary: "Multi-factor door/gate access, tiered entry"
+    use_when: "restrict/manage entry to doors/zones"
+    sales: sales_team
+
+  - id: smart_city
+    name: "Smart City Solution"
+    type: "Solution"
+    summary: "Urban infra: public safety/traffic/parking"
+    use_when: "gov customer discusses traffic/parking/city infra"
+    sales: sales_team
+
+  - id: airport
+    name: "Airport Solution"
+    type: "Solution"
+    summary: "Staff control + passenger flow for airports"
+    use_when: "customer is an airport/aviation authority"
+    sales: sales_team
+
+  - id: citizen_id
+    name: "Citizen Identification"
+    type: "Solution"
+    aadhaar: true
+    summary: "Gov-grade national ID/Aadhaar enrollment"
+    use_when: "gov needs citizen enrollment or ID verification"
+    sales: sales_team
+
+  - id: biometrics_attendance
+    name: "Biometrics Attendance System"
+    type: "Solution"
+    summary: "Fingerprint/iris attendance, stops buddy-punching"
+    use_when: "prevent attendance fraud, need biometric time tracking"
+    sales: sales_team
+
+  - id: biometric_tech
+    name: "Biometric Technologies"
+    type: "Solution"
+    summary: "Multi-modal biometric ID platform (generic)"
+    use_when: "customer exploring biometrics w/o specific use case yet"
+    sales: sales_team
+
+  - id: defence_security
+    name: "Defence Security & Surveillance"
+    type: "Solution"
+    summary: "Mission-critical security for defence/national protection"
+    use_when: "customer is a defence/military org"
+    sales: sales_team
+
+  - id: port_marine_security
+    name: "Port & Marine Security"
+    type: "Solution"
+    summary: "Maritime surveillance + port security mgmt"
+    use_when: "customer operates port/dock/marine facility"
+    sales: sales_team
+
+  - id: morphs
+    name: "MORPHS Slap Scanner"
+    codes: ["MORPHS"]
+    type: "Biometric Enrollment"
+    summary: "Ten-print 4-4-2 slap scanner"
+    use_when: "high-volume all-fingers capture, civil ID/law enforcement"
+    sales: sales_team
+
+  - id: matisx
+    name: "MATISX Dual Iris Scanner"
+    codes: ["MATISX", "MATIS X"]
+    type: "IRIS Sensor"
+    summary: "High-speed dual iris, mass enrollment"
+    use_when: "large-scale enrollment w/ iris modality"
+    sales: sales_team
+
+  - id: moxa7e
+    name: "MOXA7E Enrollment Device"
+    codes: ["MOXA7E"]
+    type: "Biometric Enrollment"
+    summary: "Portable multi-biometric enrollment station"
+    use_when: "field/mobile enrollment"
+    sales: sales_team
+
+  - id: mvyom7
+    name: "Mvyom7 Intelligent Terminal"
+    codes: ["Mvyom7", "Vyom 7"]
+    type: "POS MicroATM"
+    summary: "Rugged biometric POS, MicroATM/AEPS"
+    use_when: "banking/fintech biometric-verified cash/payment"
+    sales: sales_team
+
+  - id: mt100
+    name: "MT100 Biometric Tablet"
+    codes: ["MT100"]
+    type: "Biometric Tablet"
+    summary: "Industrial tablet w/ built-in fingerprint"
+    use_when: "field data collection + biometric verify"
+    sales: sales_team
+
+  - id: ms20
+    name: "MS20 Dynamic QR Sound Box"
+    codes: ["MS20"]
+    type: "POS MicroATM"
+    summary: "UPI payment sound box, dynamic QR+audio"
+    use_when: "merchant wants UPI payment confirmation"
+    sales: sales_team
+
+  - id: ms30
+    name: "MS30 Advanced Sound Box"
+    codes: ["MS30"]
+    type: "POS MicroATM"
+    summary: "Next-gen UPI sound box, longer battery"
+    use_when: "merchant wants upgrade over MS20"
+    sales: sales_team
+
+  - id: marc10
+    name: "MARC10 Capacitive Reader"
+    codes: ["MARC10"]
+    type: "Fingerprint Sensors"
+    summary: "Ultra-slim capacitive OEM module"
+    use_when: "OEM/manufacturer embedding slim sensor"
+    sales: sales_team
+
+  - id: marc11
+    name: "MARC11 L1 Scanner"
+    codes: ["MARC11"]
+    type: "Fingerprint Sensors"
+    aadhaar: true
+    summary: "L1 certified capacitive scanner"
+    use_when: "needs L1 cert, non-optical/capacitive"
+    sales: sales_team
+
+  - id: melo20
+    name: "MELO20 FAP20 Device"
+    codes: ["MELO20"]
+    type: "Fingerprint Sensors"
+    summary: "Rugged FAP20, IP65, latent-print detection"
+    use_when: "outdoor/harsh-environment capture"
+    sales: sales_team
+
+  - id: melo30
+    name: "MELO30 Fingerprint Reader"
+    codes: ["MELO30"]
+    type: "Fingerprint Sensors"
+    summary: "Large platen, FBI PIV certified"
+    use_when: "FBI PIV cert required"
+    sales: sales_team
+
+  - id: melo31
+    name: "MELO31 MOSIP Reader"
+    codes: ["MELO31"]
+    type: "Fingerprint Sensors"
+    aadhaar: true
+    summary: "Rugged FAP30, MOSIP-L1 compliant"
+    use_when: "national ID system built on MOSIP"
+    sales: sales_team
+
+  - id: mfs500lx
+    name: "MFS500-LX Advanced Scanner"
+    codes: ["MFS500-LX", "MFS500 LX"]
+    type: "Fingerprint Sensors"
+    summary: "Liveness-protected, anti-spoofing"
+    use_when: "fraud/spoofing prevention stated concern"
+    sales: sales_team
+
+  - id: mfs500mx
+    name: "MFS500-MX FBI Certified"
+    codes: ["MFS500-MX", "MFS500 MX"]
+    type: "Fingerprint Sensors"
+    aadhaar: true
+    summary: "FBI+STQC/Aadhaar cert, hardware crypto"
+    use_when: "both FBI cert AND hardware encryption needed"
+    sales: sales_team
+
+  - id: mfs200
+    name: "MFS200 Optical Scanner"
+    codes: ["MFS200"]
+    type: "Fingerprint Sensors"
+    summary: "FAP20 industrial sensor"
+    use_when: "industrial auth, FAP20 spec"
+    sales: sales_team
+
+  - id: bionic_xtreme_fx
+    name: "BioNIC Xtreme FX"
+    codes: ["BioNIC Xtreme FX"]
+    type: "Face Recognition"
+    summary: "Premium 3D liveness terminal"
+    use_when: "executive/VIP area, anti-spoofing face"
+    sales: sales_team
+
+  - id: bionic_xtreme_xi
+    name: "BioNIC Xtreme XI"
+    codes: ["BioNIC Xtreme XI"]
+    type: "Face Recognition"
+    summary: "AI ultra-fast matching, high-traffic"
+    use_when: "high foot-traffic entrance"
+    sales: sales_team
+
+  - id: ipas_ai
+    name: "IPAS-AI"
+    codes: ["IPAS-AI", "IPAS"]
+    type: "Face Recognition"
+    summary: "Face recog + integrated breath analyzer"
+    use_when: "sobriety/safety-compliance entry screening"
+    sales: sales_team
+
+  - id: bionic_xtreme_xii
+    name: "BioNIC Xtreme XII"
+    codes: ["BioNIC Xtreme XII"]
+    type: "Face Recognition"
+    summary: "Rugged multi-biometric, outdoor/extreme"
+    use_when: "outdoor gate access, harsh weather"
+    sales: sales_team
+
+  - id: service_pad
+    name: "Customized Service Pad"
+    codes: ["Service Pad"]
+    type: "Biometric Tablet"
+    summary: "Enterprise tablet w/ integrated sensors"
+    use_when: "portable service/verification kiosk"
+    sales: sales_team
+
+  - id: moxa73
+    name: "Portable Biometric Tablet (MOXA73)"
+    codes: ["MOXA73"]
+    type: "Biometric Tablet"
+    summary: "Handheld enrollment/verification terminal"
+    use_when: "field agents need mobile enrollment/verify"
+    sales: sales_team
+
+  - id: moxa71
+    name: "Rugged Biometric Terminal (MOXA71)"
+    codes: ["MOXA71"]
+    type: "Biometric Tablet"
+    summary: "IP65 industrial terminal"
+    use_when: "harsh/outdoor industrial verification"
+    sales: sales_team
+
+  - id: bio_hht
+    name: "Bio HHT"
+    codes: ["Bio HHT"]
+    type: "Physical Access Control"
+    summary: "Handheld verification device"
+    use_when: "verification away from fixed location (mobile police/field)"
+    sales: sales_team
+
+  - id: bionic_v7
+    name: "BioNIC V7"
+    codes: ["BioNIC V7"]
+    type: "Logical Access Control"
+    summary: "Secure PC/network login reader"
+    use_when: "secure computer/network logins w/ biometrics"
+    sales: sales_team
+
+  - id: mscr100
+    name: "MSCR100"
+    codes: ["MSCR100"]
+    type: "Logical Access Control"
+    summary: "Contactless smart card reader"
+    use_when: "customer uses smart cards for ID/login"
+    sales: sales_team
+
+  - id: mscr200
+    name: "MSCR200"
+    codes: ["MSCR200"]
+    type: "Logical Access Control"
+    summary: "Advanced smart card reader, higher security protocol"
+    use_when: "needs higher security than MSCR100"
+    sales: sales_team
+
+  - id: mskb100
+    name: "MSKB100"
+    codes: ["MSKB100"]
+    type: "Logical Access Control"
+    summary: "Keyboard w/ integrated fingerprint reader"
+    use_when: "wants all-in-one keyboard+fingerprint login"
+    sales: sales_team
+
+  - id: aadhaar_kit
+    name: "Aadhaar Enrollment Kit"
+    codes: ["Aadhaar Kit", "Aadhaar Enrollment Kit"]
+    type: "Aadhaar Products"
+    aadhaar: true
+    summary: "Full UIDAI kit: fingerprint+iris+camera"
+    use_when: "setting up Aadhaar/UIDAI enrollment center"
+    sales: sales_team
+
+  - id: multi_mabis
+    name: "Multi MABIS"
+    codes: ["MABIS", "Multi MABIS"]
+    type: "Software"
+    summary: "Middleware integrating multiple biometric devices/apps"
+    use_when: "integrating several biometric devices/apps together"
+    sales: sales_team
+
+  - id: bio_logon
+    name: "Bio Logon"
+    codes: ["Bio Logon"]
+    type: "Software"
+    summary: "Biometric PC auth replacing password login"
+    use_when: "replace/strengthen password login w/ biometrics"
+    sales: sales_team
+
+  - id: m_authentication
+    name: "M-Authentication"
+    codes: ["M-Authentication"]
+    type: "Software"
+    summary: "Mobile biometric verification, remote auth"
+    use_when: "verification via mobile app/remotely"
+    sales: sales_team
+
+  - id: pravesh_lite
+    name: "Pravesh Lite"
+    codes: ["Pravesh Lite", "Pravesh"]
+    type: "Software"
+    summary: "Lightweight attendance & access software"
+    use_when: "needs software to manage attendance/access"
+    sales: sales_team
+
+  - id: monuk
+    name: "Monuk"
+    codes: ["Monuk"]
+    type: "Software"
+    summary: "Visitor management system"
+    use_when: "digitize/track visitor entries"
+    sales: sales_team
+
+  - id: mensa
+    name: "Mensa"
+    codes: ["Mensa"]
+    type: "Software"
+    summary: "Canteen/cafeteria management, meal billing"
+    use_when: "employee cafeteria needing automated tracking"
+    sales: sales_team
+
+  - id: megh_pi
+    name: "Megh PI"
+    codes: ["Megh PI", "Megh"]
+    type: "Software"
+    summary: "Cloud platform: attendance+visitor+canteen unified"
+    use_when: "wants one cloud platform vs separate tools"
+    sales: sales_team
+
+  - id: macs
+    name: "MACS"
+    codes: ["MACS"]
+    type: "Software"
+    summary: "7-module unified access control (gate/ACS/VMS/canteen/T&A)"
+    use_when: "large enterprise wants single integrated platform"
+    sales: sales_team
+
+  - id: mxface
+    name: "MXFace SDK"
+    codes: ["MXFace"]
+    type: "Software"
+    summary: "Face recognition API/SDK, 1:N + liveness"
+    use_when: "developer wants to build custom face recog into own software"
+    sales: sales_team
+
+  - id: mikshi
+    name: "Mikshi AI Video Analytics"
+    codes: ["Mikshi"]
+    type: "Software"
+    summary: "AI video analytics on existing CCTV"
+    use_when: "has CCTV, wants AI insights w/o replacing hardware"
+    sales: sales_team
+
+  - id: minopcloud
+    name: "Minopcloud"
+    codes: ["Minopcloud", "Minop"]
+    type: "Software"
+    summary: "Cloud time & attendance, remote access"
+    use_when: "multi-branch/remote attendance management"
+    sales: sales_team
+
+  - id: myrfid
+    name: "MyRFID"
+    codes: ["MyRFID"]
+    type: "RFID"
+    summary: "RFID readers/tags/IoT gateways for asset tracking"
+    use_when: "tracking physical assets/inventory w/ tags"
+    sales: sales_team
+
+  - id: moreze
+    name: "Moreze Kiosks"
+    codes: ["Moreze"]
+    type: "Kiosk"
+    aadhaar: true
+    summary: "Self-service kiosks: eKYC/Aadhaar auth/citizen services"
+    use_when: "unattended/self-service kiosk for ID or service tasks"
+    sales: sales_team
+

@@ -1,0 +1,70 @@
+# Regression scenarios for the voice agent (run: uv run scripts/eval_agent.py).
+#
+# Add one scenario for every client correction and every real-call failure, BEFORE
+# changing the prompt or catalog, so you can see it fail first and pass after.
+#
+#   name     unique id
+#   turns    what the caller says, one string per turn (write it the way callers talk)
+#   tool     optional: a word the search_products query must contain on some turn
+#   language hinglish | english   (the reply language we expect)
+#   pass_if  plain-English rule the judge model checks the agent's replies against
+
+- name: mfs500_active_with_price
+  turns: ["MFS500 ke baare mein batao, ye abhi milta hai kya?", "ek hi chahiye"]
+  tool: mfs500
+  language: hinglish
+  pass_if: "Says MFS500 is available / active (never discontinued). If price is given it is 3,000 + 18% GST (3,540). Points to the website for small quantity."
+
+- name: mfs500_after_mfs100
+  turns: ["MFS100 ke baare mein bataiye", "accha, MFS500 bhi discontinue ho gaya kya? 2 piece chahiye"]
+  tool: mfs500
+  language: hinglish
+  pass_if: "Says MFS100 support has ended. Then clearly says MFS500 is NOT discontinued and is active, and guides 2 pieces to the website."
+
+- name: non_aadhaar_fingerprint
+  turns: ["Mujhe fingerprint scanner chahiye, non aadhaar kaam ke liye, office software mein lagana hai"]
+  language: hinglish
+  pass_if: "Recommends MFS500. Does NOT recommend MFS100."
+
+- name: mfs100_single
+  turns: ["MFS100 lena hai ek piece", "non aadhaar ke liye"]
+  tool: mfs100
+  language: hinglish
+  pass_if: "Explains MFS100 is no longer supported (not offered for new single purchase) and suggests MFS500 for non-Aadhaar. Does not arrange a callback for the single piece."
+
+- name: mfs100_bulk_banking
+  turns: ["MFS100 chahiye bulk mein, 300 piece, hamare bank ke liye"]
+  tool: mfs100
+  language: hinglish
+  pass_if: "Accepts the bulk banking requirement and moves to arranging a sales team callback (e.g. asks for name or number). Does not refuse."
+
+- name: mis100v2_single
+  turns: ["MIS100 V2 iris scanner milega kya? ek hi chahiye"]
+  tool: mis100
+  language: hinglish
+  pass_if: "Says it is active (not discontinued) and guides the single unit to the website. Does not arrange a callback."
+
+- name: unknown_device_callback
+  turns: ["Mantra ka MZX900 device chahiye, uska rate kya hai?"]
+  language: hinglish
+  pass_if: "Does not invent specs or a price. Says the sales team will help and starts gathering details or requirement for a callback."
+
+- name: english_caller_stays_english
+  turns: ["Hi, I need an iris scanner for Aadhaar authentication. Is it available?", "Just one unit."]
+  language: english
+  pass_if: "Replies in English. Mentions MIS100 V2 and guides the single unit to the website."
+
+- name: support_goes_to_helpline
+  turns: ["Mera scanner kaam nahi kar raha, red light aa rahi hai", "aap hi callback karwa do na"]
+  language: hinglish
+  pass_if: "Gives support helpline 079-49068-000. On the callback request, politely declines a support callback and repeats the helpline or offers the alternate number or servico email. Does not collect details."
+
+- name: attendance_discovery
+  turns: ["Attendance machine chahiye"]
+  language: hinglish
+  pass_if: "Before naming products or asking personal details, asks whether it is Aadhaar based / government (AEBAS) or normal office attendance."
+
+- name: no_details_before_need
+  turns: ["Mantra ka device purchase karna hai"]
+  language: hinglish
+  pass_if: "Asks what device or purpose they need. Does NOT ask for name, phone number or email yet."
